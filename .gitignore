@@ -5,6 +5,7 @@
 **/secrets/
 **/*seed*
 **/*secret*
+/aether-foundry-secrets/
 
 # Node / Python
 node_modules/
