@@ -1,0 +1,320 @@
+{
+  "schema_version": 1,
+  "kind": "aether.director-state",
+  "source": "fixture",
+  "timezone": "America/Chicago",
+  "updated_at": "2026-09-27T16:40:00-05:00",
+  "last_session_id": null,
+  "networks": {
+    "xrpl_testnet": {
+      "label": "XRPL Testnet",
+      "network_id": 1,
+      "http": "https://s.altnet.rippletest.net:51234",
+      "ws": "wss://s.altnet.rippletest.net:51233",
+      "explorer": "https://testnet.xrpl.org",
+      "validated_ledger_index": 21101245,
+      "reserve_base_drops": "1000000",
+      "reserve_inc_drops": "200000",
+      "server_build": "3.4.1"
+    },
+    "xahau_testnet": {
+      "label": "Xahau Testnet",
+      "network_id": 21338,
+      "http": "https://xahau-test.net",
+      "ws": "wss://xahau-test.net",
+      "explorer": "https://xahau-testnet.xrpl.org",
+      "validated_ledger_index": 12693992,
+      "reserve_base_drops": "1000000",
+      "reserve_inc_drops": "200000",
+      "server_build": "2026.6.21-release+3350"
+    }
+  },
+  "wallets": {
+    "W0": {
+      "role": "TREASURY",
+      "network": "xrpl_testnet",
+      "address": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+      "balance_drops": "90000000",
+      "spendable_drops": "88600000",
+      "owner_count": 2,
+      "sequence": 12,
+      "regular_key": null
+    },
+    "W1": {
+      "role": "MARKET",
+      "network": "xrpl_testnet",
+      "address": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+      "balance_drops": "80000000",
+      "spendable_drops": "77600000",
+      "owner_count": 7,
+      "sequence": 20,
+      "regular_key": "rDyiGKuMgL2F8S7TjB6m6Wg1pLg5KDPJYY"
+    },
+    "W2": {
+      "role": "ATELIER",
+      "network": "xrpl_testnet",
+      "address": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+      "balance_drops": "70000000",
+      "spendable_drops": "68600000",
+      "owner_count": 2,
+      "sequence": 30,
+      "regular_key": "rNNzhkcScozB7Nzv3cWCZAEnu6MMC64rmy"
+    },
+    "W3": {
+      "role": "CHANNELS",
+      "network": "xrpl_testnet",
+      "address": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+      "balance_drops": "60000000",
+      "spendable_drops": "59000000",
+      "owner_count": 0,
+      "sequence": 40,
+      "regular_key": "rJRxr1E1Dzz5TXJsCHhwQAm4qS68Y73dQj"
+    },
+    "W4": {
+      "role": "ESCROW",
+      "network": "xrpl_testnet",
+      "address": "ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN",
+      "balance_drops": "50000000",
+      "spendable_drops": "48800000",
+      "owner_count": 1,
+      "sequence": 50,
+      "regular_key": "rfXBxqPjprj1J5Ekq5v82D3BDqRm7ms7p2"
+    },
+    "W5": {
+      "role": "R&D",
+      "network": "xrpl_testnet",
+      "address": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+      "balance_drops": "40000000",
+      "spendable_drops": "38800000",
+      "owner_count": 1,
+      "sequence": 60,
+      "regular_key": "rav5cYVarjSaXeeqCbsghMmmVGcJWB5y7Q"
+    },
+    "W6": {
+      "role": "GRANTS",
+      "network": "xrpl_testnet",
+      "address": "rfnqxYQWKsVGFuWLjky41puXHJkT2v8yTf",
+      "balance_drops": "30000000",
+      "spendable_drops": "29000000",
+      "owner_count": 0,
+      "sequence": 70,
+      "regular_key": "rGjdFjMz577GF4uvb4N9ayCqP5Q74kwVq5"
+    },
+    "W7": {
+      "role": "XAHAU treasury (hook account)",
+      "network": "xahau_testnet",
+      "address": "r9YjdAzgL4hHvqDUeb4sTf4yF2MDQ5kq7h",
+      "balance_drops": "1000000000",
+      "spendable_drops": "998800000",
+      "owner_count": 1,
+      "sequence": 8,
+      "regular_key": null
+    }
+  },
+  "machines": {
+    "work-ticket-escrow": {
+      "status": "trialled",
+      "results": "machines/work-ticket-escrow/RESULTS.md",
+      "last_result_hash": "612BD199AB78E7923E4C84226CDB1658ED299E31ACDA3B4BAA193B04543ECFF7"
+    },
+    "drip-pass": {
+      "status": "trialled",
+      "results": "machines/drip-pass/RESULTS.md",
+      "last_result_hash": "6DFB44BB86E309F995579E92E2294D8F318A142E83F185FA22AB308A638E7737"
+    },
+    "walk-in-window": {
+      "status": "open",
+      "results": "machines/walk-in-window/RESULTS.md",
+      "last_result_hash": "2C013A0988DA6610B088D72B8E6F0378CFF52E9D7CB2ED2B181D3546318DDDBC"
+    },
+    "oracle-mid-ticket": {
+      "status": "trialled",
+      "results": "machines/oracle-mid-ticket/RESULTS.md",
+      "last_result_hash": "A2D8E84C265DCCDD3E2E7A422B8F60D3439739E7A257154ED857AA7AB380E3A6"
+    },
+    "lp-badge": {
+      "status": "trialled",
+      "results": "machines/lp-badge/RESULTS.md",
+      "last_result_hash": "A2956F443B10810E1273A4334DA815599570B186266390D77BEEEDB4648823D1",
+      "note": "v0 NFT is honor-system; the ledger door is lp-badge-bound"
+    },
+    "lp-badge-bound": {
+      "status": "trialled",
+      "results": "machines/lp-badge-bound/RESULTS.md",
+      "last_result_hash": "D21E08CC086310E2FA15B1F0E717FEF406F8BD3EF29ED5137AE9ACC64875FED2"
+    },
+    "batch-heartbeat": {
+      "status": "spec-only",
+      "results": "machines/batch-heartbeat/RESULTS.md",
+      "last_result_hash": null,
+      "note": "no trial hash until atomic Batch is enabled"
+    },
+    "xahau-split-treasury": {
+      "status": "live",
+      "results": "machines/xahau-split-treasury/RESULTS.md",
+      "last_result_hash": "E6142FB0B82375A01D7E07A3AF0046B6030F4CC34BCB9C3B0A2148E3ED9EEBD6"
+    },
+    "governance-board": {
+      "status": "live",
+      "results": "machines/governance-board/RESULTS.md",
+      "last_result_hash": "9162E6DFD7CD2BFB413CC90470A7E8124B66DF241A620442FD39F3FC3F379C24"
+    },
+    "x402-desk": {
+      "status": "live",
+      "results": "machines/x402-desk/README.md",
+      "last_result_hash": null,
+      "note": "read-only verifier; no single trial hash"
+    },
+    "x402-outbound": {
+      "status": "live",
+      "results": "machines/x402-outbound/RESULTS.md",
+      "last_result_hash": "D621848B4C66A940CA0DA51507D61A95D7546B4BB46E7925FC1D6FB414090C4C"
+    },
+    "genesis-artifact": {
+      "status": "trialled",
+      "results": "machines/genesis-artifact/RESULTS.md",
+      "last_result_hash": "DD7FEFB46E0443A5E9DB7357FD62FC8B501EAACCB8656FC315711F6F056E3995"
+    }
+  },
+  "watched": {
+    "walk_in_offer": {
+      "account": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+      "status": "open",
+      "offer_id": "08F7769F074C8C80C4DD6A691D2CEE3A3996458D845DA3C15F62BBAF699421B0",
+      "nftoken_id": "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1C81EFBC70141DD5D",
+      "amount_drops": "10000000",
+      "offer_count": 1,
+      "pack_offer_id": "08F7769F074C8C80C4DD6A691D2CEE3A3996458D845DA3C15F62BBAF699421B0",
+      "ledger_index": 21101245
+    },
+    "amm": {
+      "account": "r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w",
+      "amount_aeth": "4923.542951524584",
+      "amount_xrp_drops": "50783389",
+      "lp_token_currency": "0330E60FAE706EAD2C7D511D790B07A6F3B89931",
+      "trading_fee": 500,
+      "ledger_index": 21101245
+    },
+    "w0_signer_list": {
+      "account": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+      "quorum": 3,
+      "signer_count": 4,
+      "entries": [
+        {
+          "account": "rpEpjesFRPcpWWVKoheDT59YKtoA6Xureg",
+          "weight": 2
+        },
+        {
+          "account": "rHG25YbFNqFL9HzVqa9JQhXFY9Zignxznh",
+          "weight": 2
+        },
+        {
+          "account": "rGfkxsMvv833ioy2QjmTXhYF49J94N9WRu",
+          "weight": 1
+        },
+        {
+          "account": "r4Qc6iUKrLZQwM9sPdPWCCHAK2bcMsrxVr",
+          "weight": 1
+        }
+      ],
+      "matches_h1": true,
+      "master_disabled": false,
+      "previous_txn_id": "EDD27C458D314602E6059D8351D2DDA322A5E4BD1FD55602B3D2E667EA970299",
+      "ledger_index": 21101245
+    },
+    "regular_keys": {
+      "matches_pack": true,
+      "rows": [
+        {
+          "id": "W1",
+          "account": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+          "regular_key": "rDyiGKuMgL2F8S7TjB6m6Wg1pLg5KDPJYY",
+          "expected": "rDyiGKuMgL2F8S7TjB6m6Wg1pLg5KDPJYY"
+        },
+        {
+          "id": "W2",
+          "account": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+          "regular_key": "rNNzhkcScozB7Nzv3cWCZAEnu6MMC64rmy",
+          "expected": "rNNzhkcScozB7Nzv3cWCZAEnu6MMC64rmy"
+        },
+        {
+          "id": "W3",
+          "account": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+          "regular_key": "rJRxr1E1Dzz5TXJsCHhwQAm4qS68Y73dQj",
+          "expected": "rJRxr1E1Dzz5TXJsCHhwQAm4qS68Y73dQj"
+        },
+        {
+          "id": "W4",
+          "account": "ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN",
+          "regular_key": "rfXBxqPjprj1J5Ekq5v82D3BDqRm7ms7p2",
+          "expected": "rfXBxqPjprj1J5Ekq5v82D3BDqRm7ms7p2"
+        },
+        {
+          "id": "W5",
+          "account": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+          "regular_key": "rav5cYVarjSaXeeqCbsghMmmVGcJWB5y7Q",
+          "expected": "rav5cYVarjSaXeeqCbsghMmmVGcJWB5y7Q"
+        },
+        {
+          "id": "W6",
+          "account": "rfnqxYQWKsVGFuWLjky41puXHJkT2v8yTf",
+          "regular_key": "rGjdFjMz577GF4uvb4N9ayCqP5Q74kwVq5",
+          "expected": "rGjdFjMz577GF4uvb4N9ayCqP5Q74kwVq5"
+        }
+      ]
+    },
+    "batch": {
+      "atomic_enabled": false,
+      "ticket_batch_enabled": true,
+      "amendments": [
+        {
+          "name": "BatchV1_1",
+          "hash": "9F287AED3CDB50A7BD1ACEC24296A30C9B5230CCD136219317AC790E3B884377",
+          "enabled": false,
+          "supported": true
+        },
+        {
+          "name": "TicketBatch",
+          "hash": "955DF3FA5891195A9DAEFA1DDC6BB244B545DDE1BAA84CBB25D5F12A8DA68A0C",
+          "enabled": true,
+          "supported": true
+        },
+        {
+          "name": "fixBatchV1_2",
+          "hash": "14A2B45E48A4A124D1BBA657AC7B0DC3D5EA8C256C89E8F0D8142D32960A7944",
+          "enabled": false,
+          "supported": true
+        }
+      ]
+    },
+    "aeth_outstanding": "10100",
+    "testnet_nav_spendable_drops": "410400000",
+    "w7_hook": {
+      "account": "r9YjdAzgL4hHvqDUeb4sTf4yF2MDQ5kq7h",
+      "hook_hash": "B9B6A6D5DDCF4212CC046217500AB3D90D54C7E63684F98E7991F4EBA9BC6C09",
+      "hook_object_id": "C3ABA1460EF3339BFBC4CE25E963ABCF016DD16F71153263FB7989105666B629",
+      "previous_txn_id": "7DBFE10ECFFDB2ACE8D83CA570ECF64F64712DBDE962B9C6756F83E655273447",
+      "pack_hook_hash": "B9B6A6D5DDCF4212CC046217500AB3D90D54C7E63684F98E7991F4EBA9BC6C09",
+      "matches_pack": true,
+      "ledger_index": 12693992
+    }
+  },
+  "probes": {
+    "desk": {
+      "url": "https://aether-foundry-desk.vercel.app/",
+      "http_status": 200,
+      "error": null
+    },
+    "toml": {
+      "url": "https://aether-foundry-desk.vercel.app/.well-known/xrp-ledger.toml",
+      "http_status": 200,
+      "error": null
+    }
+  },
+  "next_actions": [
+    "Morning health: read probes.desk, probes.toml, wallets.W0.spendable_drops, and watched.w0_signer_list before acting.",
+    "Batch probe: read watched.batch.atomic_enabled and stay quiet while it is false; do not submit a Batch transaction.",
+    "Walk-In: read watched.walk_in_offer.status; leave the v2 shop while open, and remint only on the Foundry box after sold_out."
+  ],
+  "blockers": []
+}

@@ -15,4 +15,4 @@ flowchart LR
   Machines -->|RESULTS.md + hashes| Lab
 ```
 
-See `MASTER_PROMPT.md` for hard laws and the operating loop.
+See `MASTER_PROMPT.md` for hard laws and the operating loop. Routines resume from `lab/director-state.json` (`lab/DIRECTOR_WAKE.md`) instead of reconstructing state from session notes.
