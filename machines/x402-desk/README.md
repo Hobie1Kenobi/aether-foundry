@@ -1,7 +1,9 @@
 # x402 desk merchant
 
 **Network:** XRPL Testnet only. CAIP-2 `xrpl:1`. Mainnet `xrpl:0` is refused.  
-**Pay-to:** W3 CHANNELS `rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw`  
+**Pay-to:** W3 CHANNELS `rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw`
+
+W3 buying these routes is circular. The outbound payer refuses this payTo. See `machines/x402-outbound`.  
 **Desk:** https://aether-foundry-desk.vercel.app (Vercel project `aether-foundry-desk`, root `web`)  
 **RPC:** https://s.altnet.rippletest.net:51234
 

@@ -55,6 +55,10 @@ export const AETH_HEX = "4145544800000000000000000000000000000000";
 /** NFT taxon for Foundry artifacts */
 export const NFT_TAXON = 20260927;
 
+/**
+ * Foundry anchors. The outbound payer refuses every address in this object.
+ * Do not add the foreign x402 counterparty here.
+ */
 export const WALLETS = {
   W0: {
     id: "W0",

@@ -35,6 +35,9 @@ curl -sS -D- -o /tmp/x402-reserve.json ${DESK}/api/x402/reserve-audit
         unlocks the JSON. This desk does not sign and does not submit the
         signed blob. Mainnet <span className="mono">xrpl:0</span> is refused.
       </p>
+      <p className="muted">
+        CHANNELS also pays outbound — see machines/x402-outbound.
+      </p>
       <div className="grid">
         {skus.map((sku) => (
           <article className="card" key={sku.id}>
