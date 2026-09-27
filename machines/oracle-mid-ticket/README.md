@@ -1,6 +1,6 @@
 # Machine — Oracle Mid-Ticket (Foundry Night B)
 
-**Status:** spec only — no trial this session (2026-09-27-5)  
+**Status:** trialled (session 2026-09-27-6) — see RESULTS.md  
 **Network:** XRPL Testnet only (`wss://s.altnet.rippletest.net:51233`)  
 **Thesis:** A *price oracle* built from **AMM mid + CLOB mid**, frozen into a work-ticket quote (XRP or AETH labor units) so Atelier can sell tickets at an honest, reproducible FX without a third-party feed.
 
@@ -52,5 +52,5 @@ Session-5 live: spot_amm ≈ **0.01011**; CLOB mid ≈ **0.0100** → quote ≈ 
 ## Non-goals
 
 - No Chainlink-style external feed.  
-- No product txs this session.  
+- Spec session (2026-09-27-5) had no product txs; trial session-6 minted one quote-ticket.  
 - Not a perpetual price stream — one-shot quote per ticket.

@@ -110,7 +110,7 @@ export const WALLETS = {
 
 export type WalletId = keyof typeof WALLETS;
 
-/** Machine #1-#3 RESULTS hashes (from machines RESULTS.md) — display only */
+/** Machine #1-#4 RESULTS hashes (from machines RESULTS.md) — display only */
 export const MACHINES = {
   "work-ticket-escrow": {
     number: 1,
@@ -169,6 +169,26 @@ export const MACHINES = {
         "A784D97D6EF6B9E69C754676C7A3D2CFEB6E15B43C852E15B7D60EFBC9FAAFCB",
       checkCash:
         "FC9D24150810549E5FD2E62B0DCAC2BC922445DF34CA71F765F6F9DD9CE4E0EC",
+    },
+  },
+  "oracle-mid-ticket": {
+    number: 4,
+    name: "oracle-mid-ticket",
+    label: "Machine #4 — Oracle Mid-Ticket",
+    readme:
+      "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/oracle-mid-ticket/README.md",
+    nftokenId:
+      "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF19A5519C90141DD5B",
+    hashes: {
+      mint: "BDB214A12685448014153F0A4E7612DFED48964ACEFEEE29F6DAA078E3D55705",
+      sell: "298085ADCE0D6C8ED3DB33B25110E6B323C03C34C49DB669F05306268B2BA376",
+      accept: "F22A3A9BF15D18ED39E34F49FB8D4FE64CFE8AF52954C066C4EA46B236AF6E33",
+      escrowCreate:
+        "A45A05F1C01095C27B70902A28EAD49C1D9D8A7100C63BFCEE2053AE0CA6522C",
+      escrowFinish:
+        "A2D8E84C265DCCDD3E2E7A422B8F60D3439739E7A257154ED857AA7AB380E3A6",
+      domainAccountSet:
+        "15D20D72A5BECEE3A84998503F8D357B68D321563959497D2FF629A6D0685F76",
     },
   },
 } as const;

@@ -1,0 +1,30 @@
+{
+  "network": "XRPL Testnet",
+  "session": "2026-09-27-6",
+  "machine": "oracle-mid-ticket",
+  "ts": "2026-09-27T16:44:45.269Z",
+  "amm_account": "r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w",
+  "pool_aeth": 4973.542951524584,
+  "pool_xrp": 50.270313,
+  "spot_amm": 0.010107545765657899,
+  "best_bid": 0.0095,
+  "best_ask": 0.0105,
+  "mid_clob": 0.01,
+  "clob_thin": false,
+  "weights": {
+    "amm": 0.7,
+    "clob": 0.3
+  },
+  "formula": "quote = 0.7 * spot_amm + 0.3 * mid_clob",
+  "quote_xrp_per_aeth": 0.010075282035960528,
+  "labor_units_aeth": 1,
+  "labor_xrp_raw": 0.010075282035960528,
+  "labor_xrp": 0.010075,
+  "labor_drops": "10075",
+  "labor_floor_applied": false,
+  "ask_count": 2,
+  "bid_count": 2,
+  "ledger_index": 21096178,
+  "ledger_index_note": "amm_info returned ledger_current_index only; URI fragment recorded ledger=undefined. Contemporaneous mint ledger 21096178 used here.",
+  "uri_ledger_fragment": "undefined"
+}
