@@ -14,6 +14,7 @@
 | BUYER | work-ticket client (session-2) | rEbUaXDXZnzR8wJjGqULKn1YLXNd5CARth | XRPL Testnet | yes (faucet) |
 | STRANGER | walk-in purchaser (session-4) | rh4c6qMMyafccZrPFCPCN742BNMXfjKYss | XRPL Testnet | yes (faucet) |
 | AMM | AETH/XRP pool | r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w | XRPL Testnet | seeded 2026-09-27 |
+| FOREIGN | x402 outbound counterparty (not a Foundry anchor; do not add to desk `WALLETS`) | r3JbqcVQ4Pov4MhFUMSdnro7s3VgpaqssZ | XRPL Testnet | yes (faucet) |
 
 Seeds live in founder local `.env` only (`/workspace/aether-foundry-secrets/.env`, mode 600 — outside git tree).
 

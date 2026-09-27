@@ -1,0 +1,448 @@
+"use strict";
+
+const { describe, it, before, after } = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("fs");
+const http = require("http");
+const os = require("os");
+const path = require("path");
+const { spawn } = require("child_process");
+const guard = require("./x402-outbound-guard");
+const record = require("./x402-outbound-record");
+const payer = require("./x402-outbound");
+const pub = require("../machines/x402-outbound/foreign-public");
+const shop = require("../machines/x402-outbound/foreign-shop");
+const rules = require("../web/lib/x402-rules");
+
+const ROOT = path.resolve(__dirname, "..");
+const KNOWN = {
+  W0: "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+  W1: "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+  W2: "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+  W3: "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+  W4: "ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN",
+  W5: "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+  W6: "rfnqxYQWKsVGFuWLjky41puXHJkT2v8yTf",
+  AMM: "r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w",
+  BUYER: "rEbUaXDXZnzR8wJjGqULKn1YLXNd5CARth",
+  STRANGER: "rh4c6qMMyafccZrPFCPCN742BNMXfjKYss",
+};
+
+function listen(server) {
+  return new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", () => resolve(server.address().port));
+  });
+}
+
+function close(server) {
+  return new Promise((resolve) => server.close(() => resolve()));
+}
+
+function spawnPayer(args, env) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [path.join(ROOT, "src", "x402-outbound.js"), ...args], {
+      cwd: ROOT,
+      env,
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", reject);
+    child.on("close", (status) => resolve({ status, stdout, stderr }));
+  });
+}
+
+function isolatedEnv(extra) {
+  return Object.assign(
+    {
+      PATH: process.env.PATH,
+      AETHER_SECRETS: path.join(os.tmpdir(), "aether-outbound-missing.env"),
+      CI: "",
+      GITHUB_ACTIONS: "",
+    },
+    extra || {}
+  );
+}
+
+function challengeServer(payTo, extra) {
+  const required = {
+    x402Version: 2,
+    error: "PAYMENT-SIGNATURE header is required",
+    accepts: [
+      {
+        scheme: "exact",
+        network: (extra && extra.network) || "xrpl:1",
+        amount: (extra && extra.amount) || "5000",
+        asset: "XRP",
+        payTo,
+        extra: {
+          sourceTag: 1,
+          invoiceId: "fx-test-invoice",
+          diyCostDrops: extra && extra.diy != null ? extra.diy : "0",
+        },
+      },
+    ],
+    diyCostDrops: extra && extra.diy != null ? extra.diy : "0",
+    resource: { url: "http://challenge.local", mimeType: "application/json" },
+  };
+  return http.createServer((req, res) => {
+    res.writeHead(402, {
+      "Content-Type": "application/json",
+      "PAYMENT-REQUIRED": rules.encodeHeader(required),
+    });
+    res.end(JSON.stringify({ paymentRequired: required, diyCostDrops: required.diyCostDrops }));
+  });
+}
+
+describe("foundry payTo denylist", () => {
+  it("loads every WALLETS anchor and excludes the foreign shop", () => {
+    const index = guard.foundryIndex();
+    for (const [id, address] of Object.entries(KNOWN)) {
+      assert.equal(index.get(address), id);
+      assert.throws(() => guard.assertForeignPayTo(address, index), /refusing Foundry payTo/);
+    }
+    assert.equal(index.has(pub.FOREIGN_ADDRESS), false);
+    assert.doesNotThrow(() => guard.assertForeignPayTo(pub.FOREIGN_ADDRESS, index));
+    assert.equal(pub.FOREIGN_ADDRESS === guard.W3_ADDRESS, false);
+  });
+});
+
+describe("outbound accept parsing", () => {
+  it("requires xrpl:1 exact XRP and refuses mainnet", () => {
+    assert.throws(
+      () =>
+        guard.selectAccept({
+          x402Version: 2,
+          accepts: [{ scheme: "exact", network: "xrpl:0", amount: "5000", asset: "XRP", payTo: "rX" }],
+        }),
+      /refusing mainnet xrpl:0/
+    );
+    const accept = guard.selectAccept({
+      x402Version: 2,
+      accepts: [
+        {
+          scheme: "exact",
+          network: "xrpl:1",
+          amount: "5000",
+          asset: "XRP",
+          payTo: pub.FOREIGN_ADDRESS,
+          extra: { sourceTag: pub.SKU.sourceTag, invoiceId: "fx-foreign-oracle-ping-test" },
+        },
+      ],
+    });
+    assert.equal(accept.payTo, pub.FOREIGN_ADDRESS);
+    assert.equal(accept.amount, "5000");
+  });
+
+  it("decodes a PAYMENT-REQUIRED header", () => {
+    const required = shop.buildRequired({
+      resourceUrl: "http://127.0.0.1:8787/foreign-oracle-ping",
+      invoiceId: "fx-foreign-oracle-ping-test",
+    });
+    const parsed = guard.parsePaymentRequired(rules.encodeHeader(required), "");
+    assert.equal(parsed.accepts[0].network, "xrpl:1");
+    assert.equal(parsed.accepts[0].payTo, pub.FOREIGN_ADDRESS);
+  });
+
+  it("binds amount, SourceTag, and invoice on the Payment", () => {
+    const accept = guard.selectAccept(
+      shop.buildRequired({
+        resourceUrl: "http://127.0.0.1/foreign-oracle-ping",
+        invoiceId: "fx-foreign-oracle-ping-test",
+      })
+    );
+    const tx = guard.buildPaymentTx({ account: guard.W3_ADDRESS, accept });
+    assert.equal(tx.Destination, pub.FOREIGN_ADDRESS);
+    assert.equal(tx.Amount, "5000");
+    assert.equal(tx.SourceTag, pub.SKU.sourceTag);
+    const memo = Buffer.from(tx.Memos[0].Memo.MemoData, "hex").toString("utf8");
+    assert.equal(memo, "fx-foreign-oracle-ping-test");
+    assert.equal(tx.Account, guard.W3_ADDRESS);
+  });
+});
+
+describe("cheapness gate", () => {
+  it("prints too expensive vs DIY when the ask is above the ceiling", () => {
+    const stated = guard.statedDiyDrops(
+      { diyCostDrops: "0" },
+      { extra: { diyCostDrops: "0" }, amount: "5000" },
+      null
+    );
+    const ceiling = guard.resolveCeiling({ maxDropsFlag: null, envMax: null, statedDiy: stated });
+    assert.equal(ceiling.ceiling, "0");
+    const verdict = guard.priceVerdict("5000", ceiling.ceiling);
+    assert.equal(verdict.pay, false);
+    assert.equal(verdict.message, "too expensive vs DIY");
+    const raised = guard.resolveCeiling({
+      maxDropsFlag: "10000",
+      envMax: "1",
+      statedDiy: "0",
+    });
+    assert.equal(raised.ceiling, "10000");
+    assert.equal(guard.priceVerdict("5000", raised.ceiling).pay, true);
+    assert.equal(guard.priceVerdict("5000", "5000").pay, true);
+  });
+});
+
+describe("x402 outbound record", () => {
+  it("appends one real hash and refuses Foundry payTo", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "x402-outbound-"));
+    const paths = {
+      logPath: path.join(dir, "ledger-log.jsonl"),
+      pnlPath: path.join(dir, "pnl.md"),
+    };
+    fs.writeFileSync(paths.pnlPath, "| x402_outbound_hits | 0 | |\n");
+    const event = {
+      hash: "ab".repeat(32),
+      pay_to: pub.FOREIGN_ADDRESS,
+      resource_url: "http://127.0.0.1/foreign-oracle-ping",
+      amount_drops: "5000",
+      network: "xrpl:1",
+    };
+    const first = record.recordOutbound(event, paths);
+    assert.equal(first.appended, true);
+    assert.equal(first.count, 1);
+    assert.match(fs.readFileSync(paths.pnlPath, "utf8"), /\| x402_outbound_hits \| 1 \|/);
+    const second = record.recordOutbound(event, paths);
+    assert.equal(second.appended, false);
+    assert.equal(second.count, 1);
+    assert.throws(
+      () => record.normalize({ hash: "cd".repeat(32), pay_to: KNOWN.W3, network: "xrpl:1" }),
+      /Foundry payTo/
+    );
+    assert.throws(
+      () =>
+        record.normalize({
+          hash: "cd".repeat(32),
+          pay_to: pub.FOREIGN_ADDRESS,
+          network: "xrpl:0",
+        }),
+      /mainnet/
+    );
+  });
+});
+
+describe("seed loading", () => {
+  it("reads W3_SEED from a secrets file and does not require other seed names", () => {
+    const file = path.join(os.tmpdir(), `w3-only-${process.pid}.env`);
+    fs.writeFileSync(file, "FOREIGN_SEED=not-the-payer\nW3_SEED=from-file\n");
+    assert.equal(payer.loadW3Seed({ AETHER_SECRETS: file, W3_SEED: "" }), "from-file");
+    assert.equal(payer.loadW3Seed({ W3_SEED: "from-env", AETHER_SECRETS: file }), "from-env");
+    fs.unlinkSync(file);
+  });
+
+  it("does not log a seed from the payer source", () => {
+    const src = fs.readFileSync(path.join(__dirname, "x402-outbound.js"), "utf8");
+    assert.match(src, /fromSeed/);
+    assert.doesNotMatch(src, /console\.(log|error)\([^)\n]*[Ss]eed/);
+    const shopDir = path.join(ROOT, "machines", "x402-outbound");
+    for (const name of fs.readdirSync(shopDir)) {
+      if (!name.endsWith(".js")) continue;
+      const text = fs.readFileSync(path.join(shopDir, name), "utf8");
+      assert.doesNotMatch(text, /fromSeed|Wallet\.sign/, name);
+    }
+  });
+});
+
+describe("foreign agent shop", () => {
+  it("unpaid GET is 402 to the foreign address", async () => {
+    const server = shop.createServer();
+    const port = await listen(server);
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/foreign-oracle-ping`);
+      const text = await res.text();
+      assert.equal(res.status, 402);
+      const header = res.headers.get("payment-required");
+      const required = rules.decodeHeader(header);
+      assert.equal(required.x402Version, 2);
+      assert.equal(required.accepts[0].network, "xrpl:1");
+      assert.equal(required.accepts[0].payTo, pub.FOREIGN_ADDRESS);
+      assert.equal(required.accepts[0].amount, "5000");
+      assert.equal(required.diyCostDrops, "0");
+      const body = JSON.parse(text);
+      assert.equal(body.foundry_revenue, false);
+      assert.equal(body.shop, "foreign-agent");
+    } finally {
+      await close(server);
+    }
+  });
+
+  it("returns ledger_index work after a matching proof", async () => {
+    const invoice = "fx-foreign-oracle-ping-test";
+    const hash = "AB".repeat(32);
+    const required = shop.buildRequired({
+      resourceUrl: "http://shop.local/foreign-oracle-ping",
+      invoiceId: invoice,
+    });
+    const tx = {
+      hash,
+      validated: true,
+      TransactionType: "Payment",
+      Account: guard.W3_ADDRESS,
+      Destination: pub.FOREIGN_ADDRESS,
+      Amount: pub.SKU.drops,
+      SourceTag: pub.SKU.sourceTag,
+      LastLedgerSequence: 21000000,
+      NetworkID: 1,
+      Memos: [
+        {
+          Memo: {
+            MemoData: Buffer.from(invoice, "utf8").toString("hex").toUpperCase(),
+          },
+        },
+      ],
+      meta: { TransactionResult: "tesSUCCESS", delivered_amount: pub.SKU.drops },
+      ledger_index: 211,
+    };
+    const signature = rules.encodeHeader({
+      x402Version: 2,
+      accepted: required.accepts[0],
+      payload: { transaction: hash },
+    });
+    const result = await shop.handleForeignRequest({
+      method: "GET",
+      url: "/foreign-oracle-ping",
+      headers: { "payment-signature": signature },
+      resourceUrl: "http://shop.local/foreign-oracle-ping",
+      lookupTx: async () => ({ found: true, tx }),
+      ledgerIndex: async () => 21099390,
+    });
+    assert.equal(result.status, 200);
+    assert.equal(result.body.ok, true);
+    assert.equal(result.body.work, "foreign-oracle-ping");
+    assert.equal(result.body.ledger_index, 21099390);
+    assert.equal(result.body.foundry_revenue, false);
+    assert.equal(result.body.pay_to, pub.FOREIGN_ADDRESS);
+  });
+
+  it("refuses a proof that pays W3", async () => {
+    const invoice = "fx-foreign-oracle-ping-test";
+    const hash = "CD".repeat(32);
+    const required = shop.buildRequired({
+      resourceUrl: "http://shop.local/foreign-oracle-ping",
+      invoiceId: invoice,
+    });
+    const accepted = Object.assign({}, required.accepts[0], { payTo: guard.W3_ADDRESS });
+    const signature = rules.encodeHeader({
+      x402Version: 2,
+      accepted,
+      payload: { transaction: hash },
+    });
+    const result = await shop.handleForeignRequest({
+      method: "GET",
+      url: "/foreign-oracle-ping",
+      headers: { "payment-signature": signature },
+      lookupTx: async () => {
+        throw new Error("lookup should not run");
+      },
+    });
+    assert.equal(result.status, 402);
+    assert.equal(result.body.code, "destination_mismatch");
+  });
+});
+
+describe("outbound CLI", () => {
+  let foreign;
+  let foreignPort;
+
+  before(async () => {
+    foreign = shop.createServer();
+    foreignPort = await listen(foreign);
+  });
+
+  after(async () => {
+    await close(foreign);
+  });
+
+  it("refuses CI before signing", async () => {
+    const result = await spawnPayer(["--url", "http://127.0.0.1/unused", "--max-drops", "10000"], {
+      PATH: process.env.PATH,
+      CI: "true",
+      GITHUB_ACTIONS: "",
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /refusing to sign under CI/);
+  });
+
+  it("refuses a Foundry payTo", async () => {
+    const server = challengeServer(KNOWN.W3);
+    const port = await listen(server);
+    try {
+      const result = await spawnPayer(
+        [
+          "--url",
+          `http://127.0.0.1:${port}/sku`,
+          "--max-drops",
+          "10000",
+          "--dry-run",
+        ],
+        isolatedEnv()
+      );
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /refusing Foundry payTo/);
+      assert.match(result.stderr, /W3/);
+    } finally {
+      await close(server);
+    }
+  });
+
+  it("refuses mainnet xrpl:0", async () => {
+    const server = challengeServer(pub.FOREIGN_ADDRESS, { network: "xrpl:0" });
+    const port = await listen(server);
+    try {
+      const result = await spawnPayer(
+        ["--url", `http://127.0.0.1:${port}/sku`, "--dry-run"],
+        isolatedEnv()
+      );
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /refusing mainnet xrpl:0/);
+    } finally {
+      await close(server);
+    }
+  });
+
+  it("exits unpaid when the foreign ask is above DIY", async () => {
+    const result = await spawnPayer(
+      ["--url", `http://127.0.0.1:${foreignPort}/foreign-oracle-ping`],
+      isolatedEnv()
+    );
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /too expensive vs DIY/);
+    assert.doesNotMatch(`${result.stdout}${result.stderr}`, /paid /);
+  });
+
+  it("dry-run plans a foreign payment and does not invent a hash", async () => {
+    const result = await spawnPayer(
+      [
+        "--url",
+        `http://127.0.0.1:${foreignPort}/foreign-oracle-ping`,
+        "--max-drops",
+        "10000",
+        "--dry-run",
+      ],
+      isolatedEnv({ CI: "true", W3_SEED: "not-a-real-seed" })
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /dry-run/);
+    assert.match(result.stdout, new RegExp(pub.FOREIGN_ADDRESS));
+    assert.match(result.stdout, /drops 5000/);
+    assert.match(result.stdout, /no tx hash \(not submitted\)/);
+    assert.doesNotMatch(`${result.stdout}${result.stderr}`, /not-a-real-seed/);
+  });
+
+  it("asks for W3_SEED and prints the one-click when the ceiling allows a pay", async () => {
+    const url = `http://127.0.0.1:${foreignPort}/foreign-oracle-ping`;
+    const result = await spawnPayer(["--url", url, "--max-drops", "10000", "--record"], isolatedEnv());
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /W3_SEED is not loaded/);
+    assert.match(result.stderr, /npm run x402:foreign/);
+    assert.match(result.stderr, /npm run x402:outbound -- --url /);
+    assert.match(result.stderr, /--record/);
+    assert.doesNotMatch(`${result.stdout}${result.stderr}`, /paid /);
+  });
+});

@@ -46,3 +46,5 @@ npm run dev
 ## x402
 
 Unpaid calls return 402 and a base64 `PAYMENT-REQUIRED` header (`x402Version` 2, network `xrpl:1`). A paid retry sends `PAYMENT-SIGNATURE`. Success is 200 plus `PAYMENT-RESPONSE` and an `x402_hit` object. Vercel does not write `market/pnl.md`; from the repo root, `npm run x402:hit` records that object.
+
+Desk SKUs still settle to W3. CHANNELS also pays outbound — see `machines/x402-outbound`. That payer refuses this desk's payTo.

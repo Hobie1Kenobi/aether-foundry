@@ -84,6 +84,12 @@ Testnet only (`xrpl:1`). Pay-to is W3 CHANNELS `rB6tyDtACcaihvoHKocuA5snG8H7Hn43
 | reserve-audit | `/api/x402/reserve-audit` | 250000 | 0.25 | 202609272 |
 | composition-quote | `/api/x402/composition-quote` | 500000 | 0.5 | 202609273 |
 
+## x402 outbound (W3 pays a foreign shop)
+
+`npm run x402:outbound` loads `W3_SEED` from `AETHER_SECRETS` or `/workspace/aether-foundry-secrets/.env`. It refuses CI, mainnet (`xrpl:0` and mainnet hosts), and any payTo in `web/lib/xrpl-public.ts` `WALLETS` (W0–W6, AMM, BUYER, STRANGER). Never buy a Foundry payTo with W3 — the desk merchant settles to W3, so W3 buying the desk is circular.
+
+The foreign trial counterparty is `machines/x402-outbound/` (payTo `r3JbqcVQ4Pov4MhFUMSdnro7s3VgpaqssZ`, not Foundry revenue). `FOREIGN_SEED` may sit in the same secrets file; it is not the payer. See that README for the one-click.
+
 ## Routines (agent schedules, America/Chicago)
 
 Created 2026-09-27:
@@ -106,3 +112,4 @@ Prefer `/workspace/aether-foundry-push.sh` when pushing from the box checkout. N
 - [ ] Batch txs while amendment disabled
 - [ ] Domain host set to a `*.v0.build` preview
 - [ ] Walk-In remint or seeds from CI (the watcher is dry-run only)
+- [ ] W3 paying a Foundry payTo (desk SKUs included — that is circular)
