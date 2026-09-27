@@ -1,6 +1,6 @@
 # Machine — Batch Heartbeat (Foundry Night C)
 
-**Status:** spec only — no trial this session (2026-09-27-5)  
+**Status:** spec only — Batch still disabled (re-probed 2026-09-27-7 afternoon)  
 **Network:** XRPL Testnet only (`wss://s.altnet.rippletest.net:51233`)  
 **Thesis:** One atomic **Batch** corporate heartbeat: accept an NFT buy offer + AMMDeposit + DIDUpdate in a single transaction so inventory, liquidity, and public identity move together or not at all.
 
@@ -8,7 +8,7 @@
 
 > **Is Batch enabled on this server?**
 
-**No.** Live `feature` probe 2026-09-27 ~10:13 AM CT against `wss://s.altnet.rippletest.net:51233` (rippled **3.4.1**):
+**No.** Latest live `feature` probe 2026-09-27 ~11:52 AM CT via HTTPS JSON-RPC (rippled **3.4.1**, ledger 21096312); same gate as morning session-5:
 
 | Amendment name | Hash (abbrev) | enabled | supported |
 |----------------|---------------|---------|-----------|
