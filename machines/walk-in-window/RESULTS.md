@@ -1,0 +1,72 @@
+# Machine: walk-in-window — RESULTS
+
+**Network:** XRPL Testnet  
+**Date (CT):** 2026-09-27 ~10:06–10:10 AM  
+**Session:** 2026-09-27-4  
+**Operator:** Foundry Director / Machine #3 primary
+
+## STRANGER (new faucet)
+
+| Field | Value |
+|-------|-------|
+| Address | `rh4c6qMMyafccZrPFCPCN742BNMXfjKYss` |
+| Funded via | `client.fundWallet()` (~100 XRP) |
+| Seed location | secrets `.env` `STRANGER_SEED` only (never in git) |
+
+## Path-pay (~50 AETH)
+
+| Field | Value |
+|-------|-------|
+| TrustSet hash | `A784D97D6EF6B9E69C754676C7A3D2CFEB6E15B43C852E15B7D60EFBC9FAAFCB` |
+| Payment hash | `BAF7B71ADCC203985D5686B201CE2E1FA94677D73A59428C02C902747E8C1158` |
+| Paths | `[[{ currency: AETH, issuer: W0 }]]` (path_find → order book / AMM) |
+| SendMax | `1508511` drops (~1.51 XRP) |
+| delivered_amount | `50` AETH (issuer W0) |
+| Source amount quote | `502837` drops |
+
+## Walk-In NFT (walk-in-0001)
+
+| Field | Value |
+|-------|-------|
+| Minter | W2 `rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw` |
+| Taxon | `20260927` |
+| TransferFee | `1000` (1%) |
+| URI | walk-in-window README raw URL |
+| NFTokenID | `000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1854F48CA0141DD5A` |
+| Mint hash | `4E6DCF07406CB5D099CBDF0EFAD0D83E6B1ECD78A203DF2AD65F89DF58625A82` |
+| Sell offer hash | `8B756EF63946A81A2C8C4F0EC450DD03D0EB3EB9723100149BA6C7BE5DBE131C` |
+| Sell offer ID | `6AFBC9E248A4F4178D533AD09EAA309954561ED21E2BD007385108BD4C2CC4D4` |
+| Price | 10 XRP |
+| Accept hash | `7CF0B34F1A2536C55746958B0BF18FB4BE500DD7BBA9FFDA67E16F8C5F23A52F` |
+| Holder | STRANGER `rh4c6qMMyafccZrPFCPCN742BNMXfjKYss` |
+| Explorer | https://testnet.xrpl.org/nft/000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1854F48CA0141DD5A |
+
+## Check (hospitality)
+
+| Field | Value |
+|-------|-------|
+| CheckCreate hash | `1EF58F875EB4DE2AF3F7EFFE599AE871A0360F726B11CCE4AD1E6FCE70CC9F37` |
+| Check ID | `24FC55FB6D2B2D792A7297E8CD04F212DCCD5FBDB5520680B02B759668CD809D` |
+| CheckCash hash | `FC9D24150810549E5FD2E62B0DCAC2BC922445DF34CA71F765F6F9DD9CE4E0EC` |
+| Amount | 2 XRP W0 → STRANGER |
+
+## DID / TOML
+
+| Item | Status |
+|------|--------|
+| W0 DID URI | Already `…/corp/charter.md` — **no DIDSet** |
+| `public/xrp-ledger.toml` | Published this session (W0–W4, AMM, taxon, machine URIs) |
+
+## Channel drill (housekeeping → drip-pass THREAT)
+
+| Step | Hash / ID | Observation |
+|------|-----------|-------------|
+| Dest-close create (SettleDelay 300) | create `6AB80973…` / channel `2E812790…` | |
+| Dest `tfClose` | `E233D2E8C6AB41DA5A6C9032D566D127CB21F7DA58A58BB7C97743DB5021CE33` | PayChannel **Deleted** immediately; unclaimed → source |
+| Source-close create | `C1ACB9658B27DEDDF5108F63118091D345FF0B4346F77A6298119A0B7539DC5C` / `F83E073B…` | |
+| Source `tfClose` | `D04A320649912A028C27E67922BF681CEF6ADF12FBF2ACF46B884962A55BCF04` | Channel **remains**; `Expiration=843837231` (~10:13:51 CT) |
+
+## Notes
+
+- No seeds in this file.
+- Unix scar escrow on BUYER untouched.

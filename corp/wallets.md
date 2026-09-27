@@ -12,6 +12,7 @@
 | W7 | XAHAU | _pending_ | Xahau Testnet | no |
 | W8 | EVM | _deferred_ | XRPL EVM Testnet | n/a |
 | BUYER | work-ticket client (session-2) | rEbUaXDXZnzR8wJjGqULKn1YLXNd5CARth | XRPL Testnet | yes (faucet) |
+| STRANGER | walk-in purchaser (session-4) | rh4c6qMMyafccZrPFCPCN742BNMXfjKYss | XRPL Testnet | yes (faucet) |
 | AMM | AETH/XRP pool | r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w | XRPL Testnet | seeded 2026-09-27 |
 
 Seeds live in founder local `.env` only (`/workspace/aether-foundry-secrets/.env`, mode 600 — outside git tree).
@@ -40,3 +41,6 @@ Booted 2026-09-27 via faucet + on-chain boot. Explorer: https://testnet.xrpl.org
 | Epoch Scar holder | W5 `rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ` |
 | PayChannel (session-3, settled) | `DCE8401B0DFFE4031FBB15935D0EC33F72B010C8B89E2F60E6E6AC8B0572E9F5` |
 
+| Walk-In NFTokenID | `000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1854F48CA0141DD5A` |
+| Walk-In holder | STRANGER `rh4c6qMMyafccZrPFCPCN742BNMXfjKYss` |
+| Path-pay (STRANGER) | 50 AETH via AMM; hash `BAF7B71ADCC203985D5686B201CE2E1FA94677D73A59428C02C902747E8C1158` |

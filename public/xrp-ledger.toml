@@ -1,4 +1,44 @@
-# Draft discovery file — publish when domain is pointed.
-# [[ACCOUNTS]]
-# address = "r..."
-# desc = "Aether Foundry Treasury (Testnet)"
+# Aether Foundry — XRPL Testnet discovery (xrp-ledger.toml)
+# Repo: https://github.com/Hobie1Kenobi/aether-foundry
+# Network: XRPL Testnet only. Publish when domain is pointed; raw GitHub copy is canonical until then.
+
+[METADATA]
+modified = "2026-09-27T15:10:00Z"
+network = "XRPL Testnet"
+
+[[ACCOUNTS]]
+address = "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs"
+desc = "W0 TREASURY — AETH issuer, DID → corp/charter.md"
+[[ACCOUNTS]]
+address = "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS"
+desc = "W1 MARKET"
+[[ACCOUNTS]]
+address = "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw"
+desc = "W2 ATELIER — NFT minter (taxon 20260927)"
+[[ACCOUNTS]]
+address = "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw"
+desc = "W3 CHANNELS"
+[[ACCOUNTS]]
+address = "ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN"
+desc = "W4 ESCROW"
+[[ACCOUNTS]]
+address = "r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w"
+desc = "AMM AETH/XRP pool"
+
+[ISSUED_CURRENCIES]
+# AETH hex 4145544800000000000000000000000000000000 issuer = W0
+
+[NFT]
+taxon = 20260927
+transfer_fee = 1000
+transfer_fee_note = "1%"
+
+[[MACHINES]]
+id = "walk-in-window"
+uri = "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/walk-in-window/README.md"
+[[MACHINES]]
+id = "drip-pass"
+uri = "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/drip-pass/README.md"
+[[MACHINES]]
+id = "work-ticket-escrow"
+uri = "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/work-ticket-escrow/README.md"
