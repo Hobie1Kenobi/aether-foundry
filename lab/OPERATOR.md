@@ -72,6 +72,17 @@ The shop stays open without a human session watching the screen. Signing stays o
    - `curl -sS -o /dev/null -w '%{http_code}\n' https://aether-foundry-desk.vercel.app/`
    - `curl -sS -o /dev/null -w '%{http_code}\n' https://aether-foundry-desk.vercel.app/.well-known/xrp-ledger.toml`
 4. Desk is **read-only**: no Wallet.sign, no AccountSet/OracleSet from the Next app.
+5. x402 merchant: unpaid `GET /api/x402/<sku>` is HTTP 402. Pay Testnet XRP to W3, then retry. See `machines/x402-desk/README.md`. The desk does not persist hits. `npm run x402:hit` appends `lab/ledger-log.jsonl` and sets `x402_hits` in `market/pnl.md`.
+
+## x402 merchant
+
+Testnet only (`xrpl:1`). Pay-to is W3 CHANNELS `rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw`. No facilitator: the desk verifies a validated Payment on the public Testnet RPC and does not submit a signed blob. `npm run x402:pay` is the operator buyer (seed in `XRPL_BUYER_SEED`, never in Vercel).
+
+| SKU | Path | Drops | XRP | SourceTag |
+|-----|------|-------|-----|-----------|
+| machine-spec | `/api/x402/machine-spec` | 100000 | 0.1 | 202609271 |
+| reserve-audit | `/api/x402/reserve-audit` | 250000 | 0.25 | 202609272 |
+| composition-quote | `/api/x402/composition-quote` | 500000 | 0.5 | 202609273 |
 
 ## Routines (agent schedules, America/Chicago)
 

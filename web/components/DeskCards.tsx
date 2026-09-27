@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { MerchantSection } from "@/components/MerchantSection";
 import {
   EXPLORER_ACCOUNT,
   EXPLORER_TX,
@@ -250,6 +251,7 @@ export async function DeskCards() {
         <nav className="hero-links" aria-label="Desk resources">
           <a href="/.well-known/xrp-ledger.toml">XRPL.toml ↗</a>
           <a href="#storefront-title">Walk-In storefront</a>
+          <a href="#x402-merchant">x402 merchant</a>
           <a
             href={MACHINES["walk-in-window"].inbound}
             target="_blank"
@@ -558,6 +560,7 @@ export async function DeskCards() {
           />
         </div>
       </section>
+      <MerchantSection />
     </>
   );
 }

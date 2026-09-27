@@ -22,10 +22,13 @@ type AccountInfoResult = RpcErrorBody & {
   account_data?: {
     Balance?: string | number;
     Sequence?: number;
+    OwnerCount?: number;
   };
 };
 
 type AmmInfoResult = RpcErrorBody & {
+  ledger_index?: number;
+  ledger_current_index?: number;
   amm?: {
     account: string;
     amount?: unknown;
@@ -138,6 +141,7 @@ export type AmmSnapshot = {
   amount2?: unknown;
   lpToken?: unknown;
   tradingFee?: number;
+  ledgerIndex?: number | null;
   error?: string;
 };
 
@@ -157,6 +161,7 @@ export async function fetchAmmInfo(): Promise<AmmSnapshot> {
       amount2: info.amount2,
       lpToken: info.lp_token,
       tradingFee: info.trading_fee,
+      ledgerIndex: res.ledger_index ?? res.ledger_current_index ?? null,
     };
   } catch (e) {
     return {
@@ -172,7 +177,7 @@ export type BookSnapshot = {
   error?: string;
 };
 
-export async function fetchBookOffers(): Promise<{
+export async function fetchBookOffers(limit = 5): Promise<{
   buyAeth: BookSnapshot;
   sellAeth: BookSnapshot;
 }> {
@@ -186,13 +191,13 @@ export async function fetchBookOffers(): Promise<{
       rpc<BookOffersResult>("book_offers", {
         taker_gets: AETH_IOU,
         taker_pays: { currency: "XRP" },
-        limit: 5,
+        limit,
         ledger_index: "validated",
       }),
       rpc<BookOffersResult>("book_offers", {
         taker_gets: { currency: "XRP" },
         taker_pays: AETH_IOU,
-        limit: 5,
+        limit,
         ledger_index: "validated",
       }),
     ]);
@@ -362,4 +367,184 @@ export async function fetchAccountNfts(
       error: e instanceof Error ? e.message : String(e),
     };
   }
+}
+
+export type LedgerReserves = {
+  ledgerIndex: number | null;
+  baseReserveDrops: string | null;
+  ownerReserveDrops: string | null;
+  error?: string;
+};
+
+type ServerStateResult = RpcErrorBody & {
+  state?: {
+    validated_ledger?: {
+      reserve_base?: number | string;
+      reserve_inc?: number | string;
+      seq?: number;
+    };
+  };
+};
+
+function dropsField(value: unknown): string | null {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return String(Math.trunc(value));
+  }
+  if (typeof value === "string" && /^[0-9]+$/.test(value)) return value;
+  return null;
+}
+
+export async function fetchLedgerReserves(): Promise<LedgerReserves> {
+  try {
+    const res = await rpc<ServerStateResult>("server_state", {});
+    const ledger = res.state?.validated_ledger;
+    const baseReserveDrops = dropsField(ledger?.reserve_base);
+    const ownerReserveDrops = dropsField(ledger?.reserve_inc);
+    if (!baseReserveDrops || !ownerReserveDrops) {
+      throw new Error("server_state missing reserve_base or reserve_inc");
+    }
+    return {
+      ledgerIndex: typeof ledger?.seq === "number" ? ledger.seq : null,
+      baseReserveDrops,
+      ownerReserveDrops,
+    };
+  } catch (e) {
+    return {
+      ledgerIndex: null,
+      baseReserveDrops: null,
+      ownerReserveDrops: null,
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
+export type AccountPosture = {
+  balanceDrops: string | null;
+  ownerCount: number | null;
+  sequence: number | null;
+  error?: string;
+};
+
+export async function fetchAccountPosture(address: string): Promise<AccountPosture> {
+  try {
+    const res = await rpc<AccountInfoResult>("account_info", {
+      account: address,
+      ledger_index: "validated",
+    });
+    const data = res.account_data;
+    if (!data || data.Balance == null) throw new Error("account_info missing Balance");
+    const balanceDrops = dropsField(data.Balance);
+    if (!balanceDrops) throw new Error("account_info Balance is not drops");
+    return {
+      balanceDrops,
+      ownerCount: typeof data.OwnerCount === "number" ? data.OwnerCount : 0,
+      sequence: typeof data.Sequence === "number" ? data.Sequence : null,
+    };
+  } catch (e) {
+    return {
+      balanceDrops: null,
+      ownerCount: null,
+      sequence: null,
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
+type AccountLinesResult = RpcErrorBody & {
+  lines?: Array<{ currency?: string; balance?: string }>;
+};
+
+export async function fetchAethTrustBalance(address: string): Promise<{
+  aeth: string | null;
+  error?: string;
+}> {
+  try {
+    const res = await rpc<AccountLinesResult>("account_lines", {
+      account: address,
+      ledger_index: "validated",
+    });
+    let aeth: string | null = null;
+    for (const line of res.lines ?? []) {
+      if (line.currency === AETH_HEX && line.balance != null) aeth = line.balance;
+    }
+    return { aeth };
+  } catch (e) {
+    return {
+      aeth: null,
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
+type GatewayBalancesResult = RpcErrorBody & {
+  obligations?: Record<string, string>;
+};
+
+export async function fetchAethObligations(issuer: string): Promise<{
+  outstanding: string | null;
+  error?: string;
+}> {
+  try {
+    const res = await rpc<GatewayBalancesResult>("gateway_balances", {
+      account: issuer,
+      ledger_index: "validated",
+    });
+    const outstanding = res.obligations?.[AETH_HEX] ?? null;
+    return { outstanding };
+  } catch (e) {
+    return {
+      outstanding: null,
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
+export async function fetchValidatedTransaction(hash: string): Promise<
+  | { found: true; tx: Record<string, unknown> }
+  | { found: false; code: "txnNotFound" | "rpc_error"; error: string }
+> {
+  let result: (RpcErrorBody & Record<string, unknown>) | undefined;
+  try {
+    const res = await fetch(XRPL_HTTP, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        method: "tx",
+        params: [{ transaction: hash, binary: false }],
+      }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
+    });
+    try {
+      const body = (await res.json()) as { result?: RpcErrorBody & Record<string, unknown> };
+      result = body.result;
+    } catch {
+      result = undefined;
+    }
+    if (!res.ok && !result) {
+      return {
+        found: false,
+        code: "rpc_error",
+        error: `rpc tx: HTTP ${res.status}`,
+      };
+    }
+  } catch (e) {
+    return {
+      found: false,
+      code: "rpc_error",
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+  if (!result || result.status === "error" || result.error) {
+    const code = result?.error === "txnNotFound" ? "txnNotFound" : "rpc_error";
+    return {
+      found: false,
+      code,
+      error: result?.error_message || result?.error || "tx lookup failed",
+    };
+  }
+  return { found: true, tx: result };
 }
