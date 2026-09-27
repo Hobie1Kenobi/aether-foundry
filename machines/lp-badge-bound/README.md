@@ -1,6 +1,6 @@
 # Machine — LP Badge Bound (v1)
 
-**Status:** ledger-enforced credential door on XRPL Testnet  
+**Status:** trialled — ledger-enforced credential door on XRPL Testnet (see RESULTS.md)  
 **Network:** XRPL Testnet only (`wss://s.altnet.rippletest.net:51233`, network id `1`)  
 **Thesis:** A guild door that accepts a payment only when the sender presents an accepted `aether-lp-ok` credential. The issuer creates that credential while the sender's Foundry AMM LP is at least the threshold, and deletes it after the LP is withdrawn. The door's reject does not consult an off-chain verifier.
 
@@ -20,7 +20,7 @@ sequenceDiagram
   H->>D: Payment + CredentialIDs → tesSUCCESS
   H->>AMM: AMMWithdraw all LP
   I->>H: CredentialDelete
-  H->>D: Payment + stale CredentialIDs → tecNO_PERMISSION
+  H->>D: Payment + stale CredentialIDs → tecBAD_CREDENTIALS
 ```
 
 ## Why this primitive

@@ -28,7 +28,7 @@ First run faucets four accounts, writes seeds outside the repo, writes public ad
 6. Holder payment with `CredentialIDs` → `tesSUCCESS`.
 7. `AMMWithdraw` all of the trial holder's LP. Abort the delete if LP is still ≥ 1000.
 8. Issuer `CredentialDelete`.
-9. Holder payment with the stale id → `tecNO_PERMISSION`.
+9. Holder payment with the stale id → `tecBAD_CREDENTIALS`.
 
 `--record` appends `lp_badge_bound_trial` to `lab/ledger-log.jsonl` after that sequence. `trial.json` is public fields only.
 

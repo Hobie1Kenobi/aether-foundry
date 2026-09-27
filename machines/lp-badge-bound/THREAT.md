@@ -8,7 +8,7 @@
 
 - Stranger, no credential: `tecNO_PERMISSION`.
 - Holder, credential accepted, `CredentialIDs` present, LP ≥ 1000: `tesSUCCESS`.
-- Holder, same id, after `AMMWithdraw` and issuer `CredentialDelete`: `tecNO_PERMISSION`.
+- Holder, same id, after `AMMWithdraw` and issuer `CredentialDelete`: `tecBAD_CREDENTIALS` (the object is gone). A payment that simply omits `CredentialIDs` is `tecNO_PERMISSION`.
 
 A script that only holds the v0 NFT, or that replays the deleted credential id, does not get through the door. No off-chain "LP ≥ N and NFT present" check is the gate. `DepositPreauth` is.
 
@@ -24,7 +24,7 @@ A same-execution LP read would be a Hook on a ledger that has the LP. XRPL Testn
 
 ## Wrong credential id
 
-`CredentialIDs` must be this subject's accepted object. Another account's id fails. Omitting `CredentialIDs` fails even while the credential exists. Both are in RESULTS.
+`CredentialIDs` must be this subject's accepted object. Omitting it fails with `tecNO_PERMISSION` even while the credential exists. Presenting the id after `CredentialDelete` fails with `tecBAD_CREDENTIALS`. Both are in RESULTS.
 
 ## DepositAuth stuck-account exception
 

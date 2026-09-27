@@ -283,6 +283,15 @@ async function main() {
       return;
     }
 
+    if (fs.existsSync(TRIAL)) {
+      const prior = JSON.parse(fs.readFileSync(TRIAL, "utf8"));
+      const hashes = prior.hashes || {};
+      if (hashes.holder_pass && hashes.holder_revoked_fail) {
+        console.log(`trial already recorded ${hashes.holder_pass} then ${hashes.holder_revoked_fail}`);
+        return;
+      }
+    }
+
     guard.assertCanSign(process.env);
     let book = loadBook();
     if (!book) {
@@ -576,7 +585,7 @@ async function main() {
         wallets.HOLDER,
         guard.buildDoorPayment(holder, door, guard.DOOR_PAYMENT_DROPS, credentialId)
       ),
-      "tecNO_PERMISSION",
+      "tecBAD_CREDENTIALS",
       "holder-revoked-fail"
     );
     const authAfter = await depositAuthorized(client, holder, door, credentialId);

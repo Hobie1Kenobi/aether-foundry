@@ -384,7 +384,8 @@ function assertPublicRecord(value, path) {
   }
   if (value && typeof value === "object") {
     for (const [key, child] of Object.entries(value)) {
-      if (/seed|secret/i.test(key)) {
+      const lowered = key.toLowerCase();
+      if (lowered === "seed" || lowered === "secret" || lowered.endsWith("_seed")) {
         throw Object.assign(new Error(`refusing key ${key}`), { code: "SECRET" });
       }
       assertPublicRecord(child, `${here}.${key}`);

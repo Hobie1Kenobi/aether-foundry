@@ -1,0 +1,43 @@
+{
+  "network": "XRPL Testnet",
+  "network_id": 1,
+  "ws": "wss://s.altnet.rippletest.net:51233",
+  "note": "Public addresses only. Seeds are not in this file. These accounts are not W1 or W2.",
+  "xrpl_twins": {
+    "W1_MARKET": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+    "W2_ATELIER": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+    "W0_TREASURY": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+    "AMM": "r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w",
+    "note": "Twins are the existing XRPL Testnet anchors. The trial holder is separate so W1's seeded LP is not withdrawn."
+  },
+  "accounts": {
+    "ISSUER": {
+      "role": "credential issuer",
+      "address": "rPXJrQEJN2K9grJJBqQHQ2V5nazcZQo5Cn",
+      "seed_env": "LPB_ISSUER_SEED",
+      "faucet_hash": "E8B35D40C35D13968D78F4562D06B5D6F5766DDCA67BCCFFE70F27534816723F",
+      "amount_xrp": 100
+    },
+    "HOLDER": {
+      "role": "LP holder and credential subject",
+      "address": "rLDbAi71mciJwCDKyTn6dohD3ypDsMLRwm",
+      "seed_env": "LPB_HOLDER_SEED",
+      "faucet_hash": "4357684510E16DBC52ED83F7A3399049F0A7A167DC2C3DF15359BA5A3D7877D9",
+      "amount_xrp": 100
+    },
+    "DOOR": {
+      "role": "deposit-auth guild door",
+      "address": "r3UBPs7Lakfic2Mjq2QcgSqwfn6iYVGtFQ",
+      "seed_env": "LPB_DOOR_SEED",
+      "faucet_hash": "B6055D385AEF5E86C3DF4A9283042776E5CBB23DAAE8CFF19B3E1395771878C7",
+      "amount_xrp": 100
+    },
+    "STRANGER": {
+      "role": "account with no credential",
+      "address": "rUpVvDQWBQVvrdazFZfb6E7DPmoafN2jNj",
+      "seed_env": "LPB_STRANGER_SEED",
+      "faucet_hash": "49FD94F07BFDC97232B266181BADC904D2436561FF0CC29570E4C4EA3CA540B7",
+      "amount_xrp": 100
+    }
+  }
+}

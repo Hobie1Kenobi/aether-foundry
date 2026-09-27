@@ -154,6 +154,9 @@ describe("amendment gate and signing refusals", () => {
     );
     assert.throws(() => guard.assertPublicRecord({ LPB_ISSUER_SEED: "nope" }), /key/);
     assert.doesNotThrow(() =>
+      guard.assertPublicRecord({ seed_env: "LPB_ISSUER_SEED", address: guard.W1 })
+    );
+    assert.doesNotThrow(() =>
       guard.assertPublicRecord({
         hash: "A".repeat(64),
         address: guard.W1,

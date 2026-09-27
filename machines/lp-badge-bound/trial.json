@@ -1,0 +1,77 @@
+{
+  "network": "XRPL Testnet",
+  "network_id": 1,
+  "build_version": "3.4.1",
+  "amendment": {
+    "amendment_id": "1CB67D082CF7D9102412D34258CEDB400E659352D3B207348889297A6D90F5EF",
+    "name": "Credentials",
+    "enabled": true,
+    "supported": true
+  },
+  "hooks_amendments": [],
+  "hooks_on_xrpl_testnet": false,
+  "enforcement": "Credentials + DepositPreauth",
+  "honor_system": false,
+  "v0_nftoken_id": "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1B3732AC80141DD5C",
+  "v0_honor_system": true,
+  "v0_note": "The session-7 NFT on W1 is unchanged and still unbound. This trial does not withdraw W1 LP.",
+  "credential_type": "aether-lp-ok",
+  "credential_type_hex": "6165746865722D6C702D6F6B",
+  "credential_id": "CF1E832E647C8B753B29D848651494AC64D6E5B7E3D3820F65EE7EFCCC2FB935",
+  "lp_threshold": "1000",
+  "lp_currency": "0330E60FAE706EAD2C7D511D790B07A6F3B89931",
+  "amm": "r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w",
+  "lp_at_issue": "4062.1154719097",
+  "lp_after_withdraw": "0",
+  "accounts": {
+    "issuer": "rPXJrQEJN2K9grJJBqQHQ2V5nazcZQo5Cn",
+    "holder": "rLDbAi71mciJwCDKyTn6dohD3ypDsMLRwm",
+    "door": "r3UBPs7Lakfic2Mjq2QcgSqwfn6iYVGtFQ",
+    "stranger": "rUpVvDQWBQVvrdazFZfb6E7DPmoafN2jNj"
+  },
+  "xrpl_twins": {
+    "W1": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+    "W2": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw"
+  },
+  "hashes": {
+    "trustset": "4B1A69114B1D21E2B9B4146CC19C2F376CEA5488487135CE42F8D73235FFA367",
+    "aeth_buy": "C09E87E00DCF3CAA594E3FF7D947891AC7D61501C0D85AE6884C1FCDE2CA8249",
+    "amm_deposit": "1FDDE1A94C759554DE3F1B8D457F7D6E0338F9AEF01E177B5671345803605AF0",
+    "deposit_auth": "DB7761E2E2B1D945E317CEDB1552EF54BA7FDF5C10ECB20717ECCD6B4020146C",
+    "deposit_preauth": "EB4387CB79C01E17C16AD66C4287E3DC208EBFAFDF066F2429D58906EEE2103B",
+    "stranger_fail": "27AE8639E52729C1085D9D36C8E36145450502F580E4D0894804DCC01B1C6C92",
+    "credential_create": "12529E5C6324D9316F6D61F29BDE878F47AC8EB33108B7FAF2E57DDA5845EAA1",
+    "credential_accept": "831D1F016204F59C0B005B22CD734319D0DCFBF3CB1A414B2097736716ADBCA5",
+    "holder_bare_fail": "311CBEA7D2008ADE45093067A4536CE771DCD55439D930BD128F953C684DE944",
+    "holder_pass": "D21E08CC086310E2FA15B1F0E717FEF406F8BD3EF29ED5137AE9ACC64875FED2",
+    "amm_withdraw": "943FD9A5DAB346623F3C6E18FD159950F91EBC68DA9092E1CBDA3DD986CD1F60",
+    "credential_delete": "F02F11856EAA7BB22E66017AFAD985838C7FC27CAEF64B0F5F425028F99187AB",
+    "holder_revoked_fail": "919C1C7721EB178EBD4BC95DE35817D0F5410E3F5EA7FB6C08EE4CCA4437EE48"
+  },
+  "ledgers": {
+    "stranger_fail": 21100654,
+    "holder_bare_fail": 21100659,
+    "holder_pass": 21100661,
+    "holder_revoked_fail": 21100666,
+    "credential_delete": 21100664,
+    "amm_withdraw": 21100663
+  },
+  "engines": {
+    "stranger_fail": "tecNO_PERMISSION",
+    "holder_bare_fail": "tecNO_PERMISSION",
+    "holder_pass": "tesSUCCESS",
+    "holder_revoked_fail": "tecBAD_CREDENTIALS"
+  },
+  "deposit_authorized_before_pass": {
+    "ok": true,
+    "deposit_authorized": true
+  },
+  "deposit_authorized_without_credential": {
+    "ok": true,
+    "deposit_authorized": false
+  },
+  "deposit_authorized_after_delete": {
+    "ok": false,
+    "error": "badCredentials"
+  }
+}

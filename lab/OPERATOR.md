@@ -33,7 +33,7 @@ Agent-run ops for the XRPL **Testnet** corporation. Read this before any session
 | 2 | `drip-pass` | Trialled |
 | 3 | `walk-in-window` | v2 storefront open; watcher is dry-run, remint is local |
 | 4 | `oracle-mid-ticket` | Trialled |
-| 5 | `lp-badge` | v0 NFT still honor-system. v1 door is `lp-badge-bound` (Credentials + DepositPreauth, not honor-system) |
+| 5 | `lp-badge` | v0 NFT still honor-system. v1 door `lp-badge-bound` trialled: PASS `D21E08CC…FED2`, revoked `tecBAD_CREDENTIALS` `919C1C77…EE48` |
 | 6 | `batch-heartbeat` | **Spec only** — gated on Batch amendment |
 | 7 | `xahau-split-treasury` | Live on Xahau Testnet — SetHook + 1 XAH split |
 

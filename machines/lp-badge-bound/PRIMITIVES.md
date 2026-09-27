@@ -40,7 +40,7 @@ The credential index is rippled's keylet: SHA-512 half of `uint16('D')` ‖ subj
 
 ## Door
 
-`AccountSet` SetFlag 9, then `DepositPreauth` with exactly `AuthorizeCredentials` (no account `Authorize`). A payment to the door succeeds only when `CredentialIDs` names an accepted credential of that type. After `CredentialDelete`, the same id returns `tecNO_PERMISSION`.
+`AccountSet` SetFlag 9, then `DepositPreauth` with exactly `AuthorizeCredentials` (no account `Authorize`). A payment to the door succeeds only when `CredentialIDs` names an accepted credential of that type. Omitting the id is `tecNO_PERMISSION`. After `CredentialDelete`, the same id is `tecBAD_CREDENTIALS`.
 
 ## What is not used
 
