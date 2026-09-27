@@ -35,6 +35,7 @@ Agent-run ops for the XRPL **Testnet** corporation. Read this before any session
 | 4 | `oracle-mid-ticket` | Trialled |
 | 5 | `lp-badge` | Trialled (honor-system LP threshold) |
 | 6 | `batch-heartbeat` | **Spec only** — gated on Batch amendment |
+| 7 | `xahau-split-treasury` | Live on Xahau Testnet — SetHook + 1 XAH split |
 
 Pack layout: `machines/<slug>/{README,PRIMITIVES,ECONOMICS,THREAT,RUNBOOK,RESULTS,artifact.json}`.
 
@@ -89,6 +90,27 @@ Testnet only (`xrpl:1`). Pay-to is W3 CHANNELS `rB6tyDtACcaihvoHKocuA5snG8H7Hn43
 `npm run x402:outbound` loads `W3_SEED` from `AETHER_SECRETS` or `/workspace/aether-foundry-secrets/.env`. It refuses CI, mainnet (`xrpl:0` and mainnet hosts), and any payTo in `web/lib/xrpl-public.ts` `WALLETS` (W0–W6, AMM, BUYER, STRANGER). Never buy a Foundry payTo with W3 — the desk merchant settles to W3, so W3 buying the desk is circular.
 
 The foreign trial counterparty is `machines/x402-outbound/` (payTo `r3JbqcVQ4Pov4MhFUMSdnro7s3VgpaqssZ`, not Foundry revenue). `FOREIGN_SEED` may sit in the same secrets file; it is not the payer. See that README for the one-click.
+
+## Xahau W7 split hook
+
+Xahau Testnet only (`wss://xahau-test.net`, network ID 21338). Not XRPL Testnet and not Xahau mainnet (`21337`).
+
+W7 is `r9YjdAzgL4hHvqDUeb4sTf4yF2MDQ5kq7h`. The hook is already installed. HookHash `B9B6A6D5DDCF4212CC046217500AB3D90D54C7E63684F98E7991F4EBA9BC6C09`. SetHook `7DBFE10ECFFDB2ACE8D83CA570ECF64F64712DBDE962B9C6756F83E655273447`. A 1 XAH split validated as `E6142FB0B82375A01D7E07A3AF0046B6030F4CC34BCB9C3B0A2148E3ED9EEBD6`.
+
+```bash
+npm run xahau:compile
+npm run xahau:sethook -- --dry-run
+npm run xahau:trial -- --drops 1000000 --dry-run
+```
+
+Live install and a new trial, on the Foundry box only:
+
+```bash
+npm run xahau:sethook -- --override --record
+npm run xahau:trial -- --drops 1000000 --record
+```
+
+`W7_SEED` and `W7_PAYER_SEED` load from `AETHER_SECRETS` or `/workspace/aether-foundry-secrets/.env`. Signing refuses CI. Pack: `machines/xahau-split-treasury/`.
 
 ## Routines (agent schedules, America/Chicago)
 

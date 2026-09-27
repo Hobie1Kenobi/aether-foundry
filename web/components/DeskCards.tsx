@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { MerchantSection } from "@/components/MerchantSection";
+import { XahauSplitCard } from "@/components/XahauSplitCard";
 import {
   EXPLORER_ACCOUNT,
   EXPLORER_TX,
@@ -560,6 +561,7 @@ export async function DeskCards() {
           />
         </div>
       </section>
+      <XahauSplitCard />
       <MerchantSection />
     </>
   );

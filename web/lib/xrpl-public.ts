@@ -242,3 +242,25 @@ export const AETH_IOU = {
   currency: AETH_HEX,
   issuer: WALLETS.W0.address,
 } as const;
+
+/**
+ * Xahau Testnet W7. Not an XRPL Testnet account.
+ * Kept out of WALLETS so the desk does not account_info it on rippletest.
+ */
+export const XAHAU_W7 = {
+  network: "Xahau Testnet",
+  networkId: 21338,
+  ws: "wss://xahau-test.net",
+  rpc: "https://xahau-test.net",
+  address: "r9YjdAzgL4hHvqDUeb4sTf4yF2MDQ5kq7h",
+  hookHash: "B9B6A6D5DDCF4212CC046217500AB3D90D54C7E63684F98E7991F4EBA9BC6C09",
+  setHookHash: "7DBFE10ECFFDB2ACE8D83CA570ECF64F64712DBDE962B9C6756F83E655273447",
+  trialHash: "E6142FB0B82375A01D7E07A3AF0046B6030F4CC34BCB9C3B0A2148E3ED9EEBD6",
+  destinations: [
+    { role: "MARKET 40%", address: "rUV6zDW72xLRWtECfAivjfQ67EXUE5cq38" },
+    { role: "ATELIER 25%", address: "rU98zDxthCRjoQLURzhrPJoo2t851gvExk" },
+    { role: "R&D 20%", address: "rB5jFnmc7BdBAJdquSMwhkTKjJaJGfnB8m" },
+    { role: "GRANTS 10%", address: "rHjzEwwBAB7BRwfjFMVGsmGduEahSCPkBh" },
+    { role: "SINK remainder", address: "rLwvjUEuSBe8PByEnpwWxUryG4KRCXqt6K" },
+  ],
+} as const;

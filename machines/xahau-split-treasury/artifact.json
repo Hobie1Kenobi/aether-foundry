@@ -1,0 +1,28 @@
+{
+  "name": "Aether Foundry — Xahau W7 split treasury",
+  "machine": "xahau-split-treasury",
+  "version": "0.1.0",
+  "network": "Xahau Testnet",
+  "network_id": 21338,
+  "ws": "wss://xahau-test.net",
+  "rpc": "https://xahau-test.net",
+  "treasury": "r9YjdAzgL4hHvqDUeb4sTf4yF2MDQ5kq7h",
+  "hook_hash": "B9B6A6D5DDCF4212CC046217500AB3D90D54C7E63684F98E7991F4EBA9BC6C09",
+  "hook_definition": "475AB271798F2FBB257AF3A57A7494742CFF42C9130790CD9925AF9F5EE07E5F",
+  "namespace": "CA4D1C551EC4F1BE9EF9A726DF401F71B2FE22A5B17BD5E76A9FA33996057F79",
+  "wasm_sha256": "9d214b465e05660a95dc18e3bb51cd1f8972bd597e97840863cb9330fb24812a",
+  "wasm_bytes": 9164,
+  "set_hook_hash": "7DBFE10ECFFDB2ACE8D83CA570ECF64F64712DBDE962B9C6756F83E655273447",
+  "set_hook_ledger": 12693992,
+  "trial_hash": "E6142FB0B82375A01D7E07A3AF0046B6030F4CC34BCB9C3B0A2148E3ED9EEBD6",
+  "trial_ledger": 12693999,
+  "trial_drops": "1000000",
+  "live": true,
+  "shares": {
+    "MARKET": { "bps": 4000, "address": "rUV6zDW72xLRWtECfAivjfQ67EXUE5cq38", "tag": 740 },
+    "ATELIER": { "bps": 2500, "address": "rU98zDxthCRjoQLURzhrPJoo2t851gvExk", "tag": 725 },
+    "RESEARCH": { "bps": 2000, "address": "rB5jFnmc7BdBAJdquSMwhkTKjJaJGfnB8m", "tag": 720 },
+    "GRANTS": { "bps": 1000, "address": "rHjzEwwBAB7BRwfjFMVGsmGduEahSCPkBh", "tag": 710 },
+    "SINK": { "bps": "remainder", "address": "rLwvjUEuSBe8PByEnpwWxUryG4KRCXqt6K", "tag": 705 }
+  }
+}
