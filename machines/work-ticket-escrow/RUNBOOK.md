@@ -13,6 +13,9 @@ WS: `wss://s.altnet.rippletest.net:51233`
 
 ## Ripple Epoch helper
 
+**NEVER pass Unix timestamps as FinishAfter/CancelAfter.** Use `src/time/rippleEpoch.js`.
+See also `docs/ripple-epoch.md`.
+
 ```js
 const RIPPLE_EPOCH_OFFSET = 946684800;
 const rippleNow = () => Math.floor(Date.now()/1000) - RIPPLE_EPOCH_OFFSET;

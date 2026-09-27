@@ -33,3 +33,10 @@ Seeds live in founder local `.env` only (`/workspace/aether-foundry-secrets/.env
 | Artifact #1 holder | BUYER `rEbUaXDXZnzR8wJjGqULKn1YLXNd5CARth` |
 
 Booted 2026-09-27 via faucet + on-chain boot. Explorer: https://testnet.xrpl.org
+
+| Drip Pass NFTokenID | `000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1579B96CC0141DD58` |
+| Drip Pass holder | BUYER `rEbUaXDXZnzR8wJjGqULKn1YLXNd5CARth` |
+| Epoch Scar NFTokenID | `000803E8D25E64BC6D436EA502CE71902FE64120C571FCF16CA1A7CB0141DD59` |
+| Epoch Scar holder | W5 `rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ` |
+| PayChannel (session-3, settled) | `DCE8401B0DFFE4031FBB15935D0EC33F72B010C8B89E2F60E6E6AC8B0572E9F5` |
+

@@ -1,23 +1,24 @@
-# TOKENS — AETH TokenEscrow (v0.1 spec only)
+# TOKENS — AETH TokenEscrow (v0.1)
 
-**Status:** specification stub — **not implemented** in session 2026-09-27-2.
+**Status:** probed live on XRPL Testnet — session **2026-09-27-3**.
 
-## Intent
+## Determination
 
-Replace or complement XRP EscrowCreate with Token Escrow of AETH IOU (`4145544800000000000000000000000000000000`, issuer W0) so work tickets settle in Foundry units.
+**TokenEscrow = ENABLED** (`feature` amendment `138B968F…`, name `TokenEscrow`, `enabled: true`).
 
-## Preconditions (future)
+## Preconditions (satisfied)
 
-1. BUYER TrustSet AETH to W0 with adequate limit.
-2. BUYER holds AETH (AMM swap or Payment from W0/W1).
-3. Confirm TokenEscrow amendment / API live on the connected altnet.
-4. Destination W4 (or Atelier) ready to receive IOU (trust line).
+1. BUYER TrustSet AETH to W0 — done  
+2. BUYER funded 100 AETH from W0 — done  
+3. W0 `asfAllowTrustLineLocking` (17) — done  
+4. Destination W4 received AETH on EscrowFinish (trust auto-created / DefaultRipple path)
 
-## Sketch
+## Live trials
 
-- EscrowCreate-equivalent for IOU with FinishAfter / CancelAfter.
-- Failure: unfunded trust, frozen line, clawback policy, reserve for trust line + escrow object.
+See RESULTS.md TokenEscrow section: cancel path + finish path, 50 AETH each.
 
-## Non-goal this session
+## Rules
 
-No TokenEscrow transactions, no AETH escrow objects.
+- IOU `Amount` on `EscrowCreate` requires TokenEscrow + issuer locking flag  
+- **CancelAfter is mandatory** for token escrows  
+- **Never** pass Unix timestamps as FinishAfter/CancelAfter — use Ripple Epoch (`src/time/rippleEpoch.js`)

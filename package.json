@@ -1,7 +1,7 @@
 {
   "name": "aether-foundry",
   "version": "1.0.0",
-  "description": "Aether Foundry \u2014 XRPL Testnet corporation (xrpl.js operators)",
+  "description": "Aether Foundry — XRPL Testnet corporation (xrpl.js operators)",
   "main": "index.js",
   "directories": {
     "doc": "docs"
@@ -9,7 +9,9 @@
   "scripts": {
     "health": "node src/health.js",
     "offers": "node src/place-four-clean.js",
-    "trials": "node src/work-ticket-trials-finish.js"
+    "trials": "node src/work-ticket-trials-finish.js",
+    "test": "node --test src/time/rippleEpoch.test.js",
+    "epoch-test": "node --test src/time/rippleEpoch.test.js"
   },
   "repository": {
     "type": "git",

@@ -59,3 +59,48 @@
 
 - No seeds in this file.
 - Time locks only; no Condition.
+
+---
+
+## TokenEscrow probe (session 2026-09-27-3) — M1 v0.1 housekeeping
+
+**Determination: ENABLED** on XRPL Testnet.
+
+| Check | Value |
+|-------|-------|
+| Amendment | `TokenEscrow` |
+| Amendment ID | `138B968F25822EFBF54C00F97031221C47B1EAB8321D93C7C2AEAF85F04EC5DF` |
+| `feature` | `enabled: true`, `supported: true` |
+| Companion | `fixTokenEscrowV1` also enabled |
+
+### Setup txs
+
+| Step | Result | Hash |
+|------|--------|------|
+| W0 `AccountSet` asfAllowTrustLineLocking (17) | tesSUCCESS | `B0F214DB216FF071515C2F125DB8A429273ED769CDBFB7071891741E3079E1F6` |
+| BUYER TrustSet AETH→W0 | tesSUCCESS | `D5FF70E1A4DAFE1DBB7FC62E11FEFC9C9880E670B023E20E753CD0DAE7B1A421` |
+| W0 Payment 100 AETH → BUYER | tesSUCCESS | `C4880AB08F048ADEACAA127841195D67FC82D3D7225A05E49EFDC399C8AD56DC` |
+
+### Trial — cancel path (50 AETH)
+
+| Step | Result | Hash |
+|------|--------|------|
+| EscrowCreate 50 AETH → W4 | tesSUCCESS | `C6A1CCC405CA800065A2313EADD00C4AF6C6F9ACFEF799C1BA0D0D32813393F9` |
+| Create seq | 21094058 | |
+| Escrow index | `79EC5CB83D3A169D04EC4CB22C2B0349353D5166E9B6121AFEBDF0379D279213` | |
+| EscrowCancel (BUYER) | tesSUCCESS | `A37A107E0FA093BA9525F8EEF68E6C51A24B0CCA60B228F7CDD7641BD8D78163` |
+
+Note: first finish wait used missing `server_info.validated_ledger.close_time`; CancelAfter elapsed → cancel path taken. Wait fixed to use `ledger` close_time.
+
+### Trial — finish path (50 AETH)
+
+| Step | Result | Hash |
+|------|--------|------|
+| EscrowCreate 50 AETH → W4 | tesSUCCESS | `C93C2F957C6C72636ABD620F28393BA74EF65E997FBE8EAC837C453FE123E852` |
+| Create seq | 21094060 | |
+| Escrow index | `5E7EC32B4F1B0B90AF3F5913292D8CAF89EB5C10F4DE67507A123F23F7F38EAA` |
+| FinishAfter (Ripple) | 843836411 | |
+| CancelAfter (Ripple) | 843836691 | |
+| EscrowFinish (W4) | tesSUCCESS | `612BD199AB78E7923E4C84226CDB1658ED299E31ACDA3B4BAA193B04543ECFF7` |
+
+Token escrows require **CancelAfter**. Times are Ripple Epoch only (`unix - 946684800`).

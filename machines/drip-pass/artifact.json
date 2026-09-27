@@ -1,0 +1,18 @@
+{
+  "machine": "drip-pass",
+  "version": "0.1.0",
+  "session": "2026-09-27-3",
+  "network": "XRPL Testnet",
+  "nftoken_id": "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1579B96CC0141DD58",
+  "channel_id": "DCE8401B0DFFE4031FBB15935D0EC33F72B010C8B89E2F60E6E6AC8B0572E9F5",
+  "taxon": 20260927,
+  "roles": {
+    "minter": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+    "channels": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+    "buyer": "rEbUaXDXZnzR8wJjGqULKn1YLXNd5CARth"
+  },
+  "claims_xrp": [2, 4, 6],
+  "epoch_scar_nftoken_id": "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF16CA1A7CB0141DD59",
+  "scripts": ["src/drip-pass-session.js"],
+  "lab_notes": ["lab/drip/0001.md", "lab/drip/0002.md", "lab/drip/0003.md"]
+}
