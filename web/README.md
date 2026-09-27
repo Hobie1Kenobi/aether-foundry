@@ -16,7 +16,13 @@ After deploy, verify toml:
 curl -sS https://HOST_PLACEHOLDER/.well-known/xrp-ledger.toml | head
 ```
 
-Domain AccountSet (operator, not this app): set W0 `Domain` to hex of hostname only (no `https://`, no path). See `lab/sessions/2026-09-27-vercel-desk.md`.
+## Domain host
+
+`*.v0.build` preview hosts are **not** the Domain host. A private v0 preview (for example `https://aether-foundry-desk.v0.build`) is a visual reference only.
+
+The Domain host is the Vercel-from-GitHub production or preview URL for this repo (`Root Directory` = `web`), after the founder pastes that hostname. See `lab/sessions/2026-09-27-vercel-desk.md`.
+
+Do not `AccountSet`. Do not `OracleSet`. This desk does not submit either.
 
 ## Local
 
@@ -30,4 +36,5 @@ npm run dev
 
 - Addresses hardcoded from `corp/wallets.md` (public).
 - Reads only: `account_info`, `amm_info`, `book_offers`, `account_nfts`.
+- The NAV strip sums those live `account_info` XRP balances. It does not use a hardcoded figure.
 - Machine cards show RESULTS hashes as constants — no signing.
