@@ -7,8 +7,11 @@ XRPL **Testnet** public desk. No seeds, no `Wallet.sign`, no private-key APIs.
 1. Import `https://github.com/Hobie1Kenobi/aether-foundry`
 2. Set **Root Directory** = `web`
 3. Framework preset: Next.js (default)
-4. Env (optional): copy from `.env.example` — only `NEXT_PUBLIC_XRPL_WS` / `NEXT_PUBLIC_NETWORK_LABEL`
-5. Deploy. No secrets required.
+4. Env (optional): copy from `.env.example`. Nothing is required — defaults are XRPL Testnet.
+   - `NEXT_PUBLIC_XRPL_HTTP` — HTTPS JSON-RPC the desk actually calls (default `https://s.altnet.rippletest.net:51234`)
+   - `NEXT_PUBLIC_XRPL_WS` — used only to derive that HTTP URL when `NEXT_PUBLIC_XRPL_HTTP` is unset (`wss://host:51233` → `https://host:51234`)
+   - `NEXT_PUBLIC_NETWORK_LABEL` — display label
+5. Deploy. No secrets required. Mainnet hosts in those vars are ignored.
 
 After deploy, verify toml:
 
@@ -35,6 +38,6 @@ npm run dev
 ## Safety
 
 - Addresses hardcoded from `corp/wallets.md` (public).
-- Reads only: `account_info`, `amm_info`, `book_offers`, `account_nfts`.
+- Reads only, over HTTPS JSON-RPC (not the `xrpl` WebSocket client): `account_info`, `amm_info`, `book_offers`, `account_nfts`. A failed call renders an ERROR chip; it does not fail the page.
 - The NAV strip sums those live `account_info` XRP balances. It does not use a hardcoded figure.
 - Machine cards show RESULTS hashes as constants — no signing.

@@ -6,7 +6,7 @@ import {
   NETWORK_LABEL,
   NFT_TAXON,
   WALLETS,
-  XRPL_WS,
+  XRPL_HTTP,
 } from "@/lib/xrpl-public";
 import {
   fetchAccountInfo,
@@ -144,7 +144,7 @@ export async function DeskCards() {
           </div>
           <div className="connection-note">
             <span className="muted">validated ledger reads</span>
-            <code className="mono">{XRPL_WS}</code>
+            <code className="mono">{XRPL_HTTP}</code>
           </div>
         </div>
         <nav className="hero-links" aria-label="Desk resources">

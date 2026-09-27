@@ -1,22 +1,94 @@
 /**
- * Read-only XRPL client helpers. No Wallet, no sign, no seeds.
+ * Read-only XRPL helpers via HTTPS JSON-RPC. No Wallet, no sign, no seeds.
+ * Avoids the xrpl WebSocket Client, which times out on Vercel serverless.
  */
-import { Client } from "xrpl";
 import {
   AETH_IOU,
   NFT_TAXON,
-  XRPL_WS,
   WALLETS,
+  XRPL_HTTP,
 } from "./xrpl-public";
 
-async function withClient<T>(fn: (client: Client) => Promise<T>): Promise<T> {
-  const client = new Client(XRPL_WS);
-  await client.connect();
+const RPC_TIMEOUT_MS = 8_000;
+
+type RpcErrorBody = {
+  status?: string;
+  error?: string;
+  error_message?: string;
+};
+
+type AccountInfoResult = RpcErrorBody & {
+  account_data?: {
+    Balance?: string | number;
+    Sequence?: number;
+  };
+};
+
+type AmmInfoResult = RpcErrorBody & {
+  amm?: {
+    account: string;
+    amount?: unknown;
+    amount2?: unknown;
+    lp_token?: unknown;
+    trading_fee?: number;
+  };
+};
+
+type BookOffer = {
+  Account: string;
+  TakerPays: unknown;
+  TakerGets: unknown;
+};
+
+type BookOffersResult = RpcErrorBody & {
+  offers?: BookOffer[];
+};
+
+type AccountNft = {
+  NFTokenID: string;
+  NFTokenTaxon: number;
+  Issuer: string;
+};
+
+type AccountNftsResult = RpcErrorBody & {
+  account_nfts?: AccountNft[];
+};
+
+async function rpc<T extends RpcErrorBody>(
+  method: string,
+  params: Record<string, unknown>
+): Promise<T> {
+  const res = await fetch(XRPL_HTTP, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ method, params: [params] }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
+  });
+
+  let result: T | undefined;
   try {
-    return await fn(client);
-  } finally {
-    await client.disconnect().catch(() => undefined);
+    const body = (await res.json()) as { result?: T };
+    result = body.result;
+  } catch {
+    result = undefined;
   }
+
+  if (!res.ok) {
+    const detail = result?.error_message || result?.error || res.statusText;
+    throw new Error(
+      `rpc ${method}: HTTP ${res.status}${detail ? ` ${detail}` : ""}`
+    );
+  }
+  if (!result || result.status === "error" || result.error) {
+    throw new Error(
+      result?.error_message || result?.error || `rpc ${method} failed`
+    );
+  }
+  return result;
 }
 
 export type AccountSnapshot = {
@@ -32,22 +104,22 @@ export async function fetchAccountInfo(
   role: string
 ): Promise<AccountSnapshot> {
   try {
-    return await withClient(async (client) => {
-      const res = await client.request({
-        command: "account_info",
-        account: address,
-        ledger_index: "validated",
-      });
-      const bal = res.result.account_data.Balance;
-      const drops = typeof bal === "string" ? bal : String(bal);
-      const xrp = (Number(drops) / 1_000_000).toFixed(6);
-      return {
-        address,
-        role,
-        balanceXrp: xrp,
-        sequence: res.result.account_data.Sequence,
-      };
+    const res = await rpc<AccountInfoResult>("account_info", {
+      account: address,
+      ledger_index: "validated",
     });
+    const data = res.account_data;
+    if (!data || data.Balance == null || data.Sequence == null) {
+      throw new Error("account_info missing account_data");
+    }
+    const drops = typeof data.Balance === "string" ? data.Balance : String(data.Balance);
+    const xrp = (Number(drops) / 1_000_000).toFixed(6);
+    return {
+      address,
+      role,
+      balanceXrp: xrp,
+      sequence: data.Sequence,
+    };
   } catch (e) {
     return {
       address,
@@ -70,21 +142,21 @@ export type AmmSnapshot = {
 
 export async function fetchAmmInfo(): Promise<AmmSnapshot> {
   try {
-    return await withClient(async (client) => {
-      const res = await client.request({
-        command: "amm_info",
-        asset: { currency: "XRP" },
-        asset2: AETH_IOU,
-      });
-      const info = res.result.amm;
-      return {
-        account: info.account,
-        amount: info.amount,
-        amount2: info.amount2,
-        lpToken: info.lp_token,
-        tradingFee: info.trading_fee,
-      };
+    const res = await rpc<AmmInfoResult>("amm_info", {
+      asset: { currency: "XRP" },
+      asset2: AETH_IOU,
     });
+    const info = res.amm;
+    if (!info?.account) {
+      throw new Error("amm_info missing amm");
+    }
+    return {
+      account: info.account,
+      amount: info.amount,
+      amount2: info.amount2,
+      lpToken: info.lp_token,
+      tradingFee: info.trading_fee,
+    };
   } catch (e) {
     return {
       account: WALLETS.AMM.address,
@@ -109,42 +181,36 @@ export async function fetchBookOffers(): Promise<{
     error,
   });
   try {
-    return await withClient(async (client) => {
-      const [buy, sell] = await Promise.all([
-        client.request({
-          command: "book_offers",
-          taker_gets: AETH_IOU,
-          taker_pays: { currency: "XRP" },
-          limit: 5,
-          ledger_index: "validated",
-        }),
-        client.request({
-          command: "book_offers",
-          taker_gets: { currency: "XRP" },
-          taker_pays: AETH_IOU,
-          limit: 5,
-          ledger_index: "validated",
-        }),
-      ]);
-      return {
-        buyAeth: {
-          side: "buy AETH (pay XRP)",
-          offers: (buy.result.offers ?? []).map((o) => ({
-            account: o.Account,
-            takerPays: o.TakerPays,
-            takerGets: o.TakerGets,
-          })),
-        },
-        sellAeth: {
-          side: "sell AETH (get XRP)",
-          offers: (sell.result.offers ?? []).map((o) => ({
-            account: o.Account,
-            takerPays: o.TakerPays,
-            takerGets: o.TakerGets,
-          })),
-        },
-      };
-    });
+    const [buy, sell] = await Promise.all([
+      rpc<BookOffersResult>("book_offers", {
+        taker_gets: AETH_IOU,
+        taker_pays: { currency: "XRP" },
+        limit: 5,
+        ledger_index: "validated",
+      }),
+      rpc<BookOffersResult>("book_offers", {
+        taker_gets: { currency: "XRP" },
+        taker_pays: AETH_IOU,
+        limit: 5,
+        ledger_index: "validated",
+      }),
+    ]);
+    const mapOffers = (offers: BookOffer[] | undefined) =>
+      (offers ?? []).map((o) => ({
+        account: o.Account,
+        takerPays: o.TakerPays,
+        takerGets: o.TakerGets,
+      }));
+    return {
+      buyAeth: {
+        side: "buy AETH (pay XRP)",
+        offers: mapOffers(buy.offers),
+      },
+      sellAeth: {
+        side: "sell AETH (get XRP)",
+        offers: mapOffers(sell.offers),
+      },
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return {
@@ -167,21 +233,18 @@ export async function fetchAccountNfts(
   taxonFilter = NFT_TAXON
 ): Promise<NftSnapshot> {
   try {
-    return await withClient(async (client) => {
-      const res = await client.request({
-        command: "account_nfts",
-        account: address,
-        ledger_index: "validated",
-      });
-      const nfts = (res.result.account_nfts ?? [])
-        .filter((n) => n.NFTokenTaxon === taxonFilter)
-        .map((n) => ({
-          nftokenID: n.NFTokenID,
-          taxon: n.NFTokenTaxon,
-          issuer: n.Issuer,
-        }));
-      return { account: address, role, nfts };
+    const res = await rpc<AccountNftsResult>("account_nfts", {
+      account: address,
+      ledger_index: "validated",
     });
+    const nfts = (res.account_nfts ?? [])
+      .filter((n) => n.NFTokenTaxon === taxonFilter)
+      .map((n) => ({
+        nftokenID: n.NFTokenID,
+        taxon: n.NFTokenTaxon,
+        issuer: n.Issuer,
+      }));
+    return { account: address, role, nfts };
   } catch (e) {
     return {
       account: address,
