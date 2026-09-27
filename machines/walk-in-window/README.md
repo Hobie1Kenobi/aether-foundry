@@ -1,47 +1,68 @@
 # Machine #3 — Walk-In Window
 
-**Status:** v0 live on XRPL Testnet (2026-09-27 session-4)  
-**Network:** XRPL Testnet only (`wss://s.altnet.rippletest.net:51233`)  
+**Status:** v2 standing storefront on XRPL Testnet (2026-09-27). Sell offer left open; remint when taken.  
+**Network:** XRPL Testnet only (`wss://s.altnet.rippletest.net:51233` / HTTPS `https://s.altnet.rippletest.net:51234`)  
 **Thesis:** An open storefront NFT that a **new faucet stranger** (not a returning BUYER) can buy with plain XRP — Walk-In Window, not invitation-only.
+
+Strangers start at [`INBOUND.md`](./INBOUND.md). The v2 token URI is that file. The public desk reads W2 sell offers at request time and does not sign.
 
 ```mermaid
 sequenceDiagram
-  participant S as STRANGER (faucet)
+  participant S as Stranger (faucet)
+  participant Desk as Desk (read-only)
   participant W2 as W2 ATELIER
-  participant W0 as W0 TREASURY
   participant AMM as AMM AETH/XRP
   participant L as XRPL Testnet
 
-  S->>L: faucet fundWallet
-  S->>L: TrustSet AETH
-  S->>AMM: Payment Paths (~50 AETH)
-  W2->>L: NFTokenMint walk-in-0001
-  W2->>L: NFTokenCreateOffer sell (10 XRP)
+  W2->>L: NFTokenMint (URI → INBOUND.md)
+  W2->>L: NFTokenCreateOffer 10 XRP, no Destination
+  Note over W2,L: Offer left open
+  S->>L: faucet fund
+  S->>Desk: read live W2 sell offer
   S->>L: NFTokenAcceptOffer
-  W0->>L: CheckCreate 2 XRP → S
-  S->>L: CheckCash
+  Note over W2,L: When taken, W2 remints and relists
+  S->>AMM: optional TrustSet + path-pay ~50 AETH
 ```
 
 ## Primitive composition (≥3)
 
-1. **NFTokenMint / NFTokenCreateOffer / NFTokenAcceptOffer** — transferable walk-in artifact (taxon `20260927`, 1% royalty).
-2. **Payment (Paths / SendMax)** — STRANGER converts XRP → ~50 AETH through AMM `r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w`.
-3. **CheckCreate / CheckCash** — W0 tips STRANGER 2 XRP after purchase (optional hospitality).
-4. *(Housekeeping)* **PaymentChannelCreate / Claim tfClose** — SettleDelay≥300 threat drill (documented in drip-pass THREAT, not part of Walk-In product).
+1. **NFTokenMint / NFTokenCreateOffer / NFTokenAcceptOffer** — transferable storefront artifact (taxon `20260927`, TransferFee `1000`). W2 lists it; the stranger submits the accept. Sell flag `tfSellNFToken`, no Destination.
+2. **Payment (Paths / SendMax)** — optional after purchase: the buyer converts XRP → ~50 AETH through AMM `r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w`.
+3. **CheckCreate / CheckCash** — v0 hospitality only (W0 tipped the session-4 STRANGER 2 XRP). Not part of the standing listing.
 
-## Success metrics (session-4)
+## v2 listing (standing)
+
+| Field | Value |
+|-------|-------|
+| Seller | W2 `rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw` |
+| NFTokenID | `000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1C81EFBC70141DD5D` |
+| OfferID | `08F7769F074C8C80C4DD6A691D2CEE3A3996458D845DA3C15F62BBAF699421B0` |
+| Mint hash | `DC7609E1331198731F7C0B2E58378C39F4F11511F40337DB3A4C865F00368E10` |
+| CreateOffer hash | `2C013A0988DA6610B088D72B8E6F0378CFF52E9D7CB2ED2B181D3546318DDDBC` |
+| Price | 10 XRP (`10000000` drops) |
+| URI | `INBOUND.md` on `main` |
+
+These IDs match the listing that was left open. After a purchase they are consumed. The desk shows whatever sell offer W2 has now.
+
+## v0 (session-4, closed)
+
+walk-in-0001 was sold to STRANGER `rh4c6qMMyafccZrPFCPCN742BNMXfjKYss` for 10 XRP. That sale is history. It is not the standing offer.
+
+## Success metrics
 
 | Metric | Result |
 |--------|--------|
-| New STRANGER faucet wallet | `rh4c6qMMyafccZrPFCPCN742BNMXfjKYss` |
-| Path-pay delivered | 50 AETH |
+| v2 sell offer left open on W2 | yes — see desk / `RESULTS.md` |
+| New STRANGER faucet wallet (v0) | `rh4c6qMMyafccZrPFCPCN742BNMXfjKYss` |
+| Path-pay delivered (v0) | 50 AETH |
 | walk-in-0001 sold to STRANGER (not BUYER) | yes |
-| xrp-ledger.toml published | yes |
+| xrp-ledger.toml + INBOUND weblink | yes |
 | Seeds in repo | none |
 
 ## Non-goals
 
 - Hooks, EVM, x402 server, new CLOB, TokenEscrow v0.2, Drip Pass v2.
 - Using BUYER as the walk-in purchaser (BUYER accepting does **not** count).
+- A signing UI on the desk.
 
-See `RESULTS.md` for hashes. Operator steps in `RUNBOOK.md`.
+See `RESULTS.md` for hashes, `RUNBOOK.md` for the remint loop, and `INBOUND.md` for buyers.

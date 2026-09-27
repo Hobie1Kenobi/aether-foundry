@@ -1,6 +1,21 @@
-# PRIMITIVES — Walk-In Window v0
+# PRIMITIVES — Walk-In Window
 
-## NFTokenMint
+## v2 standing storefront (current)
+
+| Field | v2 usage |
+|-------|----------|
+| Account | W2 ATELIER `rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw` |
+| NFTokenTaxon | `20260927` |
+| Mint flags | `tfTransferable` (8) |
+| TransferFee | `1000` (= 1%) |
+| URI | hex of `machines/walk-in-window/INBOUND.md` raw GitHub URL |
+| CreateOffer flags | `tfSellNFToken` (1), no Destination |
+| Amount | `10000000` drops (10 XRP) |
+| Disposition | Offer left open. Stranger submits `NFTokenAcceptOffer`. When taken, remint and relist. |
+
+v0 below is the session-4 sale to STRANGER (walk-in-0001), not the standing offer.
+
+## NFTokenMint (v0)
 
 | Field | v0 usage |
 |-------|----------|

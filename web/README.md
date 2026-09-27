@@ -38,6 +38,6 @@ npm run dev
 ## Safety
 
 - Addresses hardcoded from `corp/wallets.md` (public).
-- Reads only, over HTTPS JSON-RPC (not the `xrpl` WebSocket client): `account_info`, `amm_info`, `book_offers`, `account_nfts`. A failed call renders an ERROR chip; it does not fail the page.
+- Reads only, over HTTPS JSON-RPC (not the `xrpl` WebSocket client): `account_info`, `amm_info`, `book_offers`, `account_nfts`, and `account_objects` (`type: nft_offer`) for the Walk-In storefront. A failed call renders an ERROR chip; it does not fail the page.
 - The NAV strip sums those live `account_info` XRP balances. It does not use a hardcoded figure.
 - Machine cards show RESULTS hashes as constants — no signing.

@@ -210,6 +210,18 @@ header.hero {
   background: var(--panel-raised);
 }
 
+.callout.storefront {
+  margin-bottom: 0.85rem;
+}
+
+.storefront-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  margin: 0.9rem 0 0.35rem;
+  font: 0.75rem var(--mono);
+}
+
 .callout-mark {
   align-self: start;
   padding-top: 0.2rem;
