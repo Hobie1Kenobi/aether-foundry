@@ -11,6 +11,7 @@
 | W6 | GRANTS | rfnqxYQWKsVGFuWLjky41puXHJkT2v8yTf | XRPL Testnet | yes |
 | W7 | XAHAU | _pending_ | Xahau Testnet | no |
 | W8 | EVM | _deferred_ | XRPL EVM Testnet | n/a |
+| BUYER | work-ticket client (session-2) | rEbUaXDXZnzR8wJjGqULKn1YLXNd5CARth | XRPL Testnet | yes (faucet) |
 | AMM | AETH/XRP pool | r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w | XRPL Testnet | seeded 2026-09-27 |
 
 Seeds live in founder local `.env` only (`/workspace/aether-foundry-secrets/.env`, mode 600 — outside git tree).
@@ -28,5 +29,7 @@ Seeds live in founder local `.env` only (`/workspace/aether-foundry-secrets/.env
 | Artifact #0 NFTokenID | `000803E8D25E64BC6D436EA502CE71902FE64120C571FCF129D634CE0141DD56` |
 | NFT taxon | `20260927` |
 | NFT issuer / minter | W2 ATELIER |
+| Artifact #1 NFTokenID | `000803E8D25E64BC6D436EA502CE71902FE64120C571FCF13EFDC5CD0141DD57` |
+| Artifact #1 holder | BUYER `rEbUaXDXZnzR8wJjGqULKn1YLXNd5CARth` |
 
 Booted 2026-09-27 via faucet + on-chain boot. Explorer: https://testnet.xrpl.org

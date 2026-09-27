@@ -1,0 +1,22 @@
+{
+  "name": "Aether Foundry Artifact #1 \u2014 Work-Ticket Escrow",
+  "description": "Artifact binding Machine #1 work-ticket-escrow v0. Mints receipt for time-locked XRP escrow trials (finish + cancel) on XRPL Testnet.",
+  "collection": "Aether Foundry Artifacts",
+  "taxon": 20260927,
+  "artifact_number": 1,
+  "network": "XRPL Testnet",
+  "issuer": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+  "minter": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+  "nftoken_id": "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF13EFDC5CD0141DD57",
+  "mint_hash": "C1A9589142A00453A3E447D0A7D167C3C9BDB58891BB989C652FFEC539D975C8",
+  "transfer_fee_field": 1000,
+  "transfer_fee_bps_equiv": "1%",
+  "uri": "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/work-ticket-escrow/README.md",
+  "machine": "work-ticket-escrow",
+  "buyer_address": "rEbUaXDXZnzR8wJjGqULKn1YLXNd5CARth",
+  "sell_hash": "3E452FD4EA276DCD1A281558F7655132EAB4A744CFCD71CA8D9454E1B70DA7E5",
+  "accept_hash": "07A8CE674CDA95CCBA63B0820806F882FF9F4ED95B99C1574E68B0EA7BF7F187",
+  "trial_a_finish_hash": "0F87A94FCCAC7F8E34FB4BEB0E371BD13197A3B1BC16D4FF65437F24E1D003F4",
+  "trial_b_cancel_hash": "48B66E863CA6989D08F15C052942E674579E5EECDD49AB83EA43C1BDA81FEC4E",
+  "minted_at_ct": "2026-09-27 ~09:47 AM CT"
+}

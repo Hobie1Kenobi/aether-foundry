@@ -1,39 +1,51 @@
-# Machine #1 — Work-Ticket Escrow (stub)
+# Machine #1 — Work-Ticket Escrow
 
-**Status:** proposed / not yet packed  
-**Network:** XRPL Testnet only  
-**Thesis:** Escrow a work ticket (XRP or AETH) against an Artifact NFT deliverable; release on finish or return on timeout.
+**Status:** v0 live on XRPL Testnet (2026-09-27 session-2)  
+**Network:** XRPL Testnet only (`wss://s.altnet.rippletest.net:51233`)  
+**Thesis:** Escrow XRP work payment to W4 against an Atelier Artifact NFT deliverable; release on time-lock finish or return on cancel.
+
+```mermaid
+sequenceDiagram
+  participant B as BUYER
+  participant W2 as W2 ATELIER
+  participant W4 as W4 ESCROW
+  participant L as XRPL Testnet
+
+  W2->>L: NFTokenMint Artifact #1 (taxon 20260927)
+  W2->>L: NFTokenCreateOffer (sell)
+  B->>L: NFTokenAcceptOffer
+  B->>L: EscrowCreate XRP → W4 (FinishAfter / CancelAfter)
+  Note over B,W4: wait until FinishAfter (Ripple Epoch)
+  W4->>L: EscrowFinish (Trial A happy path)
+  Note over B,W4: OR wait until CancelAfter
+  B->>L: EscrowCancel (Trial B cancel path)
+```
 
 ## Primitive composition (≥3)
 
-1. **EscrowCreate / EscrowFinish / EscrowCancel** — time-locked work deposit (W4 ESCROW as custodian or peer-to-peer).
-2. **NFTokenMint / NFTokenCreateOffer / NFTokenAcceptOffer** — Artifact receipt + optional sell offer to client.
-3. **Payment (AETH IOU)** — settle surplus or bounty in Foundry units via W0-issued AETH (trust line required).
-4. *(Optional fourth)* **AMMSwap** — convert AETH↔XRP at the seeded pool `r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w` for payout currency preference.
+1. **EscrowCreate / EscrowFinish / EscrowCancel** — time-locked XRP deposit to W4 (v0: time locks only, no crypto-condition).
+2. **NFTokenMint / NFTokenCreateOffer / NFTokenAcceptOffer** — Artifact receipt + sell → BUYER acquisition.
+3. **Payment** — implicit via escrow finish credit; NFT sale Amount is a Payment-equivalent transfer.
 
-## Happy path (sketch)
+## v0 settlement rule
 
-1. Client TrustSets AETH (if paying in AETH) or holds XRP.
-2. Client EscrowCreates deposit to W4 with `FinishAfter` / `CancelAfter` window.
-3. Atelier mints work Artifact under taxon `20260927` with URI → ticket metadata.
-4. On acceptance: EscrowFinish → treasury/atelier; optional NFT offer to client.
-5. On timeout: EscrowCancel → client; Artifact remains Foundry-owned or burned via offer-to-issuer pattern.
+- Currency: **XRP only** (AETH TokenEscrow = v0.1 spec — see `ECONOMICS.md` / `TOKENS.md`).
+- Locks: **FinishAfter + CancelAfter** (Ripple Epoch seconds = Unix − 946684800).
+- Destination: **W4 ESCROW** `ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN`.
+- Artifact: minted by W2, taxon `20260927`, TransferFee `1000` (1% to issuer W2 on secondary sales).
 
-## Success metrics
+## Success metrics (session-2)
 
-- Escrow finish rate ≥ target (document in RESULTS).
-- Cycle time escrow→finish logged in `lab/ledger-log.jsonl`.
-- No stranded OwnerCount / reserve on W4.
+| Metric | Result |
+|--------|--------|
+| Trial A EscrowFinish | `tesSUCCESS` |
+| Trial B EscrowCancel | `tesSUCCESS` |
+| Artifact #1 minted + sold to BUYER | yes |
+| Seeds in repo | none |
 
-## Open questions
+## Non-goals (v0)
 
-- Conditioned escrow (crypto-condition) vs pure time locks for v1?
-- Should Artifact TransferFee (1% on genesis) apply to ticket NFTs?
-- x402 gate in front of ticket creation?
+- Mainnet, conditioned escrow, TokenEscrow, Hooks, EVM, TOML.
+- CLOB grid beyond the four passive housekeeping offers.
 
-## Non-goals (v1)
-
-- Mainnet.
-- Multisig release (week-2 SignerList may wrap this later).
-
-See `machines/genesis-artifact/RESULTS.md` for the boot mint that this machine builds on.
+See `RESULTS.md` for hashes. Run via `RUNBOOK.md`.

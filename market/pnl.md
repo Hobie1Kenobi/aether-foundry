@@ -2,25 +2,25 @@
 
 | Metric | Value | As of |
 |--------|-------|-------|
-| tesnet_nav_xrp | ~650 XRP free + 50 XRP in AMM + IOU float | 2026-09-27 CT |
-| aeth_outstanding | 10000 (5000 in AMM, 5000 on W1) | 2026-09-27 |
-| amm_lp_value | ~50 XRP + 5000 AETH (LP 500000 @ W1) | 2026-09-27 |
-| inbound_tx_7d | boot txs only | |
-| unique_counterparties | faucet + internal W0–W2 | |
-| artifacts_minted | 1 (Artifact #0) | 2026-09-27 |
-| artifacts_sold | 0 | |
-| machines_with_results | 1 (genesis-artifact) | |
+| tesnet_nav_xrp | ~W0–W6 float + AMM + escrow locked | 2026-09-27 CT |
+| aeth_outstanding | 10000 (≈5024 in AMM, ≈4976 on W1) | 2026-09-27-2 |
+| amm_lp_value | ≈49.77 XRP + ≈5024 AETH (LP 500000 @ W1) | 2026-09-27-2 |
+| artifacts_minted | 2 (#0 genesis, #1 work-ticket) | 2026-09-27 |
+| artifacts_sold | 1 (#1 → BUYER @ 1 XRP) | 2026-09-27-2 |
+| machines_with_results | 2 (genesis-artifact, work-ticket-escrow) | |
+| escrow_finished_xrp | 10 → W4 | Trial A |
+| escrow_cancelled_xrp | 2 → BUYER | Trial B |
+| escrow_stuck_xrp | 10 on BUYER (Unix-vs-Ripple epoch bug) | see THREAT |
+| passive_offers_live | 4 (W1) | housekeeping |
 | x402_hits | 0 | |
 | grants_paid | 0 | |
-| surprises | 0 | |
 
-## Ledger
+## Ledger (session-2 adds)
 
 | Date (CT) | Δ | Hash | Note |
 |-----------|---|------|------|
-| 2026-09-27 ~09:37 | DIDSet W0 | 95FD1096AE2D7F777697B65D2F97B7CBE3F08826654AE3CDC2D845A8022832A1 | charter URI |
-| 2026-09-27 ~09:37 | AccountSet DefaultRipple | 55AA90B5611B20B014819C643604583C3CDFF5118AC11D6CD78CC22A4C9BC932 | W0 flags |
-| 2026-09-27 ~09:38 | TrustSet AETH | BA6DEB736BE3C72DF8431D9BC5B87BA471B15B3E43DDA9285DB70338E6902243 | W1 limit 1e6 |
-| 2026-09-27 ~09:38 | +10000 AETH → W1 | 0E46250ADB4366F70C21140043A8F586ABB4EBBF995A0AFB2643AD4046FC7A2F | issue |
-| 2026-09-27 ~09:38 | AMMCreate −50 XRP −5000 AETH | ED9D47A42456A1504918CDFC1648BA4F86EDDBDFFB5CACC01F943B810B45A740 | pool seed |
-| 2026-09-27 ~09:37 | NFTokenMint Artifact #0 | DD7FEFB46E0443A5E9DB7357FD62FC8B501EAACCB8656FC315711F6F056E3995 | taxon 20260927 |
+| 2026-09-27 ~09:46 | OfferCreate ×4 passive | 6038AC31… / 614D82BA… / B0F67949… / 69F18E0A… | W1 CLOB wings |
+| 2026-09-27 ~09:47 | NFTokenMint Artifact #1 | C1A9589142A00453A3E447D0A7D167C3C9BDB58891BB989C652FFEC539D975C8 | taxon 20260927 |
+| 2026-09-27 ~09:47 | NFTokenAcceptOffer | 07A8CE674CDA95CCBA63B0820806F882FF9F4ED95B99C1574E68B0EA7BF7F187 | BUYER acquires #1 |
+| 2026-09-27 ~09:48 | EscrowCreate+Finish 10 XRP | DEEB7689… → 0F87A94F… | Trial A |
+| 2026-09-27 ~09:49 | EscrowCreate+Cancel 2 XRP | 33C9CCB5… → 48B66E86… | Trial B |
