@@ -1,0 +1,21 @@
+{
+  "name": "Aether Foundry — LP Badge Bound",
+  "machine": "lp-badge-bound",
+  "version": "1.0.0",
+  "network": "XRPL Testnet",
+  "network_id": 1,
+  "enforcement": "Credentials + DepositPreauth",
+  "honor_system": false,
+  "v0_honor_system": true,
+  "v0_nftoken_id": "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1B3732AC80141DD5C",
+  "credentials_amendment": "1CB67D082CF7D9102412D34258CEDB400E659352D3B207348889297A6D90F5EF",
+  "hooks_on_xrpl_testnet": false,
+  "credential_type": "aether-lp-ok",
+  "lp_threshold": "1000",
+  "amm": "r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w",
+  "lp_currency": "0330E60FAE706EAD2C7D511D790B07A6F3B89931",
+  "xrpl_twins": {
+    "W1": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+    "W2": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw"
+  }
+}

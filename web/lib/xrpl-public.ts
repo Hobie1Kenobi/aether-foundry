@@ -232,6 +232,37 @@ export const MACHINES = {
   },
 } as const;
 
+/**
+ * LP Badge v1 door. XRPL Testnet credential gate, not the v0 NFT.
+ * Addresses and hashes are filled after the trial. Read-only.
+ */
+export const LP_BADGE_BOUND = {
+  network: "XRPL Testnet",
+  amendment: "Credentials",
+  amendmentId:
+    "1CB67D082CF7D9102412D34258CEDB400E659352D3B207348889297A6D90F5EF",
+  hooksOnXrplTestnet: false,
+  honorSystem: false,
+  credentialType: "aether-lp-ok",
+  lpThreshold: "1000",
+  amm: WALLETS.AMM.address,
+  v0NftokenId:
+    "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1B3732AC80141DD5C",
+  readme:
+    "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/lp-badge-bound/README.md",
+  issuer: "",
+  holder: "",
+  door: "",
+  stranger: "",
+  credentialId: "",
+  hashes: {
+    strangerFail: "",
+    holderBareFail: "",
+    holderPass: "",
+    holderRevokedFail: "",
+  },
+} as const;
+
 export const EXPLORER_TX = (hash: string) =>
   `https://testnet.xrpl.org/transactions/${hash}`;
 

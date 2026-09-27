@@ -33,13 +33,26 @@ Agent-run ops for the XRPL **Testnet** corporation. Read this before any session
 | 2 | `drip-pass` | Trialled |
 | 3 | `walk-in-window` | v2 storefront open; watcher is dry-run, remint is local |
 | 4 | `oracle-mid-ticket` | Trialled |
-| 5 | `lp-badge` | Trialled (honor-system LP threshold) |
+| 5 | `lp-badge` | v0 NFT still honor-system. v1 door is `lp-badge-bound` (Credentials + DepositPreauth, not honor-system) |
 | 6 | `batch-heartbeat` | **Spec only** — gated on Batch amendment |
 | 7 | `xahau-split-treasury` | Live on Xahau Testnet — SetHook + 1 XAH split |
 
 Pack layout: `machines/<slug>/{README,PRIMITIVES,ECONOMICS,THREAT,RUNBOOK,RESULTS,artifact.json}`.
 
 Desk constants live in `web/lib/xrpl-public.ts` (`MACHINES`). Cards render in `web/components/DeskCards.tsx`. After adding a machine to `MACHINES`, update DeskCards and redeploy.
+
+## LP Badge bind
+
+v0 NFT on W1 is unchanged. The ledger gate is `machines/lp-badge-bound/`: a DepositAuth door that requires credential `aether-lp-ok`. XRPL Testnet `Credentials` is enabled. No Hooks amendment is enabled here; do not SetHook against `s.altnet.rippletest.net`.
+
+```bash
+npm run lp-badge:bound -- --dry-run
+npm run lp-badge:bound -- --record
+```
+
+Seeds `LPB_ISSUER_SEED`, `LPB_HOLDER_SEED`, `LPB_DOOR_SEED`, `LPB_STRANGER_SEED` stay outside the repo. The trial holder is not W1. Do not `AMMWithdraw` W1's seeded LP to "prove" the old NFT.
+
+Follow-ups, not this cut: `oracle-mid-ticket` quote attestation is still honor-system. A same-execution LP read would be a Xahau hook on a pool that actually lives on Xahau.
 
 ## Batch gate rule
 

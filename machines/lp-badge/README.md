@@ -1,7 +1,8 @@
 # Machine — LP Badge (Foundry Night A)
 
-**Status:** trialled (session 2026-09-27-7) — see RESULTS.md  
+**Status:** v0 trialled (session 2026-09-27-7) — honor-system NFT, see RESULTS.md  
 **Network:** XRPL Testnet only (`wss://s.altnet.rippletest.net:51233`)  
+**v1 door:** `machines/lp-badge-bound/` — Credentials + DepositPreauth. That path is the ledger bind. This NFT was not upgraded in place.  
 **Thesis:** An NFT that is a *claim / badge* tied to the holder's AMM LP position in AETH/XRP — membership in the liquidity guild, not a PFP.
 
 ```mermaid
