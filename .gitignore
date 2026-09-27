@@ -24,3 +24,4 @@ __pycache__/
 
 # Lab scratch (keep tracked JSONL and markdown)
 lab/sessions/*.tmp
+lab/*.tmp

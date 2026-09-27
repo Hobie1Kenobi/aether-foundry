@@ -68,14 +68,14 @@ Re-probe only. Check `server_info` / feature flags for `BatchV1_1` / `fixBatchV1
 - Weekly letter: `lab/weekly/YYYY-MM-DD.md`
 - P&L hygiene: `market/pnl.md`, `market/fx.md` from live `account_info` / `amm_info` / `account_lines` / `account_nfts` on W0–W6, BUYER, STRANGER, AMM
 - Optional: `npm run report:nav` when present
-- Put continuation cards in session notes, not chat-only
+- Continuation card: `lab/director-state.json` (`next_actions`, `blockers`, `last_session_id`). Session notes still get a copy. Contract: `lab/DIRECTOR_WAKE.md`.
 
 ## Walk-In Window loop
 
 The shop stays open without a human session watching the screen. Signing stays on the founder box.
 
 1. `.github/workflows/walk-in-remint-watch.yml` (every 30 minutes, or `workflow_dispatch`) runs `node src/walk-in-remint-watch.js --quiet`. Read-only Testnet HTTP. Exit 0 while W2 still has a sell offer. No seeds in GitHub Actions.
-2. When that sell offer is gone, the run writes `lab/remint-plans/walk-in-*.json`, appends `lab/ledger-log.jsonl` (`walk_in_sold_out`), and a detection line in `machines/walk-in-window/RESULTS.md`, then commits those files. That line is not a remint.
+2. When that sell offer is gone, the run writes `lab/remint-plans/walk-in-*.json`, appends `lab/ledger-log.jsonl` (`walk_in_sold_out`), and a detection line in `machines/walk-in-window/RESULTS.md`, then commits those files. That line is not a remint. A wake listener then runs `npm run director:snapshot` and `npm run director:wake -- --check --routine walk-in-remint` (exit 2 when the offer is gone).
 3. Founder, with secrets outside the repo: `npm run remint:walk-in`. Loads `W2_SEED` from `AETHER_SECRETS` or `/workspace/aether-foundry-secrets/.env`, mints, and relists. Refuses while a sell offer is still open. Refuses when `CI` or `GITHUB_ACTIONS` is set. Does not accept.
 4. Desk reads `account_objects` and shows OPEN again.
 
@@ -140,15 +140,30 @@ npm run gov:multisign
 
 `gov:dry` does not read seeds. `gov:live` and `gov:multisign` load `W0_SEED`…`W6_SEED` from `AETHER_SECRETS` or `/workspace/aether-foundry-secrets/.env`, generate missing `SIGNER_*_SEED` and `W*_REGULAR_SEED` values into that file, and refuse CI. The multisign demo is 10000 drops (W0 → W6, Director + Market). Do not invent a hash when the seeds are absent.
 
+## Director wake
+
+Canonical state is `lab/director-state.json`. The contract, merge rules, and the exact fields each routine reads are in `lab/DIRECTOR_WAKE.md`.
+
+```bash
+npm run director:snapshot
+npm run director:wake
+npm run director:wake -- --check --quiet --routine morning-health
+```
+
+Snapshot is read-only Testnet HTTP (XRPL network id 1, Xahau network id 21338). It refuses mainnet hosts and refuses to write seeds. It does not invent a ledger index when RPC fails. It refreshes balances and watched objects, and it keeps `next_actions`, `blockers`, and `last_session_id`.
+
+Wake prints the continuation card and does not hit RPC. `--check` exits 0 when quiet and 2 on alert. Do not use `npm run health` for the morning routine; that script can faucet and pay.
+
 ## Routines (agent schedules, America/Chicago)
 
-Created 2026-09-27:
+Created 2026-09-27. Each routine reads `lab/director-state.json` after a fresh snapshot. Field lists are in `lab/DIRECTOR_WAKE.md`.
 
-| Routine | When | Behavior |
-|---------|------|----------|
-| Foundry morning health | Weekdays 08:56 | Quiet if green; alert on broken desk/toml/treasury |
-| Foundry weekly NAV | Mondays 08:56 | Digest NAV / AETH outstanding / counterparties |
-| Foundry Batch probe | Mon/Wed/Fri 12:56 | Quiet if Batch still disabled; alert only if gate flips |
+| Routine | When | Wake | Behavior |
+|---------|------|------|----------|
+| Foundry morning health | Weekdays 08:56 | `--routine morning-health` | Quiet if desk, toml, and W0 treasury (spendable, SignerList, RegularKeys) are green |
+| Foundry weekly NAV | Mondays 08:56 | `--routine weekly-nav` | Digest `watched.testnet_nav_spendable_drops`, AETH outstanding, AMM amounts. Counterparties stay in `market/pnl.md`. A changed NAV is not an alert. |
+| Foundry Batch probe | Mon/Wed/Fri 12:56 | `--routine batch-probe` | Quiet while `watched.batch.atomic_enabled` is false. Alert only if the gate flips. No Batch txs from the alert. |
+| Walk-In remint | after `walk_in_sold_out`, or any shop check | `--routine walk-in-remint` | Quiet while `watched.walk_in_offer.status` is `open`. Alert on `sold_out`. Signing stays on the Foundry box. |
 
 ## Push path (Foundry box)
 
@@ -165,3 +180,5 @@ Prefer `/workspace/aether-foundry-push.sh` when pushing from the box checkout. N
 - [ ] W3 paying a Foundry payTo (desk SKUs included — that is circular)
 - [ ] `asfDisableMaster` / `lsfDisableMaster` without a written recovery path (week-2 leaves master enabled)
 - [ ] `gov:live` or `gov:multisign` from CI
+- [ ] Seeds or mainnet hosts in `lab/director-state.json`
+- [ ] Inventing a ledger index when `director:snapshot` RPC fails

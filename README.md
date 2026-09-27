@@ -23,7 +23,8 @@ See `MASTER_PROMPT.md` §9 for the operating loop and first-boot checklist.
 | Path | Role |
 |------|------|
 | `corp/` | Charter, wallet address book, org |
-| `lab/` | Sessions, standups, motions, ledger log |
+| `lab/` | Sessions, standups, motions, ledger log, `director-state.json` |
+| `lab/DIRECTOR_WAKE.md` | Wake contract for morning health, NAV, Batch probe, Walk-In |
 | `machines/` | Named primitive compositions |
 | `market/` | P&L, FX, book snapshots |
 | `src/` | Runnable xrpl.js / xrpl-py scripts |
