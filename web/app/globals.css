@@ -445,6 +445,21 @@ ul.clean li {
   font-size: 0.88rem;
 }
 
+.merchant-call {
+  margin-top: 0.85rem;
+}
+
+.merchant-pre {
+  margin: 0 0 0.85rem;
+  padding: 0.75rem;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  font: 0.72rem/1.45 var(--mono);
+  white-space: pre-wrap;
+}
+
 @media (max-width: 760px) {
   .hero-copy,
   .section-heading {

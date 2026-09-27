@@ -16,7 +16,7 @@ Live refresh via `npm run report:nav` — ledger **21094528**, CT **2026-09-27 ~
 | escrow_cancelled_xrp | 2 → BUYER | Trial B |
 | escrow_stuck_xrp | 10 on BUYER (Unix-vs-Ripple epoch bug) — **do not touch** | Unix scar |
 | passive_offers_live | 4 (W1 CLOB wings) | live |
-| x402_hits | 0 | |
+| x402_hits | 0 | append desk x402_hit via npm run x402:hit |
 | grants_paid | 0 | |
 | surprises | 3 (epoch scar; SettleDelay dest-vs-source; Batch disabled on testnet 3.4.1) | |
 

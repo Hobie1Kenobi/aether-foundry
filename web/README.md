@@ -41,3 +41,8 @@ npm run dev
 - Reads only, over HTTPS JSON-RPC (not the `xrpl` WebSocket client): `account_info`, `amm_info`, `book_offers`, `account_nfts`, and `account_objects` (`type: nft_offer`) for the Walk-In storefront. A failed call renders an ERROR chip; it does not fail the page.
 - The NAV strip sums those live `account_info` XRP balances. It does not use a hardcoded figure.
 - Machine cards show RESULTS hashes as constants — no signing.
+- x402 routes under `/api/x402/*` verify a settled Testnet Payment to W3. They do not sign or submit. Prices and the buyer script are in `machines/x402-desk/README.md`.
+
+## x402
+
+Unpaid calls return 402 and a base64 `PAYMENT-REQUIRED` header (`x402Version` 2, network `xrpl:1`). A paid retry sends `PAYMENT-SIGNATURE`. Success is 200 plus `PAYMENT-RESPONSE` and an `x402_hit` object. Vercel does not write `market/pnl.md`; from the repo root, `npm run x402:hit` records that object.

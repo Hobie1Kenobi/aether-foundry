@@ -8,7 +8,7 @@ export default function DeskPage() {
     <main>
       <DeskCards />
       <footer style={{ marginTop: "2rem" }} className="muted">
-        Aether Foundry · XRPL Testnet desk · no Wallet.sign · no seed imports
+        Aether Foundry · XRPL Testnet desk · does not sign · x402 pay-to W3
       </footer>
     </main>
   );

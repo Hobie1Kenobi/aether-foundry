@@ -4,7 +4,7 @@
 # Served also at web/public/.well-known/xrp-ledger.toml for Vercel desk deploy.
 
 [METADATA]
-modified = "2026-09-27T18:30:00Z"
+modified = "2026-09-27T19:30:00Z"
 network = "XRPL Testnet"
 expires = "2027-09-27T00:00:00Z"
 
@@ -19,7 +19,7 @@ address = "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw"
 desc = "W2 ATELIER — NFT minter (taxon 20260927); Walk-In storefront seller"
 [[ACCOUNTS]]
 address = "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw"
-desc = "W3 CHANNELS"
+desc = "W3 CHANNELS — x402 pay-to (Testnet XRP only)"
 [[ACCOUNTS]]
 address = "ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN"
 desc = "W4 ESCROW"
@@ -100,3 +100,8 @@ title = "Corporate charter (DID target)"
 url = "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/genesis-artifact/README.md"
 type = "documentation"
 title = "Genesis artifact #0"
+
+[[WEBLINKS]]
+url = "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/x402-desk/README.md"
+type = "documentation"
+title = "x402 desk merchant (Testnet, pay W3)"
