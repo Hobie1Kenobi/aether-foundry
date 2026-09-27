@@ -112,6 +112,8 @@ export async function DeskCards() {
   const m1 = MACHINES["work-ticket-escrow"];
   const m2 = MACHINES["drip-pass"];
   const m3 = MACHINES["walk-in-window"];
+  const m4 = MACHINES["oracle-mid-ticket"];
+  const m5 = MACHINES["lp-badge"];
 
   const onlineAccounts = accounts.filter((account) => account.balanceXrp != null);
   const totalDrops = onlineAccounts.reduce(
@@ -375,7 +377,7 @@ export async function DeskCards() {
           <div>
             <p className="kicker">04 / EXECUTION RECORD</p>
             <h2 id="machines-title" className="section-title">
-              Machines #1–#3
+              Machines #1–#5
             </h2>
           </div>
           <span className="section-meta">RESULTS hashes / display only</span>
@@ -414,6 +416,29 @@ export async function DeskCards() {
               ["Path-pay ~50 AETH", m3.hashes.pathPay],
               ["TrustSet", m3.hashes.trustSet],
               ["CheckCash", m3.hashes.checkCash],
+            ]}
+          />
+          <MachineCard
+            number={m4.number}
+            title={m4.label.replace(`Machine #${m4.number} — `, "")}
+            readme={m4.readme}
+            entries={[
+              ["Mint", m4.hashes.mint],
+              ["Sell", m4.hashes.sell],
+              ["Accept", m4.hashes.accept],
+              ["EscrowCreate", m4.hashes.escrowCreate],
+              ["EscrowFinish", m4.hashes.escrowFinish],
+              ["DomainAccountSet", m4.hashes.domainAccountSet],
+            ]}
+          />
+          <MachineCard
+            number={m5.number}
+            title={m5.label.replace(`Machine #${m5.number} — `, "")}
+            readme={m5.readme}
+            entries={[
+              ["Mint", m5.hashes.mint],
+              ["CreateOffer", m5.hashes.createOffer],
+              ["Accept", m5.hashes.accept],
             ]}
           />
         </div>
