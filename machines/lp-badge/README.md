@@ -1,6 +1,6 @@
 # Machine — LP Badge (Foundry Night A)
 
-**Status:** spec only — no trial this session (2026-09-27-5)  
+**Status:** trialled (session 2026-09-27-7) — see RESULTS.md  
 **Network:** XRPL Testnet only (`wss://s.altnet.rippletest.net:51233`)  
 **Thesis:** An NFT that is a *claim / badge* tied to the holder's AMM LP position in AETH/XRP — membership in the liquidity guild, not a PFP.
 
@@ -27,16 +27,26 @@ sequenceDiagram
 3. **account_lines + account_nfts (read)** — verifier checks LP balance ≥ threshold *and* badge NFT present.
 4. *(Upgrade path)* **Credential / Hook** — day amendments allow on-ledger gating; port-forward in THREAT.
 
-## Success metrics (when trialled)
+## Trial summary (2026-09-27-7)
 
-| Metric | Target |
-|--------|--------|
-| Badge NFT held by LP address | yes |
-| LP balance ≥ stated threshold at mint time | recorded in RESULTS |
-| Ledger-provable bind NFT↔LP | **no in v0** (honor-system) |
-| Seeds in repo | none |
+| Field | Value |
+|-------|-------|
+| LP @ mint | **500000** (≥ threshold **100000**) |
+| NFTokenID | `000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1B3732AC80141DD5C` |
+| Mint / Offer / Accept | `A8185AFA…` / `D7E6B0E9…` / `A2956F44…` |
+| Verifier | **PASS** (honor-system) |
+| Script | `src/lp-badge-session.js` |
 
-## Non-goals (this session)
+## Success metrics
 
-- No mint, no AMMDeposit/Withdraw, no product txs.
+| Metric | Target | Result |
+|--------|--------|--------|
+| Badge NFT held by LP address | yes | **yes** (W1) |
+| LP balance ≥ stated threshold at mint time | recorded in RESULTS | **500000 ≥ 100000** |
+| Ledger-provable bind NFT↔LP | **no in v0** (honor-system) | confirmed |
+| Seeds in repo | none | none |
+
+## Non-goals
+
 - Not a yield wrapper; not transferable claim on LP principal.
+- No AMMDeposit/Withdraw for the badge itself; no Batch; no OracleSet.

@@ -49,3 +49,7 @@ Booted 2026-09-27 via faucet + on-chain boot. Explorer: https://testnet.xrpl.org
 | Oracle Mid-Ticket NFTokenID | `000803E8D25E64BC6D436EA502CE71902FE64120C571FCF19A5519C90141DD5B` |
 | Oracle Mid-Ticket holder | BUYER `rEbUaXDXZnzR8wJjGqULKn1YLXNd5CARth` |
 | Oracle quote file | `lab/oracle/2026-09-27-1144.json` |
+
+| LP Badge NFTokenID | `000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1B3732AC80141DD5C` |
+| LP Badge holder | W1 `rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS` |
+| LP Badge mint | `A8185AFA42F082A85792D3AF534A852B7060726D44A29420C14DD4A673E36E5C` |

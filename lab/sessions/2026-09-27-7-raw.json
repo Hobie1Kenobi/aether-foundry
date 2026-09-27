@@ -1,0 +1,60 @@
+{
+  "network": "XRPL Testnet",
+  "session": "2026-09-27-7",
+  "machine": "lp-badge",
+  "ws": "wss://s.altnet.rippletest.net:51233",
+  "amm": {
+    "account": "r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w",
+    "ledger_index": 21096269,
+    "pool_aeth": 4973.542951524584,
+    "pool_xrp": 50.270313,
+    "lp_outstanding": 500000,
+    "lp_currency": "0330E60FAE706EAD2C7D511D790B07A6F3B89931",
+    "trading_fee": 500
+  },
+  "lp": {
+    "holder": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+    "currency": "0330E60FAE706EAD2C7D511D790B07A6F3B89931",
+    "issuer": "r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w",
+    "balance": 500000,
+    "threshold": 100000,
+    "passes_threshold": true,
+    "ledger_index": 21096268
+  },
+  "nft": {
+    "mint_hash": "A8185AFA42F082A85792D3AF534A852B7060726D44A29420C14DD4A673E36E5C",
+    "result": "tesSUCCESS",
+    "ledger_index": 21096269,
+    "nftoken_id": "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1B3732AC80141DD5C",
+    "taxon": 20260927,
+    "uri": "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/lp-badge/README.md#lp-threshold=100000&lp=500000&holder=W1",
+    "transfer_fee": 1000,
+    "issuer": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+    "flags": "tfTransferable"
+  },
+  "offers": {
+    "create_hash": "D7E6B0E9A5E3F087FB51C6F977590A88A6EE768DE4454F4FFC7D861D9835D4C7",
+    "create_result": "tesSUCCESS",
+    "create_ledger": 21096271,
+    "offer_id": "EBA790F12B3500821FE544FF9717501E248F4AB81FACF20F5097D27CEF51CADB",
+    "amount": "0",
+    "destination": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+    "flags": "tfSellNFToken",
+    "note": "Destination-restricted 0 XRP attestation transfer",
+    "accept_hash": "A2956F443B10810E1273A4334DA815599570B186266390D77BEEEDB4648823D1",
+    "accept_result": "tesSUCCESS",
+    "accept_ledger": 21096272
+  },
+  "verifier": {
+    "lp_balance": 500000,
+    "lp_threshold": 100000,
+    "lp_ok": true,
+    "nftoken_id": "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1B3732AC80141DD5C",
+    "holds_badge": true,
+    "pass": true,
+    "honor_system": true,
+    "note": "Pass = LP≥threshold AND badge present at verify time; ledger does not bind NFT↔LP continuously"
+  },
+  "honor_system": true,
+  "honor_system_note": "Ledger does not bind NFTokenID to LP trust line; URI asserts threshold at mint/verify time only"
+}

@@ -110,7 +110,7 @@ export const WALLETS = {
 
 export type WalletId = keyof typeof WALLETS;
 
-/** Machine #1-#4 RESULTS hashes (from machines RESULTS.md) — display only */
+/** Machine #1-#5 RESULTS hashes (from machines RESULTS.md) — display only */
 export const MACHINES = {
   "work-ticket-escrow": {
     number: 1,
@@ -189,6 +189,23 @@ export const MACHINES = {
         "A2D8E84C265DCCDD3E2E7A422B8F60D3439739E7A257154ED857AA7AB380E3A6",
       domainAccountSet:
         "15D20D72A5BECEE3A84998503F8D357B68D321563959497D2FF629A6D0685F76",
+    },
+  },
+  "lp-badge": {
+    number: 5,
+    name: "lp-badge",
+    label: "Machine #5 — LP Badge",
+    readme:
+      "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/lp-badge/README.md",
+    nftokenId:
+      "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1B3732AC80141DD5C",
+    honorSystem: true,
+    lpThreshold: 100000,
+    hashes: {
+      mint: "A8185AFA42F082A85792D3AF534A852B7060726D44A29420C14DD4A673E36E5C",
+      createOffer:
+        "D7E6B0E9A5E3F087FB51C6F977590A88A6EE768DE4454F4FFC7D861D9835D4C7",
+      accept: "A2956F443B10810E1273A4334DA815599570B186266390D77BEEEDB4648823D1",
     },
   },
 } as const;
