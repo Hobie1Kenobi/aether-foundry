@@ -37,6 +37,7 @@ Agent-run ops for the XRPL **Testnet** corporation. Read this before any session
 | 6 | `batch-heartbeat` | **Spec only** — gated on Batch amendment |
 | 7 | `xahau-split-treasury` | Live on Xahau Testnet — SetHook + 1 XAH split |
 | 8 | `governance-board` | Policy H1 in force. SignerList / RegularKey live set is Foundry-box gated |
+| — | `grants-flywheel` | Operational. W6 pays non-labeled artifact users. No grant hash until `tesSUCCESS` |
 
 Pack layout: `machines/<slug>/{README,PRIMITIVES,ECONOMICS,THREAT,RUNBOOK,RESULTS,artifact.json}`.
 
@@ -164,6 +165,20 @@ npm run gov:multisign
 
 `gov:dry` does not read seeds. `gov:live` and `gov:multisign` load `W0_SEED`…`W6_SEED` from `AETHER_SECRETS` or `/workspace/aether-foundry-secrets/.env`, generate missing `SIGNER_*_SEED` and `W*_REGULAR_SEED` values into that file, and refuse CI. The multisign demo is 10000 drops (W0 → W6, Director + Market). Do not invent a hash when the seeds are absent.
 
+## W6 grants flywheel
+
+Pack: `machines/grants-flywheel/`. W6 pays one non-labeled counterparty who already used a Foundry artifact (Walk-In accept, x402 Payment to W3, AETH trust line or path-pay, taxon `20260927` holder). Every address in `web/lib/xrpl-public.ts` `WALLETS` is excluded, including STRANGER. The Day-30 faucet buyer is eligible when the ledger log still shows that accept.
+
+Default grant is 1 XRP (`1000000` drops). `--drops` at or above 50 XRP needs `lab/motions/` for that destination. W6 must keep 10 XRP spendable. The Payment does not come from W0.
+
+```bash
+npm run grants:scan
+npm run grants:pay -- --dry-run
+npm run grants:pay -- --record
+```
+
+Scan is read-only public Testnet HTTP, capped at 20 txs per account and 20 NFTs. `--dry-run` prints the unsigned Payment and does not load a seed. Live signing prefers `W6_REGULAR_SEED`, then `W6_SEED`, then `GRANTS_SEED`. `Account` stays W6. It refuses CI, mainnet hosts, and NetworkID 0. The same destination and reason inside 7 days does not pay twice (`lab/grants/ledger.jsonl`). `--record` updates `grants_paid` in `market/pnl.md` and `RESULTS.md` only after `tesSUCCESS`. Do not invent that hash.
+
 ## Director wake
 
 Canonical state is `lab/director-state.json`. The contract, merge rules, and the exact fields each routine reads are in `lab/DIRECTOR_WAKE.md`.
@@ -205,5 +220,7 @@ Prefer `/workspace/aether-foundry-push.sh` when pushing from the box checkout. N
 - [ ] W3 paying a Foundry payTo (desk SKUs included — that is circular)
 - [ ] `asfDisableMaster` / `lsfDisableMaster` without a written recovery path (week-2 leaves master enabled)
 - [ ] `gov:live` or `gov:multisign` from CI
+- [ ] `grants:pay` from CI, or a grant to any `WALLETS` address (STRANGER included)
+- [ ] Funding a W6 grant from W0
 - [ ] Seeds or mainnet hosts in `lab/director-state.json`
 - [ ] Inventing a ledger index when `director:snapshot` RPC fails

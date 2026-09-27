@@ -28,7 +28,7 @@ address = "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ"
 desc = "W5 R&D"
 [[ACCOUNTS]]
 address = "rfnqxYQWKsVGFuWLjky41puXHJkT2v8yTf"
-desc = "W6 GRANTS"
+desc = "W6 GRANTS — flywheel payments to non-labeled counterparties"
 [[ACCOUNTS]]
 address = "r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w"
 desc = "AMM AETH/XRP pool (testnet)"

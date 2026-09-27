@@ -112,6 +112,23 @@ export const WALLETS = {
   },
 } as const;
 
+/**
+ * W6 grants flywheel. Read-only desk copy. No trial hash until tesSUCCESS.
+ * The desk does not sign.
+ */
+export const GRANTS_FLYWHEEL = {
+  slug: "grants-flywheel",
+  label: "W6 Grants Flywheel",
+  payer: WALLETS.W6.address,
+  defaultDrops: "1000000",
+  readme:
+    "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/grants-flywheel/README.md",
+  runbook:
+    "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/grants-flywheel/RUNBOOK.md",
+  scanCommand: "npm run grants:scan",
+  payCommand: "npm run grants:pay -- --dry-run",
+} as const;
+
 export type WalletId = keyof typeof WALLETS;
 
 /** Machine #1-#5 RESULTS hashes (from machines RESULTS.md) — display only */

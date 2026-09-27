@@ -1,0 +1,14 @@
+{
+  "machine": "grants-flywheel",
+  "network": "XRPL Testnet",
+  "network_id": 1,
+  "payer": "rfnqxYQWKsVGFuWLjky41puXHJkT2v8yTf",
+  "experiment": "grants-flywheel",
+  "purpose": "aether-grant",
+  "default_drops": "1000000",
+  "motion_drops": "50000000",
+  "source_tag": 202609276,
+  "cooldown_ms": 604800000,
+  "grant_hash": null,
+  "note": "null means not submitted. Do not treat null as a ledger hash."
+}
