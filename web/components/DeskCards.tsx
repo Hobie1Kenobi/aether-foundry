@@ -70,11 +70,17 @@ function WalkInStorefrontCard({
   snapshot,
   w2Address,
   inbound,
+  inboundSection,
+  runbook,
+  buyCommand,
   recordedOfferId,
 }: {
   snapshot: WalkInStorefrontSnapshot;
   w2Address: string;
   inbound: string;
+  inboundSection: string;
+  runbook: string;
+  buyCommand: string;
   recordedOfferId: string;
 }) {
   const replaced =
@@ -145,8 +151,16 @@ function WalkInStorefrontCard({
             </dd>
           </dl>
         ))}
+        <p className="muted">
+          Buy from a checkout. Step 1 in{" "}
+          <ExternalLink href={inboundSection}>INBOUND.md</ExternalLink> is{" "}
+          <span className="mono">{buyCommand}</span>. This desk does not sign.
+        </p>
+        <pre className="merchant-pre buy-pre">{`${buyCommand} -- --dry-run\n${buyCommand} -- --faucet`}</pre>
         <p className="storefront-links">
           <ExternalLink href={inbound}>INBOUND.md</ExternalLink>
+          <ExternalLink href={runbook}>RUNBOOK.md</ExternalLink>
+          <a href="/api/inbound/walk-in">live offer JSON</a>
           <ExternalLink href={EXPLORER_ACCOUNT(w2Address)}>W2 on explorer</ExternalLink>
         </p>
         <p className="mono muted">account_objects · type nft_offer · validated</p>
@@ -161,12 +175,16 @@ function MachineCard({
   readme,
   channelId,
   entries,
+  docs,
+  command,
 }: {
   number: number;
   title: string;
   readme: string;
   channelId?: string;
   entries: Array<[string, string]>;
+  docs?: Array<{ href: string; label: string }>;
+  command?: string;
 }) {
   return (
     <article className="card machine-card">
@@ -178,6 +196,16 @@ function MachineCard({
       <ExternalLink href={readme}>
         <span className="muted">Machine README</span>
       </ExternalLink>
+      {docs && docs.length > 0 ? (
+        <p className="storefront-links">
+          {docs.map((doc) => (
+            <ExternalLink key={doc.href} href={doc.href}>
+              {doc.label}
+            </ExternalLink>
+          ))}
+        </p>
+      ) : null}
+      {command ? <p className="mono muted channel-id">{command}</p> : null}
       {channelId ? (
         <p className="mono muted channel-id" title={channelId}>
           channel {channelId}
@@ -253,6 +281,7 @@ export async function DeskCards() {
         <nav className="hero-links" aria-label="Desk resources">
           <a href="/.well-known/xrp-ledger.toml">XRPL.toml ↗</a>
           <a href="#storefront-title">Walk-In storefront</a>
+          <a href="/api/inbound/walk-in">Walk-In offer JSON</a>
           <a href="#x402-merchant">x402 merchant</a>
           <a
             href={MACHINES["walk-in-window"].inbound}
@@ -299,6 +328,9 @@ export async function DeskCards() {
         snapshot={storefront}
         w2Address={WALLETS.W2.address}
         inbound={m3.inbound}
+        inboundSection={m3.inboundSection}
+        runbook={m3.runbook}
+        buyCommand={m3.buyCommand}
         recordedOfferId={m3.storefrontV2.offerId}
       />
 
@@ -528,6 +560,11 @@ export async function DeskCards() {
             number={m3.number}
             title={m3.label.replace(`Machine #${m3.number} — `, "")}
             readme={m3.readme}
+            command={m3.buyCommand}
+            docs={[
+              { href: m3.inbound, label: "INBOUND.md" },
+              { href: m3.runbook, label: "RUNBOOK.md" },
+            ]}
             entries={[
               ["v2 Mint (standing)", m3.hashes.mintV2],
               ["v2 CreateOffer (standing)", m3.hashes.createOfferV2],

@@ -1,0 +1,140 @@
+{
+  "server": "aether-foundry-inbound",
+  "version": "1",
+  "network": "xrpl:1",
+  "networkLabel": "XRPL Testnet",
+  "signing": "delegated",
+  "deskSigns": false,
+  "notes": [
+    "Read tools are seedless and call the public desk.",
+    "Buy tools do not accept a seed argument. The operator environment holds WALKIN_BUYER_SEED or XRPL_BUYER_SEED, or the command uses --faucet.",
+    "Signing happens in src/walk-in-buy.js and src/x402-pay.js. The desk never calls Wallet.sign.",
+    "Refuse mainnet hosts and NetworkID 0. Refuse CI and GITHUB_ACTIONS on any signing path."
+  ],
+  "tools": [
+    {
+      "name": "walk_in_status",
+      "description": "Read the current Walk-In Window sell offer on XRPL Testnet. Returns open or sold_out plus the live OfferID. Does not sign.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "binding": {
+        "mode": "http-get",
+        "url": "https://aether-foundry-desk.vercel.app/api/inbound/walk-in",
+        "fallback": "npm run buy:walk-in -- --dry-run",
+        "seeds": false
+      }
+    },
+    {
+      "name": "walk_in_buy",
+      "description": "Accept the current W2 NFT sell offer from a non-Foundry Testnet wallet. Signing is delegated to npm run buy:walk-in on the operator machine. A Foundry labeled wallet (W0-W6, AMM, BUYER, STRANGER) does not count as walk-in. Optional AETH path-pay is off unless with_aeth is true.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dry_run": {
+            "type": "boolean",
+            "description": "Print the discovered offer and do not sign."
+          },
+          "faucet": {
+            "type": "boolean",
+            "description": "Fund a fresh Testnet wallet, then accept. Ignores any buyer variable already in the environment."
+          },
+          "with_aeth": {
+            "type": "boolean",
+            "description": "After the accept, TrustSet and path-pay about 50 AETH. Off by default."
+          },
+          "offer_id": {
+            "type": "string",
+            "pattern": "^[0-9A-Fa-f]{64}$",
+            "description": "Optional pin. Must be an offer that is open now. Omit to take the current XRP sell offer."
+          },
+          "record": {
+            "type": "boolean",
+            "description": "Append lab/ledger-log.jsonl and a RESULTS note after tesSUCCESS. Requires a real hash."
+          }
+        },
+        "additionalProperties": false
+      },
+      "binding": {
+        "mode": "npm",
+        "command": "npm run buy:walk-in -- --faucet",
+        "dryRun": "npm run buy:walk-in -- --dry-run",
+        "record": "npm run buy:walk-in -- --faucet --record",
+        "withAeth": "npm run buy:walk-in -- --faucet --with-aeth",
+        "env": ["WALKIN_BUYER_SEED", "XRPL_BUYER_SEED"],
+        "seedsInArguments": false,
+        "cwd": "repository root",
+        "refuses": ["CI", "GITHUB_ACTIONS", "mainnet hosts", "NetworkID 0", "Foundry WALLETS"]
+      }
+    },
+    {
+      "name": "x402_catalog",
+      "description": "List desk x402 SKUs, prices in drops, and paths. Free. Testnet xrpl:1 only.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "binding": {
+        "mode": "http-get",
+        "url": "https://aether-foundry-desk.vercel.app/api/x402",
+        "seeds": false
+      }
+    },
+    {
+      "name": "x402_buy",
+      "description": "Buy a desk SKU with npm run x402:pay against the production desk. Pay-to is W3 CHANNELS. W3 must not be the buyer: that payment is circular and the script refuses it. The desk verifies a validated Payment and does not sign.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string",
+            "enum": ["machine-spec", "reserve-audit", "composition-quote"]
+          },
+          "record": {
+            "type": "boolean",
+            "description": "Pass --record so a real 200 appends the hit."
+          },
+          "prompt": {
+            "type": "string",
+            "description": "Optional prompt for machine-spec."
+          },
+          "units": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Optional labor units for composition-quote."
+          }
+        },
+        "required": ["sku"],
+        "additionalProperties": false
+      },
+      "binding": {
+        "mode": "npm",
+        "command": "DESK_URL=https://aether-foundry-desk.vercel.app npm run x402:pay -- reserve-audit",
+        "record": "DESK_URL=https://aether-foundry-desk.vercel.app npm run x402:pay -- reserve-audit --record",
+        "env": ["XRPL_BUYER_SEED", "DESK_URL"],
+        "seedsInArguments": false,
+        "payTo": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+        "refuses": ["payer address equal to W3", "xrpl:0", "mainnet hosts", "CI", "GITHUB_ACTIONS"]
+      }
+    }
+  ]
+}

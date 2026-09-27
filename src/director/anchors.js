@@ -153,10 +153,12 @@ const MACHINES = [
   },
 ];
 
+// Stranger buy is executable (`npm run buy:walk-in`) while the offer is open.
+// Remint stays on the Foundry box. Do not invent a buy hash in this file.
 const DEFAULT_NEXT_ACTIONS = [
   "Morning health: read probes.desk, probes.toml, wallets.W0.spendable_drops, and watched.w0_signer_list before acting.",
   "Batch probe: read watched.batch.atomic_enabled and stay quiet while it is false; do not submit a Batch transaction.",
-  "Walk-In: read watched.walk_in_offer.status; leave the v2 shop while open, and remint only on the Foundry box after sold_out.",
+  "Walk-In: while watched.walk_in_offer.status is open, strangers buy with npm run buy:walk-in (faucet or a non-Foundry seed); remint only on the Foundry box after sold_out.",
 ];
 
 const ADDRESS_RE = /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/;

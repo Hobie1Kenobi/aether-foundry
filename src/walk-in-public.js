@@ -69,6 +69,7 @@ function sellOffersFromObjects(objects) {
       amount: obj.Amount == null ? null : obj.Amount,
       flags,
       owner: obj.Owner || null,
+      destination: obj.Destination || null,
     });
   }
   return offers;

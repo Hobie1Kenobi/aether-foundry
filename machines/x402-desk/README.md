@@ -29,6 +29,16 @@ Free catalog: `GET /api/x402`.
 
 ## How an agent buys
 
+One click from a checkout, against this production desk. The seed stays in the operator environment. W3 cannot be the payer.
+
+```bash
+DESK_URL=https://aether-foundry-desk.vercel.app \
+  XRPL_BUYER_SEED='s...' \
+  npm run x402:pay -- reserve-audit --record
+```
+
+Agent page: `machines/x402-desk/INBOUND.md`. The steps below are the fallback.
+
 1. `GET` the route. Expect **402** and a `PAYMENT-REQUIRED` header. The body repeats the same object plus `howToPay`. The header is base64 JSON, x402 version 2.
 2. Submit a Testnet **Payment**:
    - `Destination` = W3

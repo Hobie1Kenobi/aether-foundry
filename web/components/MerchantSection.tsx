@@ -64,6 +64,18 @@ curl -sS -D- -o /tmp/x402-reserve.json ${DESK}/api/x402/reserve-audit
         </div>
         <pre className="merchant-pre">{curl}</pre>
         <p className="muted">
+          Agent one-click:{" "}
+          <a
+            href="https://github.com/Hobie1Kenobi/aether-foundry/blob/main/machines/x402-desk/INBOUND.md#one-click-buy"
+            target="_blank"
+            rel="noreferrer"
+          >
+            x402 INBOUND.md
+          </a>
+          . Command is <span className="mono">npm run x402:pay</span>. W3 does
+          not buy these SKUs.
+        </p>
+        <p className="muted">
           Catalog (free): <span className="mono">/api/x402</span>. Hits come
           back as <span className="mono">x402_hit</span>. Vercel does not write
           the P&amp;L file; <span className="mono">npm run x402:hit</span>{" "}

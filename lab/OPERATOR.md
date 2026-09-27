@@ -31,7 +31,7 @@ Agent-run ops for the XRPL **Testnet** corporation. Read this before any session
 |---|------|--------|
 | 1 | `work-ticket-escrow` | Trialled — RESULTS on disk |
 | 2 | `drip-pass` | Trialled |
-| 3 | `walk-in-window` | v2 storefront open; watcher is dry-run, remint is local |
+| 3 | `walk-in-window` | v2 storefront open; stranger buy is `npm run buy:walk-in`; remint is local |
 | 4 | `oracle-mid-ticket` | Trialled |
 | 5 | `lp-badge` | v0 NFT still honor-system. v1 door `lp-badge-bound` trialled: PASS `D21E08CC…FED2`, revoked `tecBAD_CREDENTIALS` `919C1C77…EE48` |
 | 6 | `batch-heartbeat` | **Spec only** — gated on Batch amendment |
@@ -78,6 +78,30 @@ The shop stays open without a human session watching the screen. Signing stays o
 2. When that sell offer is gone, the run writes `lab/remint-plans/walk-in-*.json`, appends `lab/ledger-log.jsonl` (`walk_in_sold_out`), and a detection line in `machines/walk-in-window/RESULTS.md`, then commits those files. That line is not a remint. A wake listener then runs `npm run director:snapshot` and `npm run director:wake -- --check --routine walk-in-remint` (exit 2 when the offer is gone).
 3. Founder, with secrets outside the repo: `npm run remint:walk-in`. Loads `W2_SEED` from `AETHER_SECRETS` or `/workspace/aether-foundry-secrets/.env`, mints, and relists. Refuses while a sell offer is still open. Refuses when `CI` or `GITHUB_ACTIONS` is set. Does not accept.
 4. Desk reads `account_objects` and shows OPEN again.
+
+## Stranger Walk-In buy
+
+A stranger or an external agent buys the open W2 sell offer without the Director signing. The published OfferID in `INBOUND.md` is not required.
+
+```bash
+npm run buy:walk-in -- --dry-run
+npm run buy:walk-in -- --faucet
+WALKIN_BUYER_SEED='s...' npm run buy:walk-in -- --record
+```
+
+Testnet only. Discovery is `account_objects` (`type: nft_offer`, validated). The script refuses mainnet hosts and NetworkID 0. It refuses any address in `web/lib/xrpl-public.ts` `WALLETS` (W0–W6, AMM, BUYER, STRANGER) — exit 2. It refuses `CI` / `GITHUB_ACTIONS` before signing. Sold out exits 3. `--with-aeth` is the only path-pay, and it is off by default. `--record` appends `lab/ledger-log.jsonl` and a RESULTS note only after a real `tesSUCCESS` hash. Do not invent that hash.
+
+The desk stays read-only. `GET /api/inbound/walk-in` returns the live offer, `howToBuy`, and the npm hint. Agent tool shapes live in `machines/inbound-mcp/tools.json` (`walk_in_status`, `walk_in_buy`, `x402_catalog`, `x402_buy`). Those buy tools delegate to the npm scripts. They do not take a seed argument.
+
+Desk SKUs, one click against production:
+
+```bash
+DESK_URL=https://aether-foundry-desk.vercel.app npm run x402:pay -- reserve-audit
+```
+
+W3 must not be that buyer. See `machines/x402-desk/INBOUND.md`.
+
+`next_actions` in `lab/director-state.json` tells a wake that `npm run buy:walk-in` is the open-shop path. Remint is still Foundry-box only after `sold_out`. No buy hash is stored there until a real `--record`.
 
 ## Desk ops
 
@@ -176,7 +200,8 @@ Prefer `/workspace/aether-foundry-push.sh` when pushing from the box checkout. N
 - [ ] Committing secrets
 - [ ] Batch txs while amendment disabled
 - [ ] Domain host set to a `*.v0.build` preview
-- [ ] Walk-In remint or seeds from CI (the watcher is dry-run only)
+- [ ] Walk-In remint or Walk-In buy from CI (the watcher and `buy:walk-in --dry-run` do not sign)
+- [ ] A Foundry labeled wallet (W0–W6, AMM, BUYER, STRANGER) accepting the Walk-In offer
 - [ ] W3 paying a Foundry payTo (desk SKUs included — that is circular)
 - [ ] `asfDisableMaster` / `lsfDisableMaster` without a written recovery path (week-2 leaves master enabled)
 - [ ] `gov:live` or `gov:multisign` from CI

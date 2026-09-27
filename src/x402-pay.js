@@ -87,6 +87,11 @@ async function main() {
   } catch {
     die("XRPL_BUYER_SEED is not a usable seed");
   }
+  try {
+    assertNotCircularBuyer(wallet.classicAddress, rules.PAY_TO);
+  } catch (err) {
+    die(err.message || String(err));
+  }
   console.log("payer", wallet.classicAddress);
   console.log("sku", row.id, "drops", row.drops, "invoice", invoiceId);
 
@@ -151,7 +156,17 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error(err.message || err);
-  process.exit(1);
-});
+function assertNotCircularBuyer(address, payTo) {
+  if (address === payTo) {
+    throw new Error("refusing W3 as the desk buyer (circular: desk SKUs settle to W3)");
+  }
+}
+
+module.exports = { assertNotCircularBuyer, envIsCi, isMainnetUrl };
+
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err.message || err);
+    process.exit(1);
+  });
+}

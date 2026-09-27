@@ -21,25 +21,51 @@ The NFT URI is this file:
 
 Currency AETH hex: `4145544800000000000000000000000000000000`
 
+## One-click buy
+
+Agents start here. The command reads the current W2 sell offer (`account_objects`, `type: nft_offer`, validated ledger). It does not require the OfferID published further down this page.
+
+```bash
+npm run buy:walk-in -- --dry-run
+npm run buy:walk-in -- --faucet
+```
+
+`--dry-run` prints the plan and does not sign. `--faucet` funds a fresh Testnet wallet and submits `NFTokenAcceptOffer`. A seed already in the environment is used only when you omit `--faucet`:
+
+```bash
+WALKIN_BUYER_SEED='s...' npm run buy:walk-in -- --record
+```
+
+`XRPL_BUYER_SEED` is the fallback variable. Either seed is refused when its address is a Foundry labeled wallet (W0–W6, AMM, BUYER, STRANGER in `web/lib/xrpl-public.ts`). BUYER accepting does not count as walk-in. The script refuses mainnet hosts, NetworkID 0, and live signing when `CI` or `GITHUB_ACTIONS` is set. Sold out exits 3.
+
+Optional AETH, after the NFT accept, stays off unless you ask:
+
+```bash
+npm run buy:walk-in -- --faucet --with-aeth
+```
+
+`--record` appends `lab/ledger-log.jsonl` and a note in `RESULTS.md` only after a real `tesSUCCESS` hash. The desk does not run this command. Live status for agents: `GET https://aether-foundry-desk.vercel.app/api/inbound/walk-in`.
+
 ## Steps (stranger or agent)
 
-1. **Faucet** — fund a fresh Testnet wallet (for example `client.fundWallet()` on `wss://s.altnet.rippletest.net:51233`, or https://faucet.altnet.rippletest.net/accounts). Keep enough XRP for the 10 XRP price, the fee, and the NFT reserve. Do **not** reuse a Foundry labeled wallet (BUYER does not count as walk-in).
-2. **Find the open offer** — do this at buy time. The OfferID below is the listing that was open when this page was published; a purchase deletes it and Foundry remints a new one.
+1. **Run the one-click command** above. The prose below is the fallback when you are not in a checkout of this repo.
+2. **Faucet** — fund a fresh Testnet wallet (for example `client.fundWallet()` on `wss://s.altnet.rippletest.net:51233`, or https://faucet.altnet.rippletest.net/accounts). Keep enough XRP for the 10 XRP price, the fee, and the NFT reserve. Do **not** reuse a Foundry labeled wallet (BUYER does not count as walk-in).
+3. **Find the open offer** — do this at buy time. The OfferID below is the listing that was open when this page was published; a purchase deletes it and Foundry remints a new one.
    - Desk: the Walk-In Window card on https://aether-foundry-desk.vercel.app (live `account_objects` read).
    - Or HTTPS JSON-RPC `account_objects` on W2 with `type: "nft_offer"` and `ledger_index: "validated"`. A sell offer has `Flags` bit `1` (`tfSellNFToken`). The OfferID is the object's `index`. `Amount` is drops (`10000000` = 10 XRP).
    - Or `nft_sell_offers` with the current `nft_id` / `NFTokenID`. The OfferID is `nft_offer_index`.
-3. **Buy** — submit `NFTokenAcceptOffer` paying that XRP amount. No `Destination` was set, so any funded Testnet account can accept.
+4. **Buy** — submit `NFTokenAcceptOffer` paying that XRP amount. No `Destination` was set, so any funded Testnet account can accept. The one-click command builds this transaction from the live OfferID.
 
 ```json
 {
   "TransactionType": "NFTokenAcceptOffer",
   "Account": "<your faucet address>",
-  "NFTokenSellOffer": "<OfferID from step 2>"
+  "NFTokenSellOffer": "<OfferID from step 3>"
 }
 ```
 
-4. **Optional AETH** — after you hold the NFT: `TrustSet` a limit for AETH issued by W0, then a same-account `Payment` of about 50 AETH with `SendMax` in XRP and `Paths` from `ripple_path_find` (AMM `r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w`). Machine #3 `RESULTS.md` has a worked v0 example (TrustSet `A784D97D6EF6B9E69C754676C7A3D2CFEB6E15B43C852E15B7D60EFBC9FAAFCB`, path-pay `BAF7B71ADCC203985D5686B201CE2E1FA94677D73A59428C02C902747E8C1158`). Quotes move; do not reuse that session's `SendMax` blindly.
-5. **Discover more** — W0 Domain points at the desk. Machine READMEs are linked from the toml and from GitHub.
+5. **Optional AETH** — after you hold the NFT: `TrustSet` a limit for AETH issued by W0, then a same-account `Payment` of about 50 AETH with `SendMax` in XRP and `Paths` from `ripple_path_find` (AMM `r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w`). The one-click flag is `--with-aeth`. It is not the default. Machine #3 `RESULTS.md` has a worked v0 example (TrustSet `A784D97D6EF6B9E69C754676C7A3D2CFEB6E15B43C852E15B7D60EFBC9FAAFCB`, path-pay `BAF7B71ADCC203985D5686B201CE2E1FA94677D73A59428C02C902747E8C1158`). Quotes move; do not reuse that session's `SendMax` blindly.
+6. **Discover more** — W0 Domain points at the desk. Machine READMEs are linked from the toml and from GitHub.
 
 ## Listing published with this page
 

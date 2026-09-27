@@ -4,6 +4,30 @@
 **Buyer doc:** `machines/walk-in-window/INBOUND.md`  
 **Desk:** read-only. This runbook is operator-side. Never commit or print seeds.
 
+## Stranger buy (no Director)
+
+A stranger or an external agent accepts the open sell offer. The Director does not sign this path.
+
+```bash
+npm run buy:walk-in -- --dry-run
+npm run buy:walk-in -- --faucet
+WALKIN_BUYER_SEED='s...' npm run buy:walk-in -- --record
+```
+
+| Flag / case | Behavior |
+|-------------|----------|
+| `--dry-run` | Prints the live offer and `NFTokenAcceptOffer`. Does not load a seed or sign. |
+| `--faucet` | `client.fundWallet()` on Testnet, then accept. Ignores buyer seeds in the environment. |
+| `WALKIN_BUYER_SEED` | Preferred seed. `XRPL_BUYER_SEED` is the fallback when `--faucet` is omitted. |
+| Foundry wallet | Exit 2. Addresses in `web/lib/xrpl-public.ts` `WALLETS` (W0–W6, AMM, BUYER, STRANGER) do not count as walk-in. |
+| Mainnet host or NetworkID 0 | Exit 1. No sign. |
+| `CI` or `GITHUB_ACTIONS` | Exit 1 before any live sign. Dry-run still works. |
+| No sell offer | Exit 3 (`SOLD OUT`). Do not reuse the OfferID table below. |
+| `--with-aeth` | After a successful accept, TrustSet plus a ~50 AETH path-pay. Off unless this flag is set. |
+| `--record` | Appends `lab/ledger-log.jsonl` (`action` `walk_in_buy`) and a RESULTS note. Requires the submitted hash. Refused together with `--dry-run`. |
+
+Discovery is `account_objects` on W2, `type: nft_offer`, `ledger_index: validated`. Agents can also `GET /api/inbound/walk-in` on the desk. That route is seedless.
+
 ## v2 standing storefront (current)
 
 W2 keeps one open NFT sell offer. Strangers buy it themselves. The desk reads `account_objects` (`type: nft_offer`) on W2 at request time and shows OPEN or SOLD OUT.
@@ -67,6 +91,7 @@ Secrets stay in the operator env outside the repo (`AETHER_SECRETS`, or `/worksp
 
 ## Verify
 
+- `npm run buy:walk-in -- --dry-run` prints the live OfferID and does not sign.
 - `npm run watch:walk-in` exits 0 while the listing is OPEN (`--quiet` is silent).
 - `account_objects` on W2 (`type: nft_offer`, validated ledger) shows one sell offer, or the desk card says SOLD OUT while a remint is pending.
 - `INBOUND.md` matches the token URI.
