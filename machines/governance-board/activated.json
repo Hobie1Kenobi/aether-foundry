@@ -1,0 +1,163 @@
+{
+  "network": "XRPL Testnet",
+  "hunch": "H1",
+  "quorum": 3,
+  "master_disabled": false,
+  "signer_list_status": "submitted",
+  "signers": [
+    {
+      "id": "director",
+      "persona": "Director",
+      "weight": 2,
+      "address": "rpEpjesFRPcpWWVKoheDT59YKtoA6Xureg",
+      "env": "SIGNER_DIRECTOR_SEED"
+    },
+    {
+      "id": "treasurer",
+      "persona": "Treasurer",
+      "weight": 2,
+      "address": "rHG25YbFNqFL9HzVqa9JQhXFY9Zignxznh",
+      "env": "SIGNER_TREASURER_SEED"
+    },
+    {
+      "id": "atelier",
+      "persona": "Atelier",
+      "weight": 1,
+      "address": "rGfkxsMvv833ioy2QjmTXhYF49J94N9WRu",
+      "env": "SIGNER_ATELIER_SEED"
+    },
+    {
+      "id": "market",
+      "persona": "Market",
+      "weight": 1,
+      "address": "r4Qc6iUKrLZQwM9sPdPWCCHAK2bcMsrxVr",
+      "env": "SIGNER_MARKET_SEED"
+    }
+  ],
+  "regular_keys": [
+    {
+      "id": "W1",
+      "role": "MARKET",
+      "account": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+      "regular_key": "rDyiGKuMgL2F8S7TjB6m6Wg1pLg5KDPJYY",
+      "env": "W1_REGULAR_SEED"
+    },
+    {
+      "id": "W2",
+      "role": "ATELIER",
+      "account": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+      "regular_key": "rNNzhkcScozB7Nzv3cWCZAEnu6MMC64rmy",
+      "env": "W2_REGULAR_SEED"
+    },
+    {
+      "id": "W3",
+      "role": "CHANNELS",
+      "account": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+      "regular_key": "rJRxr1E1Dzz5TXJsCHhwQAm4qS68Y73dQj",
+      "env": "W3_REGULAR_SEED"
+    },
+    {
+      "id": "W4",
+      "role": "ESCROW",
+      "account": "ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN",
+      "regular_key": "rfXBxqPjprj1J5Ekq5v82D3BDqRm7ms7p2",
+      "env": "W4_REGULAR_SEED"
+    },
+    {
+      "id": "W5",
+      "role": "R&D",
+      "account": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+      "regular_key": "rav5cYVarjSaXeeqCbsghMmmVGcJWB5y7Q",
+      "env": "W5_REGULAR_SEED"
+    },
+    {
+      "id": "W6",
+      "role": "GRANTS",
+      "account": "rfnqxYQWKsVGFuWLjky41puXHJkT2v8yTf",
+      "regular_key": "rGjdFjMz577GF4uvb4N9ayCqP5Q74kwVq5",
+      "env": "W6_REGULAR_SEED"
+    }
+  ],
+  "txs": [
+    {
+      "action": "SignerListSet",
+      "tx_type": "SignerListSet",
+      "account": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+      "hash": "EDD27C458D314602E6059D8351D2DDA322A5E4BD1FD55602B3D2E667EA970299",
+      "result": "tesSUCCESS",
+      "ledger_index": 21101245,
+      "quorum": 3
+    },
+    {
+      "action": "SetRegularKey",
+      "tx_type": "SetRegularKey",
+      "account": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+      "hash": "BE9FFD71974AA61D7525F3002564C98EF02FAD6D5005951E4E0D35D6092D04C6",
+      "result": "tesSUCCESS",
+      "ledger_index": 21101246,
+      "wallet": "W1",
+      "regular_key": "rDyiGKuMgL2F8S7TjB6m6Wg1pLg5KDPJYY"
+    },
+    {
+      "action": "SetRegularKey",
+      "tx_type": "SetRegularKey",
+      "account": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+      "hash": "E235A6A2D7BC3495870A99E0C8748A278235E3070F897E931820618D33F540AC",
+      "result": "tesSUCCESS",
+      "ledger_index": 21101247,
+      "wallet": "W2",
+      "regular_key": "rNNzhkcScozB7Nzv3cWCZAEnu6MMC64rmy"
+    },
+    {
+      "action": "SetRegularKey",
+      "tx_type": "SetRegularKey",
+      "account": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+      "hash": "FCA7EBA1993980ABE2B49AEABD261160D29922E25AF573D9D1896F89AB0A544C",
+      "result": "tesSUCCESS",
+      "ledger_index": 21101249,
+      "wallet": "W3",
+      "regular_key": "rJRxr1E1Dzz5TXJsCHhwQAm4qS68Y73dQj"
+    },
+    {
+      "action": "SetRegularKey",
+      "tx_type": "SetRegularKey",
+      "account": "ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN",
+      "hash": "337941DF15A47FEAAFB09AE52E76A21AE073442D89C77733491C25CD9FE10564",
+      "result": "tesSUCCESS",
+      "ledger_index": 21101250,
+      "wallet": "W4",
+      "regular_key": "rfXBxqPjprj1J5Ekq5v82D3BDqRm7ms7p2"
+    },
+    {
+      "action": "SetRegularKey",
+      "tx_type": "SetRegularKey",
+      "account": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+      "hash": "EFC010077E587E2DDC7971CDFC535304A9533F42474E6E4F034E9FC07CB1CE99",
+      "result": "tesSUCCESS",
+      "ledger_index": 21101252,
+      "wallet": "W5",
+      "regular_key": "rav5cYVarjSaXeeqCbsghMmmVGcJWB5y7Q"
+    },
+    {
+      "action": "SetRegularKey",
+      "tx_type": "SetRegularKey",
+      "account": "rfnqxYQWKsVGFuWLjky41puXHJkT2v8yTf",
+      "hash": "09BD4B69B05411FC864E38A9AA7C04897AAB22F47D2F44D4CAC85CEC848C5864",
+      "result": "tesSUCCESS",
+      "ledger_index": 21101254,
+      "wallet": "W6",
+      "regular_key": "rGjdFjMz577GF4uvb4N9ayCqP5Q74kwVq5"
+    },
+    {
+      "action": "Payment_multisign_quorum_demo",
+      "tx_type": "Payment",
+      "account": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+      "hash": "9162E6DFD7CD2BFB413CC90470A7E8124B66DF241A620442FD39F3FC3F379C24",
+      "result": "tesSUCCESS",
+      "ledger_index": 21101258,
+      "destination": "rfnqxYQWKsVGFuWLjky41puXHJkT2v8yTf",
+      "amount_drops": "10000",
+      "signers": "director+market"
+    }
+  ]
+}

@@ -5,17 +5,42 @@
 **Hunch:** H1 (Director 2, Treasurer 2, Atelier 1, Market 1, quorum 3)  
 **W0:** `rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs`
 
-## Live set
+## Live set (Foundry box 2026-09-27)
 
 | Item | Hash |
 |------|------|
-| SignerListSet | not submitted |
-| SetRegularKey W1–W6 | not submitted |
-| Multi-sign Payment | not submitted |
+| SignerListSet (quorum 3) | `EDD27C458D314602E6059D8351D2DDA322A5E4BD1FD55602B3D2E667EA970299` |
+| SetRegularKey W1 | `BE9FFD71974AA61D7525F3002564C98EF02FAD6D5005951E4E0D35D6092D04C6` |
+| SetRegularKey W2 | `E235A6A2D7BC3495870A99E0C8748A278235E3070F897E931820618D33F540AC` |
+| SetRegularKey W3 | `FCA7EBA1993980ABE2B49AEABD261160D29922E25AF573D9D1896F89AB0A544C` |
+| SetRegularKey W4 | `337941DF15A47FEAAFB09AE52E76A21AE073442D89C77733491C25CD9FE10564` |
+| SetRegularKey W5 | `EFC010077E587E2DDC7971CDFC535304A9533F42474E6E4F034E9FC07CB1CE99` |
+| SetRegularKey W6 | `09BD4B69B05411FC864E38A9AA7C04897AAB22F47D2F44D4CAC85CEC848C5864` |
+| Multi-sign Payment (Director+Market, 10000 drops → W6) | `9162E6DFD7CD2BFB413CC90470A7E8124B66DF241A620442FD39F3FC3F379C24` |
 
-`W0_SEED`…`W6_SEED` were not in this environment (`AETHER_SECRETS` unset, `/workspace/aether-foundry-secrets/.env` absent). No payment hash is recorded. `activated.json` is not created until `npm run gov:live` validates on the Foundry box.
+Public addresses and hashes also live in `activated.json`. Signer / regular-key **seeds** stay only in `/workspace/aether-foundry-secrets/.env` (never git). Master keys remain enabled (`lsfDisableMaster` unset).
 
-`npm run gov:live` exited 1 with `Refusing to sign. No tx hash.` `CI=true npm run gov:live` exited 1 with `refusing to load seeds or sign in CI`.
+### Signer addresses (H1)
+
+| Persona | Weight | Address |
+|---------|-------:|---------|
+| Director | 2 | `rpEpjesFRPcpWWVKoheDT59YKtoA6Xureg` |
+| Treasurer | 2 | `rHG25YbFNqFL9HzVqa9JQhXFY9Zignxznh` |
+| Atelier | 1 | `rGfkxsMvv833ioy2QjmTXhYF49J94N9WRu` |
+| Market | 1 | `r4Qc6iUKrLZQwM9sPdPWCCHAK2bcMsrxVr` |
+
+### Regular keys
+
+| Wallet | Account | RegularKey |
+|--------|---------|------------|
+| W1 | `rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS` | `rDyiGKuMgL2F8S7TjB6m6Wg1pLg5KDPJYY` |
+| W2 | `rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw` | `rNNzhkcScozB7Nzv3cWCZAEnu6MMC64rmy` |
+| W3 | `rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw` | `rJRxr1E1Dzz5TXJsCHhwQAm4qS68Y73dQj` |
+| W4 | `ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN` | `rfXBxqPjprj1J5Ekq5v82D3BDqRm7ms7p2` |
+| W5 | `rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ` | `rav5cYVarjSaXeeqCbsghMmmVGcJWB5y7Q` |
+| W6 | `rfnqxYQWKsVGFuWLjky41puXHJkT2v8yTf` | `rGjdFjMz577GF4uvb4N9ayCqP5Q74kwVq5` |
+
+Cloud-agent PR trial had no master seeds; this Foundry-box run is the activation archive.
 
 ## Read-only pre-state (`npm run gov:dry`)
 

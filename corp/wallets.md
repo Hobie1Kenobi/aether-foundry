@@ -22,20 +22,20 @@ Seeds live in founder local `.env` only (`/workspace/aether-foundry-secrets/.env
 
 Hunch H1. SignerQuorum **3**. Weights: Director 2, Treasurer 2, Atelier 1, Market 1. Master keys stay enabled. No Xahau twin.
 
-`npm run gov:live` on the Foundry box generates the seeds outside git and writes `machines/governance-board/activated.json` with the public addresses after a validated `SignerListSet`. Until that file exists, the addresses below are not assigned and nothing in this table is an on-ledger signer.
+Activated 2026-09-27 on the Foundry box (`SignerListSet` `EDD27C458D314602E6059D8351D2DDA322A5E4BD1FD55602B3D2E667EA970299`). Public addresses also in `machines/governance-board/activated.json`. Seeds stay outside git.
 
 | Persona / key | Weight | Address | Seed env |
 |---------------|-------:|---------|----------|
-| Director signer | 2 | pending `gov:live` | `SIGNER_DIRECTOR_SEED` |
-| Treasurer signer | 2 | pending `gov:live` | `SIGNER_TREASURER_SEED` |
-| Atelier signer | 1 | pending `gov:live` | `SIGNER_ATELIER_SEED` |
-| Market signer | 1 | pending `gov:live` | `SIGNER_MARKET_SEED` |
-| W1 regular key | — | pending `gov:live` | `W1_REGULAR_SEED` |
-| W2 regular key | — | pending `gov:live` | `W2_REGULAR_SEED` |
-| W3 regular key | — | pending `gov:live` | `W3_REGULAR_SEED` |
-| W4 regular key | — | pending `gov:live` | `W4_REGULAR_SEED` |
-| W5 regular key | — | pending `gov:live` | `W5_REGULAR_SEED` |
-| W6 regular key | — | pending `gov:live` | `W6_REGULAR_SEED` |
+| Director signer | 2 | `rpEpjesFRPcpWWVKoheDT59YKtoA6Xureg` | `SIGNER_DIRECTOR_SEED` |
+| Treasurer signer | 2 | `rHG25YbFNqFL9HzVqa9JQhXFY9Zignxznh` | `SIGNER_TREASURER_SEED` |
+| Atelier signer | 1 | `rGfkxsMvv833ioy2QjmTXhYF49J94N9WRu` | `SIGNER_ATELIER_SEED` |
+| Market signer | 1 | `r4Qc6iUKrLZQwM9sPdPWCCHAK2bcMsrxVr` | `SIGNER_MARKET_SEED` |
+| W1 regular key | — | `rDyiGKuMgL2F8S7TjB6m6Wg1pLg5KDPJYY` | `W1_REGULAR_SEED` |
+| W2 regular key | — | `rNNzhkcScozB7Nzv3cWCZAEnu6MMC64rmy` | `W2_REGULAR_SEED` |
+| W3 regular key | — | `rJRxr1E1Dzz5TXJsCHhwQAm4qS68Y73dQj` | `W3_REGULAR_SEED` |
+| W4 regular key | — | `rfXBxqPjprj1J5Ekq5v82D3BDqRm7ms7p2` | `W4_REGULAR_SEED` |
+| W5 regular key | — | `rav5cYVarjSaXeeqCbsghMmmVGcJWB5y7Q` | `W5_REGULAR_SEED` |
+| W6 regular key | — | `rGjdFjMz577GF4uvb4N9ayCqP5Q74kwVq5` | `W6_REGULAR_SEED` |
 
 ## Xahau Testnet split destinations (W7 hook)
 
