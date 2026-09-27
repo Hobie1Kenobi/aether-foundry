@@ -5,7 +5,31 @@
 **Payer:** W3 CHANNELS `rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw`  
 **Foreign payTo:** `r3JbqcVQ4Pov4MhFUMSdnro7s3VgpaqssZ`
 
-No outbound Payment was submitted. This VM has no `W3_SEED`. `x402_outbound_hits` stays **0**. There is no purchase hash to archive.
+## Live W3 → foreign purchase (Foundry box)
+
+| Field | Value |
+|-------|--------|
+| Date | 2026-09-27 (America/Chicago) |
+| Payer | W3 CHANNELS `rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw` |
+| payTo | `r3JbqcVQ4Pov4MhFUMSdnro7s3VgpaqssZ` (foreign shop, not Foundry revenue) |
+| Amount | 5000 drops |
+| sourceTag | 77402101 |
+| Invoice | `fx-foreign-oracle-ping-muk8t4tw-srvjx0` |
+| Payment hash | `D621848B4C66A940CA0DA51507D61A95D7546B4BB46E7925FC1D6FB414090C4C` |
+| HTTP | 200 |
+| Work | `foreign-oracle-ping` |
+| Ledger index (payload) | 21099699 |
+| `x402_outbound_hits` | **1** (unique hash via `--record`) |
+| Explorer | https://testnet.xrpl.org/transactions/D621848B4C66A940CA0DA51507D61A95D7546B4BB46E7925FC1D6FB414090C4C |
+
+One-click used:
+
+```bash
+npm run x402:foreign
+npm run x402:outbound -- --url http://127.0.0.1:8787/foreign-oracle-ping --max-drops 10000 --record
+```
+
+`--max-drops 10000` is required because stated DIY is 0. Desk self-buy remains refused (payTo W3). Cloud agent PR trial had no `W3_SEED`; this Foundry-box run is the first archived outbound Payment.
 
 ## Foreign account (faucet, not an x402 buy)
 
