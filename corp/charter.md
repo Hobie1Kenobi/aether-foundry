@@ -35,6 +35,8 @@ Signer addresses are classic addresses of unfunded ed25519 key pairs. They must 
 
 **Treasury motions.** An outgoing W0 payment ≥ 50 test XRP (50_000_000 drops), master-signed or multi-signed, still needs a file in `/lab/motions/` whose `destination` and `amount_drops` or `amount_xrp` match. See `lab/motions/README.md`.
 
+**Grants flywheel.** W6 pays small Testnet XRP grants to non-labeled counterparties who used Foundry artifacts (`machines/grants-flywheel/`). A W6 payment ≥ 50 test XRP uses the same motion files. W0 is not the payer.
+
 **Quorum demo.** `npm run gov:multisign` sends 10_000 drops (0.01 XRP) from W0 to W6, signed by Director (2) + Market (1). Under the motion line. It does not touch the Unix-epoch BUYER escrow.
 
 ## Roles

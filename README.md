@@ -32,6 +32,7 @@ See `MASTER_PROMPT.md` §9 for the operating loop and first-boot checklist.
 | `machines/x402-outbound/` | W3 outbound x402 payer and foreign agent shop |
 | `machines/xahau-split-treasury/` | W7 Xahau Testnet split hook |
 | `machines/governance-board/` | W0 SignerList and W1–W6 regular keys |
+| `machines/grants-flywheel/` | W6 grants to non-labeled artifact users |
 | `hooks/` | Xahau Hook C and stripped wasm |
 | `public/` | Discovery (`xrp-ledger.toml`) |
 

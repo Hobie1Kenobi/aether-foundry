@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { MerchantSection } from "@/components/MerchantSection";
+import { GrantsFlywheelCard } from "@/components/GrantsFlywheelCard";
 import { LpBadgeBoundCard } from "@/components/LpBadgeBoundCard";
 import { XahauSplitCard } from "@/components/XahauSplitCard";
 import {
@@ -600,6 +601,7 @@ export async function DeskCards() {
         </div>
       </section>
       <LpBadgeBoundCard />
+      <GrantsFlywheelCard />
       <XahauSplitCard />
       <MerchantSection />
     </>
