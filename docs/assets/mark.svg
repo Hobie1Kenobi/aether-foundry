@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Aether Foundry</title>
+  <desc id="desc">Three ingots above a crucible, inside a ring. Primitives in, one machine out.</desc>
+  <rect width="128" height="128" rx="28" fill="#141210"/>
+  <rect x="6" y="6" width="116" height="116" rx="24" fill="none" stroke="#3F3424" stroke-width="2"/>
+  <circle cx="64" cy="64" r="46" fill="none" stroke="#E2B340" stroke-width="2.5"/>
+  <rect x="38" y="34" width="8" height="16" rx="1.5" fill="#F3D48A"/>
+  <rect x="60" y="28" width="8" height="22" rx="1.5" fill="#E2B340"/>
+  <rect x="82" y="34" width="8" height="16" rx="1.5" fill="#F3D48A"/>
+  <path d="M34 56h60L80 90H48L34 56z" fill="#C8892A"/>
+  <path d="M48 90h32l-4 8H52l-4-8z" fill="#F3D48A"/>
+  <rect x="60" y="100" width="8" height="10" rx="1.5" fill="#E2B340"/>
+</svg>
