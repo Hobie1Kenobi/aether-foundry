@@ -1,0 +1,22 @@
+{
+  "machine": "governance-board",
+  "network": "XRPL Testnet",
+  "network_id": 1,
+  "hunch": "H1",
+  "quorum": 3,
+  "weights": {
+    "Director": 2,
+    "Treasurer": 2,
+    "Atelier": 1,
+    "Market": 1
+  },
+  "account": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+  "demo_drops": "10000",
+  "demo_destination": "rfnqxYQWKsVGFuWLjky41puXHJkT2v8yTf",
+  "demo_signers": ["director", "market"],
+  "master_disabled": false,
+  "signer_list_set_hash": null,
+  "multisign_payment_hash": null,
+  "regular_key_hashes": {},
+  "note": "null means not submitted. Do not treat null as a ledger hash."
+}

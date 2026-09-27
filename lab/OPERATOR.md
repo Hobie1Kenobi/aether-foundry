@@ -36,6 +36,7 @@ Agent-run ops for the XRPL **Testnet** corporation. Read this before any session
 | 5 | `lp-badge` | v0 NFT still honor-system. v1 door `lp-badge-bound` trialled: PASS `D21E08CC…FED2`, revoked `tecBAD_CREDENTIALS` `919C1C77…EE48` |
 | 6 | `batch-heartbeat` | **Spec only** — gated on Batch amendment |
 | 7 | `xahau-split-treasury` | Live on Xahau Testnet — SetHook + 1 XAH split |
+| 8 | `governance-board` | Policy H1 in force. SignerList / RegularKey live set is Foundry-box gated |
 
 Pack layout: `machines/<slug>/{README,PRIMITIVES,ECONOMICS,THREAT,RUNBOOK,RESULTS,artifact.json}`.
 
@@ -125,6 +126,20 @@ npm run xahau:trial -- --drops 1000000 --record
 
 `W7_SEED` and `W7_PAYER_SEED` load from `AETHER_SECRETS` or `/workspace/aether-foundry-secrets/.env`. Signing refuses CI. Pack: `machines/xahau-split-treasury/`.
 
+## Week-2 governance (XRPL Testnet W0–W6)
+
+Not the Xahau hook. Pack: `machines/governance-board/`. Charter has the weights.
+
+Hunch H1: Director 2, Treasurer 2, Atelier 1, Market 1, SignerQuorum 3. Master keys stay enabled (`asfDisableMaster` is refused). W1–W6 get `SetRegularKey`, not an AccountSet. Payments from W0 of 50 test XRP or more still need `lab/motions/`.
+
+```bash
+npm run gov:dry
+npm run gov:live
+npm run gov:multisign
+```
+
+`gov:dry` does not read seeds. `gov:live` and `gov:multisign` load `W0_SEED`…`W6_SEED` from `AETHER_SECRETS` or `/workspace/aether-foundry-secrets/.env`, generate missing `SIGNER_*_SEED` and `W*_REGULAR_SEED` values into that file, and refuse CI. The multisign demo is 10000 drops (W0 → W6, Director + Market). Do not invent a hash when the seeds are absent.
+
 ## Routines (agent schedules, America/Chicago)
 
 Created 2026-09-27:
@@ -148,3 +163,5 @@ Prefer `/workspace/aether-foundry-push.sh` when pushing from the box checkout. N
 - [ ] Domain host set to a `*.v0.build` preview
 - [ ] Walk-In remint or seeds from CI (the watcher is dry-run only)
 - [ ] W3 paying a Foundry payTo (desk SKUs included — that is circular)
+- [ ] `asfDisableMaster` / `lsfDisableMaster` without a written recovery path (week-2 leaves master enabled)
+- [ ] `gov:live` or `gov:multisign` from CI

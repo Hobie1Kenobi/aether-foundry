@@ -29,6 +29,7 @@ See `MASTER_PROMPT.md` §9 for the operating loop and first-boot checklist.
 | `src/` | Runnable xrpl.js / xrpl-py scripts |
 | `machines/x402-outbound/` | W3 outbound x402 payer and foreign agent shop |
 | `machines/xahau-split-treasury/` | W7 Xahau Testnet split hook |
+| `machines/governance-board/` | W0 SignerList and W1–W6 regular keys |
 | `hooks/` | Xahau Hook C and stripped wasm |
 | `public/` | Discovery (`xrp-ledger.toml`) |
 

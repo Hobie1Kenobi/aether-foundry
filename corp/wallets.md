@@ -18,6 +18,25 @@
 
 Seeds live in founder local `.env` only (`/workspace/aether-foundry-secrets/.env`, mode 600 — outside git tree).
 
+## Week-2 board (XRPL Testnet, public addresses only)
+
+Hunch H1. SignerQuorum **3**. Weights: Director 2, Treasurer 2, Atelier 1, Market 1. Master keys stay enabled. No Xahau twin.
+
+`npm run gov:live` on the Foundry box generates the seeds outside git and writes `machines/governance-board/activated.json` with the public addresses after a validated `SignerListSet`. Until that file exists, the addresses below are not assigned and nothing in this table is an on-ledger signer.
+
+| Persona / key | Weight | Address | Seed env |
+|---------------|-------:|---------|----------|
+| Director signer | 2 | pending `gov:live` | `SIGNER_DIRECTOR_SEED` |
+| Treasurer signer | 2 | pending `gov:live` | `SIGNER_TREASURER_SEED` |
+| Atelier signer | 1 | pending `gov:live` | `SIGNER_ATELIER_SEED` |
+| Market signer | 1 | pending `gov:live` | `SIGNER_MARKET_SEED` |
+| W1 regular key | — | pending `gov:live` | `W1_REGULAR_SEED` |
+| W2 regular key | — | pending `gov:live` | `W2_REGULAR_SEED` |
+| W3 regular key | — | pending `gov:live` | `W3_REGULAR_SEED` |
+| W4 regular key | — | pending `gov:live` | `W4_REGULAR_SEED` |
+| W5 regular key | — | pending `gov:live` | `W5_REGULAR_SEED` |
+| W6 regular key | — | pending `gov:live` | `W6_REGULAR_SEED` |
+
 ## Xahau Testnet split destinations (W7 hook)
 
 These are Xahau accounts. They are not the XRPL Testnet twins and they are not in the desk `WALLETS` map. Public addresses only. Seed env names are placeholders in `.env.example`.
