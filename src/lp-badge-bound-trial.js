@@ -124,17 +124,8 @@ async function faucetOnce(url) {
     } catch {
       data = null;
     }
-    const account = data && data.account ? data.account : data || {};
-    const address = account.classicAddress || account.address;
-    const secret = account.secret || account.seed;
-    if (response.ok && address && secret && !String(secret).includes("\n")) {
-      return {
-        address,
-        secret,
-        hash: data && data.hash ? String(data.hash).toUpperCase() : null,
-        amount: data && data.amount != null ? Number(data.amount) : data && data.balance != null ? Number(data.balance) : null,
-      };
-    }
+    const parsed = guard.parseFaucetBody(data);
+    if (response.ok && parsed) return parsed;
     last = `faucet HTTP ${response.status} attempt ${attempt}`;
     await sleep(1500 * attempt);
   }

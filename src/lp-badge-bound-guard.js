@@ -392,6 +392,23 @@ function assertPublicRecord(value, path) {
   }
 }
 
+function parseFaucetBody(data) {
+  const account = data && data.account ? data.account : {};
+  const address = account.classicAddress || account.address || (data && data.address) || null;
+  const secret = (data && (data.seed || data.secret)) || account.seed || account.secret || null;
+  const hashRaw = data && (data.transactionHash || data.hash);
+  let amount = null;
+  if (data && data.amount != null) amount = Number(data.amount);
+  else if (data && data.balance != null) amount = Number(data.balance);
+  if (!address || !secret || String(secret).includes("\n")) return null;
+  return {
+    address: String(address),
+    secret: String(secret),
+    hash: hashRaw ? String(hashRaw).toUpperCase() : null,
+    amount,
+  };
+}
+
 function loadEnvText(text) {
   const out = {};
   for (const line of String(text || "").split("\n")) {
@@ -465,6 +482,7 @@ module.exports = {
   hasDepositAuth,
   credentialAccepted,
   assertPublicRecord,
+  parseFaucetBody,
   loadEnvText,
   walletFromSecret,
 };

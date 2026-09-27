@@ -162,6 +162,24 @@ describe("amendment gate and signing refusals", () => {
     );
   });
 
+  it("reads the altnet faucet body that puts seed beside account", () => {
+    const parsed = guard.parseFaucetBody({
+      account: {
+        xAddress: "X7dnRr1KAaERYd8BjrKBVF3Cs2LR7LbbZrSUZNr57dth5es",
+        address: "rsv2i5sHDua4eCxg9nzLxrpZqVqwbDzkh4",
+        classicAddress: "rsv2i5sHDua4eCxg9nzLxrpZqVqwbDzkh4",
+      },
+      amount: 100,
+      transactionHash: "9cb96211f81061f27ec688bffb9cf921ff697e90371de133b3234a1983f0dada",
+      seed: "faucet-seed-field",
+    });
+    assert.equal(parsed.address, "rsv2i5sHDua4eCxg9nzLxrpZqVqwbDzkh4");
+    assert.equal(parsed.amount, 100);
+    assert.equal(parsed.hash, "9CB96211F81061F27EC688BFFB9CF921FF697E90371DE133B3234A1983F0DADA");
+    assert.equal(parsed.secret, "faucet-seed-field");
+    assert.equal(guard.parseFaucetBody({ account: { classicAddress: "rX" } }), null);
+  });
+
   it("flags deposit auth and accepted credentials by their ledger bits", () => {
     assert.equal(guard.hasDepositAuth(guard.LSF_DEPOSIT_AUTH), true);
     assert.equal(guard.hasDepositAuth(0), false);
