@@ -7,8 +7,47 @@
 export const NETWORK_LABEL =
   process.env.NEXT_PUBLIC_NETWORK_LABEL ?? "XRPL Testnet";
 
-export const XRPL_WS =
-  process.env.NEXT_PUBLIC_XRPL_WS ?? "wss://s.altnet.rippletest.net:51233";
+const DEFAULT_XRPL_WS = "wss://s.altnet.rippletest.net:51233";
+const DEFAULT_XRPL_HTTP = "https://s.altnet.rippletest.net:51234";
+
+export const XRPL_WS = process.env.NEXT_PUBLIC_XRPL_WS ?? DEFAULT_XRPL_WS;
+
+function isMainnetUrl(raw: string): boolean {
+  try {
+    const host = new URL(raw).hostname.toLowerCase();
+    if (host === "ripple.com" || host.endsWith(".ripple.com")) return true;
+    if (host === "xrplcluster.com" || host.endsWith(".xrplcluster.com"))
+      return true;
+    if (host === "xrpl.ws" || host.endsWith(".xrpl.ws")) return true;
+    if (host === "xrpl.link" || host.endsWith(".xrpl.link")) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function wsToHttp(wsUrl: string): string {
+  try {
+    const url = new URL(wsUrl);
+    if (url.protocol === "wss:") url.protocol = "https:";
+    else if (url.protocol === "ws:") url.protocol = "http:";
+    if (url.port === "51233") url.port = "51234";
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return DEFAULT_XRPL_HTTP;
+  }
+}
+
+function resolveXrplHttp(): string {
+  const explicit = process.env.NEXT_PUBLIC_XRPL_HTTP?.trim();
+  const candidate =
+    explicit && explicit.length > 0 ? explicit : wsToHttp(XRPL_WS);
+  if (!candidate || isMainnetUrl(candidate)) return DEFAULT_XRPL_HTTP;
+  return candidate.replace(/\/$/, "");
+}
+
+/** HTTPS JSON-RPC. Prefers NEXT_PUBLIC_XRPL_HTTP, else maps XRPL_WS :51233 → :51234. */
+export const XRPL_HTTP = resolveXrplHttp();
 
 /** AETH currency hex (ASCII "AETH" padded) */
 export const AETH_HEX = "4145544800000000000000000000000000000000";
