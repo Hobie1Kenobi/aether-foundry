@@ -4,7 +4,7 @@
 # Served also at web/public/.well-known/xrp-ledger.toml for Vercel desk deploy.
 
 [METADATA]
-modified = "2026-09-27T15:20:00Z"
+modified = "2026-09-27T18:30:00Z"
 network = "XRPL Testnet"
 expires = "2027-09-27T00:00:00Z"
 
@@ -16,7 +16,7 @@ address = "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS"
 desc = "W1 MARKET"
 [[ACCOUNTS]]
 address = "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw"
-desc = "W2 ATELIER — NFT minter (taxon 20260927)"
+desc = "W2 ATELIER — NFT minter (taxon 20260927); Walk-In storefront seller"
 [[ACCOUNTS]]
 address = "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw"
 desc = "W3 CHANNELS"
@@ -85,6 +85,11 @@ title = "Machine #2 drip-pass"
 url = "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/walk-in-window/README.md"
 type = "documentation"
 title = "Machine #3 walk-in-window"
+
+[[WEBLINKS]]
+url = "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/walk-in-window/INBOUND.md"
+type = "documentation"
+title = "Machine #3 Walk-In Window inbound (standing storefront)"
 
 [[WEBLINKS]]
 url = "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/corp/charter.md"

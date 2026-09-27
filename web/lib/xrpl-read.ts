@@ -3,6 +3,7 @@
  * Avoids the xrpl WebSocket Client, which times out on Vercel serverless.
  */
 import {
+  AETH_HEX,
   AETH_IOU,
   NFT_TAXON,
   WALLETS,
@@ -226,6 +227,114 @@ export type NftSnapshot = {
   nfts: Array<{ nftokenID: string; taxon: number; issuer: string }>;
   error?: string;
 };
+
+const TF_SELL_NFTOKEN = 0x00000001;
+
+type NftOfferLedgerObject = {
+  Amount?: unknown;
+  Flags?: number;
+  NFTokenID?: string;
+  Owner?: string;
+  PreviousTxnID?: string;
+  index?: string;
+};
+
+type AccountObjectsResult = RpcErrorBody & {
+  account_objects?: NftOfferLedgerObject[];
+  marker?: unknown;
+};
+
+export type WalkInSellOffer = {
+  offerId: string;
+  nftokenId: string;
+  owner: string;
+  priceXrp: string | null;
+  amountLabel: string;
+  previousTxnId?: string;
+};
+
+export type WalkInStorefrontSnapshot = {
+  account: string;
+  status: "OPEN" | "SOLD OUT" | "ERROR";
+  offers: WalkInSellOffer[];
+  error?: string;
+};
+
+function dropsToXrp(drops: string): string | null {
+  if (!/^\d+$/.test(drops)) return null;
+  const xrp = Number(drops) / 1_000_000;
+  if (!Number.isFinite(xrp)) return null;
+  if (Number.isInteger(xrp)) return String(xrp);
+  return xrp.toFixed(6).replace(/\.?0+$/, "");
+}
+
+function offerAmount(amount: unknown): { priceXrp: string | null; amountLabel: string } {
+  if (typeof amount === "string") {
+    const priceXrp = dropsToXrp(amount);
+    if (priceXrp != null) return { priceXrp, amountLabel: `${priceXrp} XRP` };
+    return { priceXrp: null, amountLabel: amount };
+  }
+  if (amount && typeof amount === "object") {
+    const row = amount as { value?: string; currency?: string };
+    const value = row.value ?? "?";
+    const currency =
+      row.currency === AETH_HEX ? "AETH" : row.currency ?? "IOU";
+    return { priceXrp: null, amountLabel: `${value} ${currency}` };
+  }
+  return { priceXrp: null, amountLabel: "—" };
+}
+
+/** Open NFT sell offers owned by an account. Request-time read so a purchase shows SOLD OUT. */
+export async function fetchWalkInSellOffers(
+  address: string
+): Promise<WalkInStorefrontSnapshot> {
+  try {
+    const objects: NftOfferLedgerObject[] = [];
+    let marker: unknown;
+    for (let page = 0; page < 4; page += 1) {
+      const params: Record<string, unknown> = {
+        account: address,
+        type: "nft_offer",
+        ledger_index: "validated",
+        limit: 200,
+      };
+      if (marker !== undefined) params.marker = marker;
+      const res = await rpc<AccountObjectsResult>("account_objects", params);
+      objects.push(...(res.account_objects ?? []));
+      if (res.marker == null) break;
+      marker = res.marker;
+    }
+    const offers = objects
+      .filter(
+        (obj) =>
+          ((obj.Flags ?? 0) & TF_SELL_NFTOKEN) === TF_SELL_NFTOKEN &&
+          Boolean(obj.index) &&
+          Boolean(obj.NFTokenID)
+      )
+      .map((obj) => {
+        const price = offerAmount(obj.Amount);
+        return {
+          offerId: obj.index as string,
+          nftokenId: obj.NFTokenID as string,
+          owner: obj.Owner ?? address,
+          previousTxnId: obj.PreviousTxnID,
+          ...price,
+        };
+      });
+    return {
+      account: address,
+      status: offers.length > 0 ? "OPEN" : "SOLD OUT",
+      offers,
+    };
+  } catch (e) {
+    return {
+      account: address,
+      status: "ERROR",
+      offers: [],
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
 
 export async function fetchAccountNfts(
   address: string,

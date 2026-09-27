@@ -160,6 +160,20 @@ export const MACHINES = {
     label: "Machine #3 — Walk-In Window",
     readme:
       "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/walk-in-window/README.md",
+    inbound:
+      "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/walk-in-window/INBOUND.md",
+    /**
+     * v2 standing storefront at listing time.
+     * The desk fetches live W2 sell offers; these IDs go stale after a sale and remint.
+     */
+    storefrontV2: {
+      label: "v2 standing",
+      nftokenId:
+        "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1C81EFBC70141DD5D",
+      offerId:
+        "08F7769F074C8C80C4DD6A691D2CEE3A3996458D845DA3C15F62BBAF699421B0",
+      priceDrops: "10000000",
+    },
     hashes: {
       strangerAccept:
         "7CF0B34F1A2536C55746958B0BF18FB4BE500DD7BBA9FFDA67E16F8C5F23A52F",
@@ -169,6 +183,10 @@ export const MACHINES = {
         "A784D97D6EF6B9E69C754676C7A3D2CFEB6E15B43C852E15B7D60EFBC9FAAFCB",
       checkCash:
         "FC9D24150810549E5FD2E62B0DCAC2BC922445DF34CA71F765F6F9DD9CE4E0EC",
+      mintV2:
+        "DC7609E1331198731F7C0B2E58378C39F4F11511F40337DB3A4C865F00368E10",
+      createOfferV2:
+        "2C013A0988DA6610B088D72B8E6F0378CFF52E9D7CB2ED2B181D3546318DDDBC",
     },
   },
   "oracle-mid-ticket": {

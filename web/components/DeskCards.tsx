@@ -13,6 +13,8 @@ import {
   fetchAccountNfts,
   fetchAmmInfo,
   fetchBookOffers,
+  fetchWalkInSellOffers,
+  type WalkInStorefrontSnapshot,
 } from "@/lib/xrpl-read";
 
 function HashList({ entries }: { entries: Array<[string, string]> }) {
@@ -52,6 +54,101 @@ function ExternalLink({
         ↗
       </span>
     </a>
+  );
+}
+
+function offerStatusClass(status: WalkInStorefrontSnapshot["status"]): string {
+  if (status === "OPEN") return "status-chip live-chip";
+  if (status === "SOLD OUT") return "status-chip warn";
+  return "status-chip error-chip";
+}
+
+function WalkInStorefrontCard({
+  snapshot,
+  w2Address,
+  inbound,
+  recordedOfferId,
+}: {
+  snapshot: WalkInStorefrontSnapshot;
+  w2Address: string;
+  inbound: string;
+  recordedOfferId: string;
+}) {
+  const replaced =
+    snapshot.status === "OPEN" &&
+    snapshot.offers.every((offer) => offer.offerId !== recordedOfferId);
+
+  return (
+    <section className="callout storefront" aria-labelledby="storefront-title">
+      <div className="callout-mark">STORE</div>
+      <div>
+        <div className="callout-title-row">
+          <h2 id="storefront-title">Walk-In Window v2</h2>
+          <span className={offerStatusClass(snapshot.status)}>{snapshot.status}</span>
+        </div>
+        <p className="muted">
+          Standing Testnet storefront on W2 Atelier{" "}
+          <ExternalLink href={EXPLORER_ACCOUNT(w2Address)} title={w2Address}>
+            <span className="mono truncate-inline">{w2Address}</span>
+          </ExternalLink>
+          . Read the live sell offer, then submit{" "}
+          <span className="mono">NFTokenAcceptOffer</span>. The desk does not sign.
+        </p>
+        {snapshot.error ? <p className="error">{snapshot.error}</p> : null}
+        {snapshot.status === "SOLD OUT" ? (
+          <p className="muted">
+            No open NFT sell offer on W2. SOLD OUT until the next remint — do not
+            reuse a previous OfferID.
+          </p>
+        ) : null}
+        {replaced ? (
+          <p className="muted">
+            The live offer replaced the recorded v2 listing. Buy the OfferID below.
+          </p>
+        ) : null}
+        {snapshot.offers.map((offer) => (
+          <dl className="kv" key={offer.offerId}>
+            <dt>OfferID</dt>
+            <dd>
+              <ExternalLink
+                href={
+                  offer.previousTxnId
+                    ? EXPLORER_TX(offer.previousTxnId)
+                    : `https://testnet.xrpl.org/nft/${offer.nftokenId}`
+                }
+                title={offer.offerId}
+              >
+                <span className="mono truncate-link">{offer.offerId}</span>
+              </ExternalLink>
+            </dd>
+            <dt>NFTokenID</dt>
+            <dd>
+              <ExternalLink
+                href={`https://testnet.xrpl.org/nft/${offer.nftokenId}`}
+                title={offer.nftokenId}
+              >
+                <span className="mono truncate-link">{offer.nftokenId}</span>
+              </ExternalLink>
+            </dd>
+            <dt>price</dt>
+            <dd className="balance-value">
+              {offer.priceXrp != null ? (
+                <>
+                  {offer.priceXrp} <span>XRP</span>
+                </>
+              ) : (
+                offer.amountLabel
+              )}
+            </dd>
+          </dl>
+        ))}
+        <p className="storefront-links">
+          <ExternalLink href={inbound}>INBOUND.md</ExternalLink>
+          <ExternalLink href={EXPLORER_ACCOUNT(w2Address)}>W2 on explorer</ExternalLink>
+        </p>
+        <p className="mono muted">account_objects · type nft_offer · validated</p>
+      </div>
+    </section>
   );
 }
 
@@ -97,7 +194,7 @@ export async function DeskCards() {
     WALLETS.STRANGER,
   ];
 
-  const [accounts, amm, books, nftsW2, nftsStranger, nftsBuyer] =
+  const [accounts, amm, books, nftsW2, nftsStranger, nftsBuyer, storefront] =
     await Promise.all([
       Promise.all(
         coreAccounts.map((w) => fetchAccountInfo(w.address, `${w.id} ${w.role}`))
@@ -107,6 +204,7 @@ export async function DeskCards() {
       fetchAccountNfts(WALLETS.W2.address, "W2 ATELIER"),
       fetchAccountNfts(WALLETS.STRANGER.address, "STRANGER"),
       fetchAccountNfts(WALLETS.BUYER.address, "BUYER"),
+      fetchWalkInSellOffers(WALLETS.W2.address),
     ]);
 
   const m1 = MACHINES["work-ticket-escrow"];
@@ -151,6 +249,14 @@ export async function DeskCards() {
         </div>
         <nav className="hero-links" aria-label="Desk resources">
           <a href="/.well-known/xrp-ledger.toml">XRPL.toml ↗</a>
+          <a href="#storefront-title">Walk-In storefront</a>
+          <a
+            href={MACHINES["walk-in-window"].inbound}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Walk-In inbound ↗
+          </a>
           <a
             href="https://github.com/Hobie1Kenobi/aether-foundry"
             target="_blank"
@@ -185,15 +291,22 @@ export async function DeskCards() {
         </div>
       </section>
 
+      <WalkInStorefrontCard
+        snapshot={storefront}
+        w2Address={WALLETS.W2.address}
+        inbound={m3.inbound}
+        recordedOfferId={m3.storefrontV2.offerId}
+      />
+
       <section className="callout" aria-labelledby="walk-in-title">
-        <div className="callout-mark">INBOUND</div>
+        <div className="callout-mark">RECORD</div>
         <div>
           <div className="callout-title-row">
             <h2 id="walk-in-title">STRANGER walk-in</h2>
             <span className="status-chip">NFT ACCEPTED</span>
           </div>
           <p className="muted">
-            First inbound counterparty. Test actor{" "}
+            Session-4 record, not the standing offer. Test actor{" "}
             <ExternalLink
               href={EXPLORER_ACCOUNT(WALLETS.STRANGER.address)}
               title={WALLETS.STRANGER.address}
@@ -412,10 +525,12 @@ export async function DeskCards() {
             title={m3.label.replace(`Machine #${m3.number} — `, "")}
             readme={m3.readme}
             entries={[
-              ["STRANGER Accept", m3.hashes.strangerAccept],
-              ["Path-pay ~50 AETH", m3.hashes.pathPay],
-              ["TrustSet", m3.hashes.trustSet],
-              ["CheckCash", m3.hashes.checkCash],
+              ["v2 Mint (standing)", m3.hashes.mintV2],
+              ["v2 CreateOffer (standing)", m3.hashes.createOfferV2],
+              ["v0 STRANGER Accept", m3.hashes.strangerAccept],
+              ["v0 Path-pay ~50 AETH", m3.hashes.pathPay],
+              ["v0 TrustSet", m3.hashes.trustSet],
+              ["v0 CheckCash", m3.hashes.checkCash],
             ]}
           />
           <MachineCard

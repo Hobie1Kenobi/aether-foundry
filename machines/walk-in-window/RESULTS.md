@@ -1,11 +1,32 @@
 # Machine: walk-in-window — RESULTS
 
 **Network:** XRPL Testnet  
-**Date (CT):** 2026-09-27 ~10:06–10:10 AM  
-**Session:** 2026-09-27-4  
+**v2 listing:** 2026-09-27T18:24:22Z (mint tx `date`; offer left open)  
+**v0 session:** 2026-09-27 ~10:06–10:10 AM CT (session-4)  
 **Operator:** Foundry Director / Machine #3 primary
 
-## STRANGER (new faucet)
+## v2 standing storefront (open)
+
+Sell offer was **not** accepted. `INBOUND.md` is the token URI and the buyer instructions. When this offer is taken, remint, relist, and append the new hashes here. Do not treat the IDs below as permanent — the desk reads W2 live.
+
+| Field | Value |
+|-------|-------|
+| Minter / seller | W2 `rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw` |
+| Taxon | `20260927` |
+| TransferFee | `1000` (1%) |
+| Flags | mint `tfTransferable`; offer `tfSellNFToken` (`1`); no Destination |
+| URI | https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/walk-in-window/INBOUND.md |
+| NFTokenID | `000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1C81EFBC70141DD5D` |
+| Mint hash | `DC7609E1331198731F7C0B2E58378C39F4F11511F40337DB3A4C865F00368E10` |
+| CreateOffer hash | `2C013A0988DA6610B088D72B8E6F0378CFF52E9D7CB2ED2B181D3546318DDDBC` |
+| OfferID | `08F7769F074C8C80C4DD6A691D2CEE3A3996458D845DA3C15F62BBAF699421B0` |
+| Price | 10 XRP (`10000000` drops) |
+| Disposition | OPEN on W2 at listing |
+| Explorer NFT | https://testnet.xrpl.org/nft/000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1C81EFBC70141DD5D |
+| Explorer mint | https://testnet.xrpl.org/transactions/DC7609E1331198731F7C0B2E58378C39F4F11511F40337DB3A4C865F00368E10 |
+| Explorer offer | https://testnet.xrpl.org/transactions/2C013A0988DA6610B088D72B8E6F0378CFF52E9D7CB2ED2B181D3546318DDDBC |
+
+## v0 — STRANGER (new faucet)
 
 | Field | Value |
 |-------|-------|
@@ -24,7 +45,7 @@
 | delivered_amount | `50` AETH (issuer W0) |
 | Source amount quote | `502837` drops |
 
-## Walk-In NFT (walk-in-0001)
+## v0 — Walk-In NFT (walk-in-0001, sold)
 
 | Field | Value |
 |-------|-------|
