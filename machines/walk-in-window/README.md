@@ -4,7 +4,7 @@
 **Network:** XRPL Testnet only (`wss://s.altnet.rippletest.net:51233` / HTTPS `https://s.altnet.rippletest.net:51234`)  
 **Thesis:** An open storefront NFT that a **new faucet stranger** (not a returning BUYER) can buy with plain XRP — Walk-In Window, not invitation-only.
 
-Strangers start at [`INBOUND.md`](./INBOUND.md). The v2 token URI is that file. The public desk reads W2 sell offers at request time and does not sign.
+Strangers start with `npm run buy:walk-in` ([`INBOUND.md`](./INBOUND.md) step 1). The v2 token URI is that file. The public desk reads W2 sell offers at request time and does not sign. `GET /api/inbound/walk-in` returns the live offer and the same command.
 
 ```mermaid
 sequenceDiagram

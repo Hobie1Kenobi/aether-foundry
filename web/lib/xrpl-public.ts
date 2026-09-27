@@ -166,6 +166,11 @@ export const MACHINES = {
       "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/walk-in-window/README.md",
     inbound:
       "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/walk-in-window/INBOUND.md",
+    inboundSection:
+      "https://github.com/Hobie1Kenobi/aether-foundry/blob/main/machines/walk-in-window/INBOUND.md#one-click-buy",
+    runbook:
+      "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/walk-in-window/RUNBOOK.md",
+    buyCommand: "npm run buy:walk-in",
     /**
      * v2 standing storefront at listing time.
      * The desk fetches live W2 sell offers; these IDs go stale after a sale and remint.

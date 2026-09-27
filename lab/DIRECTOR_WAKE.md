@@ -66,7 +66,7 @@ Pack hash pointers (`machines.*.last_result_hash`, `watched.w7_hook.pack_hook_ha
 | `morning-health` | Desk HTTP 200, toml HTTP 200, W0 spendable at least 1 XRP, SignerList `matches_h1`, master key still enabled, RegularKeys `matches_pack`, file fresh | `desk`, `toml`, `treasury`, `signer_list`, `regular_keys`, `stale` |
 | `weekly-nav` | W0–W6 spendable drops, AMM amounts, and `aeth_outstanding` are present. The digest prints the numbers. A changed NAV is not an alert. | `nav`, `stale` |
 | `batch-probe` | `watched.batch.atomic_enabled` is false. `TicketBatch: true` is not the gate. | `batch_enabled` when atomic Batch flips on. `batch_unknown` when the amendments are missing. Do not submit a Batch transaction from this alert. |
-| `walk-in-remint` | `watched.walk_in_offer.status` is `open` | `walk_in_sold_out`. Remint only on the Foundry box (`npm run remint:walk-in`). CI does not sign. |
+| `walk-in-remint` | `watched.walk_in_offer.status` is `open`. Strangers buy with `npm run buy:walk-in` while it is open. The desk does not sign. | `walk_in_sold_out`. Remint only on the Foundry box (`npm run remint:walk-in`). CI does not sign. |
 | default (`--check` with no routine) | All of the above, plus W7 `hook_hash` equals the pack pointer | Adds `hook` |
 
 `unique_counterparties` is not in this file. Weekly NAV still reads `market/pnl.md` for that count. Do not invent it here.

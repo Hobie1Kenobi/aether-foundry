@@ -105,3 +105,8 @@ title = "Genesis artifact #0"
 url = "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/x402-desk/README.md"
 type = "documentation"
 title = "x402 desk merchant (Testnet, pay W3)"
+
+[[WEBLINKS]]
+url = "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/x402-desk/INBOUND.md"
+type = "documentation"
+title = "x402 desk inbound (npm run x402:pay)"
