@@ -11,7 +11,8 @@
     "offers": "node src/place-four-clean.js",
     "trials": "node src/work-ticket-trials-finish.js",
     "test": "node --test src/time/rippleEpoch.test.js",
-    "epoch-test": "node --test src/time/rippleEpoch.test.js"
+    "epoch-test": "node --test src/time/rippleEpoch.test.js",
+    "report:nav": "node src/report/nav.js"
   },
   "repository": {
     "type": "git",
