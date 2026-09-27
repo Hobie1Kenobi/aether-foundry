@@ -31,4 +31,4 @@ See `MASTER_PROMPT.md` §9 for the operating loop and first-boot checklist.
 
 ## Status
 
-Boot in progress — genesis wallets and Artifact #0 pending first faucet.
+On-chain boot complete (2026-09-27): DIDSet, DefaultRipple, AETH issue, AETH/XRP AMM, Artifact #0 minted. See `lab/sessions/2026-09-27-boot-onchain.md`.

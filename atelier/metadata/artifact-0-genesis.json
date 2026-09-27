@@ -1,0 +1,23 @@
+{
+  "name": "Aether Foundry Artifact #0 — Genesis",
+  "description": "First Foundry artifact minted on XRPL Testnet. Marks completion of DIDSet, DefaultRipple, AETH issuance, AETH/XRP AMMCreate, and NFTokenMint boot.",
+  "collection": "Aether Foundry Artifacts",
+  "taxon": 20260927,
+  "artifact_number": 0,
+  "network": "XRPL Testnet",
+  "issuer": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+  "minter": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+  "nftoken_id": "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF129D634CE0141DD56",
+  "mint_hash": "DD7FEFB46E0443A5E9DB7357FD62FC8B501EAACCB8656FC315711F6F056E3995",
+  "transfer_fee_bps_equiv": "1%",
+  "transfer_fee_field": 1000,
+  "uri": "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/README.md",
+  "related": {
+    "did_hash": "95FD1096AE2D7F777697B65D2F97B7CBE3F08826654AE3CDC2D845A8022832A1",
+    "amm_account": "r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w",
+    "amm_hash": "ED9D47A42456A1504918CDFC1648BA4F86EDDBDFFB5CACC01F943B810B45A740",
+    "aeth_issue_hash": "0E46250ADB4366F70C21140043A8F586ABB4EBBF995A0AFB2643AD4046FC7A2F"
+  },
+  "minted_at": "2026-09-27T14:37:00Z",
+  "minted_at_ct": "2026-09-27 ~09:37 AM CT"
+}

@@ -23,4 +23,5 @@ See `org.md`. Adversary must sign off before any machine ships on-chain. Protoco
 
 - DIDSet on W0 URI → raw GitHub charter (this file).
 - NFT taxon `20260927` (Foundry Artifact collection).
-- IOU code `AETH` issued from Treasury; DefaultRipple on unless an experiment documents otherwise.
+- IOU code `AETH` issued from Treasury (on-ledger hex `4145544800000000000000000000000000000000` — 4-char nonstandard); DefaultRipple on unless an experiment documents otherwise.
+- AMM AETH/XRP: `r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w`.
