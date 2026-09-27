@@ -399,7 +399,12 @@ ul.clean li {
 }
 
 .offer-list {
+  min-width: 0;
   color: var(--muted);
+}
+
+.offer-list li {
+  overflow-wrap: anywhere;
 }
 
 .offer-arrow {
