@@ -2,7 +2,7 @@
 
 **Status:** trialled (session 2026-09-27-7)  
 **Network:** XRPL Testnet  
-**Honor-system:** **yes** — ledger does not bind NFTokenID ↔ LP trust line (see THREAT)
+**Honor-system:** **yes for this NFT** — the ledger does not bind this NFTokenID to the LP line. The later door in `machines/lp-badge-bound/` is the enforced privilege.
 
 ## Pre-mint snapshot
 

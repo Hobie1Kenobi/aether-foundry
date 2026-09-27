@@ -67,6 +67,11 @@ Booted 2026-09-27 via faucet + on-chain boot. Explorer: https://testnet.xrpl.org
 | Oracle Mid-Ticket holder | BUYER `rEbUaXDXZnzR8wJjGqULKn1YLXNd5CARth` |
 | Oracle quote file | `lab/oracle/2026-09-27-1144.json` |
 
-| LP Badge NFTokenID | `000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1B3732AC80141DD5C` |
+| LP Badge v0 NFTokenID | `000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1B3732AC80141DD5C` |
+| LP Badge bound issuer | `rPXJrQEJN2K9grJJBqQHQ2V5nazcZQo5Cn` (XRPL Testnet, not W2) |
+| LP Badge bound holder | `rLDbAi71mciJwCDKyTn6dohD3ypDsMLRwm` (XRPL Testnet, not W1) |
+| LP Badge bound door | `r3UBPs7Lakfic2Mjq2QcgSqwfn6iYVGtFQ` |
+| LP Badge bound stranger | `rUpVvDQWBQVvrdazFZfb6E7DPmoafN2jNj` |
+| LP Badge bound credential | `CF1E832E647C8B753B29D848651494AC64D6E5B7E3D3820F65EE7EFCCC2FB935` |
 | LP Badge holder | W1 `rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS` |
 | LP Badge mint | `A8185AFA42F082A85792D3AF534A852B7060726D44A29420C14DD4A673E36E5C` |

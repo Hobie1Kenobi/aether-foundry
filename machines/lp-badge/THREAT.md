@@ -1,5 +1,11 @@
 # THREAT — LP Badge (Adversary sign-off)
 
+## v0 NFT versus the shipped door
+
+The section below describes the **v0 NFT** (`000803E8…DD5C` on W1). That token is still honor-system: the ledger does not bind it to the LP line, and this cut does not pretend otherwise.
+
+The shipped privilege is `machines/lp-badge-bound/`. A DepositAuth door accepts a payment only with an accepted `aether-lp-ok` credential, and the issuer deletes that credential after LP is withdrawn. That door is **not** honor-system. Do not describe it with this v0 label.
+
 ## Why v0 is honor-system (Adversary)
 
 **Adversary claim:** Nothing on XRPL today *binds* an NFTokenID to an LP trust line. A holder can:

@@ -232,6 +232,42 @@ export const MACHINES = {
   },
 } as const;
 
+/**
+ * LP Badge v1 door. XRPL Testnet credential gate, not the v0 NFT.
+ * Addresses and hashes are filled after the trial. Read-only.
+ */
+export const LP_BADGE_BOUND = {
+  network: "XRPL Testnet",
+  amendment: "Credentials",
+  amendmentId:
+    "1CB67D082CF7D9102412D34258CEDB400E659352D3B207348889297A6D90F5EF",
+  hooksOnXrplTestnet: false,
+  honorSystem: false,
+  credentialType: "aether-lp-ok",
+  lpThreshold: "1000",
+  amm: WALLETS.AMM.address,
+  v0NftokenId:
+    "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1B3732AC80141DD5C",
+  readme:
+    "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/lp-badge-bound/README.md",
+  issuer: "rPXJrQEJN2K9grJJBqQHQ2V5nazcZQo5Cn",
+  holder: "rLDbAi71mciJwCDKyTn6dohD3ypDsMLRwm",
+  door: "r3UBPs7Lakfic2Mjq2QcgSqwfn6iYVGtFQ",
+  stranger: "rUpVvDQWBQVvrdazFZfb6E7DPmoafN2jNj",
+  credentialId:
+    "CF1E832E647C8B753B29D848651494AC64D6E5B7E3D3820F65EE7EFCCC2FB935",
+  hashes: {
+    strangerFail:
+      "27AE8639E52729C1085D9D36C8E36145450502F580E4D0894804DCC01B1C6C92",
+    holderBareFail:
+      "311CBEA7D2008ADE45093067A4536CE771DCD55439D930BD128F953C684DE944",
+    holderPass:
+      "D21E08CC086310E2FA15B1F0E717FEF406F8BD3EF29ED5137AE9ACC64875FED2",
+    holderRevokedFail:
+      "919C1C7721EB178EBD4BC95DE35817D0F5410E3F5EA7FB6C08EE4CCA4437EE48",
+  },
+} as const;
+
 export const EXPLORER_TX = (hash: string) =>
   `https://testnet.xrpl.org/transactions/${hash}`;
 
