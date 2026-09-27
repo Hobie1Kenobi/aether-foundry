@@ -3,7 +3,7 @@
   "kind": "aether.director-state",
   "source": "director:snapshot",
   "timezone": "America/Chicago",
-  "updated_at": "2026-09-27T16:46:42-05:00",
+  "updated_at": "2026-09-27T17:08:04-05:00",
   "last_session_id": null,
   "networks": {
     "xrpl_testnet": {
@@ -12,7 +12,7 @@
       "http": "https://s.altnet.rippletest.net:51234",
       "ws": "wss://s.altnet.rippletest.net:51233",
       "explorer": "https://testnet.xrpl.org",
-      "validated_ledger_index": 21101663,
+      "validated_ledger_index": 21102054,
       "reserve_base_drops": "1000000",
       "reserve_inc_drops": "200000",
       "server_build": "3.4.1"
@@ -23,7 +23,7 @@
       "http": "https://xahau-test.net",
       "ws": "wss://xahau-test.net",
       "explorer": "https://xahau-testnet.xrpl.org",
-      "validated_ledger_index": 12695498,
+      "validated_ledger_index": 12695914,
       "reserve_base_drops": "1000000",
       "reserve_inc_drops": "200000",
       "server_build": "2026.6.21-release+3350"
@@ -54,10 +54,10 @@
       "role": "ATELIER",
       "network": "xrpl_testnet",
       "address": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
-      "balance_drops": "112009883",
-      "spendable_drops": "110609883",
+      "balance_drops": "122009859",
+      "spendable_drops": "120609859",
       "owner_count": 2,
-      "sequence": 21093734,
+      "sequence": 21093736,
       "regular_key": "rNNzhkcScozB7Nzv3cWCZAEnu6MMC64rmy"
     },
     "W3": {
@@ -180,12 +180,12 @@
     "walk_in_offer": {
       "account": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
       "status": "open",
-      "offer_id": "08F7769F074C8C80C4DD6A691D2CEE3A3996458D845DA3C15F62BBAF699421B0",
-      "nftoken_id": "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1C81EFBC70141DD5D",
+      "offer_id": "CEAC38D14EBB2B544E59D78084ECAE1D52486BA29C53D248717CD42DB159654F",
+      "nftoken_id": "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1E1248CC60141DD5E",
       "amount_drops": "10000000",
       "offer_count": 1,
       "pack_offer_id": "08F7769F074C8C80C4DD6A691D2CEE3A3996458D845DA3C15F62BBAF699421B0",
-      "ledger_index": 21101663
+      "ledger_index": 21102054
     },
     "amm": {
       "account": "r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w",
@@ -193,7 +193,7 @@
       "amount_xrp_drops": "50783389",
       "lp_token_currency": "0330E60FAE706EAD2C7D511D790B07A6F3B89931",
       "trading_fee": 500,
-      "ledger_index": 21101663
+      "ledger_index": 21102053
     },
     "w0_signer_list": {
       "account": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
@@ -220,7 +220,7 @@
       "matches_h1": true,
       "master_disabled": false,
       "previous_txn_id": "EDD27C458D314602E6059D8351D2DDA322A5E4BD1FD55602B3D2E667EA970299",
-      "ledger_index": 21101663
+      "ledger_index": 21102053
     },
     "regular_keys": {
       "matches_pack": true,
@@ -288,7 +288,7 @@
       ]
     },
     "aeth_outstanding": "10100",
-    "testnet_nav_spendable_drops": "666446870",
+    "testnet_nav_spendable_drops": "676446846",
     "w7_hook": {
       "account": "r9YjdAzgL4hHvqDUeb4sTf4yF2MDQ5kq7h",
       "hook_hash": "B9B6A6D5DDCF4212CC046217500AB3D90D54C7E63684F98E7991F4EBA9BC6C09",
@@ -296,7 +296,7 @@
       "previous_txn_id": "7DBFE10ECFFDB2ACE8D83CA570ECF64F64712DBDE962B9C6756F83E655273447",
       "pack_hook_hash": "B9B6A6D5DDCF4212CC046217500AB3D90D54C7E63684F98E7991F4EBA9BC6C09",
       "matches_pack": true,
-      "ledger_index": 12695498
+      "ledger_index": 12695914
     }
   },
   "probes": {

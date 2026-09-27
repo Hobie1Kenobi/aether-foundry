@@ -1,0 +1,41 @@
+{
+  "network": "XRPL Testnet",
+  "session": "2026-09-27-walk-in-v2",
+  "purpose": "Walk-In Window v2 storefront — mint + public sell offer (OPEN)",
+  "w2_address": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+  "walk_in": {
+    "mint": {
+      "hash": "DC7609E1331198731F7C0B2E58378C39F4F11511F40337DB3A4C865F00368E10",
+      "result": "tesSUCCESS",
+      "ledger_index": 21097970
+    },
+    "nftoken_id": "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1C81EFBC70141DD5D",
+    "uri": "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/walk-in-window/INBOUND.md",
+    "taxon": 20260927,
+    "transfer_fee": 1000,
+    "flags": "tfTransferable",
+    "sell_offer": {
+      "hash": "2C013A0988DA6610B088D72B8E6F0378CFF52E9D7CB2ED2B181D3546318DDDBC",
+      "result": "tesSUCCESS",
+      "ledger_index": 21097972
+    },
+    "offer_id": "08F7769F074C8C80C4DD6A691D2CEE3A3996458D845DA3C15F62BBAF699421B0",
+    "price_drops": "10000000",
+    "price_xrp": 10,
+    "offer_flags": "tfSellNFToken",
+    "destination": null,
+    "offer_status": "OPEN"
+  },
+  "verify": {
+    "account_nfts_count": 2,
+    "has_minted_nft": true,
+    "open_sell_offers": 1,
+    "offer_still_open": true,
+    "matched_offer": {
+      "amount": "10000000",
+      "flags": 1,
+      "nft_offer_index": "08F7769F074C8C80C4DD6A691D2CEE3A3996458D845DA3C15F62BBAF699421B0",
+      "owner": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw"
+    }
+  }
+}

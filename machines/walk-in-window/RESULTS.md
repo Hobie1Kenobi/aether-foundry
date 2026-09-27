@@ -91,3 +91,30 @@ Sell offer was **not** accepted. `INBOUND.md` is the token URI and the buyer ins
 
 - No seeds in this file.
 - Unix scar escrow on BUYER untouched.
+
+## Walk-in buy 2026-09-27T22:07:28Z
+
+Stranger accept via `npm run buy:walk-in`. Buyer is not a Foundry labeled wallet.
+
+| Field | Value |
+|-------|-------|
+| Buyer | `rQsPPdwiBeVDqsdDnFcVmu7xTVHMjXRFqN` |
+| OfferID | `08F7769F074C8C80C4DD6A691D2CEE3A3996458D845DA3C15F62BBAF699421B0` |
+| NFTokenID | `000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1C81EFBC70141DD5D` |
+| Amount | `10000000` |
+| Accept hash | `C8044902172E6803154E144815A6B8D19FBD1067B71BF511DF35346DF8BC43C1` |
+| AETH | not requested |
+
+## v2 remint 2026-09-27T22:07:44Z
+
+Founder one-click `npm run remint:walk-in`. Offer left open. Not accepted.
+
+| Field | Value |
+|-------|-------|
+| Minter / seller | W2 `rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw` |
+| NFTokenID | `000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1E1248CC60141DD5E` |
+| Mint hash | `C66D0FDE490B18395108BD0E01EFF407BCDCD3D6364E3489D2E7A2D2F665A674` |
+| CreateOffer hash | `75FCBFA093C36F92021E6FAB0C2C2E61A0ADB6B10A44416C1271B056B2E0A4CB` |
+| OfferID | `CEAC38D14EBB2B544E59D78084ECAE1D52486BA29C53D248717CD42DB159654F` |
+| Price | 10 XRP (`10000000` drops) |
+| Disposition | OPEN on W2 — do not accept |
