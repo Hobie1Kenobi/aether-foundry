@@ -22,18 +22,44 @@ The listing left open with this revision:
 
 Leave that offer open. Do not accept it with BUYER, STRANGER, or any other labeled Foundry wallet.
 
+### Watcher (no seeds)
+
+```bash
+npm run watch:walk-in
+# node src/walk-in-remint-watch.js [--quiet]
+```
+
+Polls `https://s.altnet.rippletest.net:51234` `account_objects` on W2 with `type: nft_offer` and `ledger_index: validated`.
+
+| Result | Behavior |
+|--------|----------|
+| OPEN (sell offer, Flags bit 1) | Exit 0. `--quiet` prints nothing. |
+| SOLD OUT | Writes `lab/remint-plans/walk-in-YYYYMMDD-HHMMSS.json` (mint + createOffer fields, URI text and hex, `npm run remint:walk-in`). Appends one `walk_in_sold_out` line to `lab/ledger-log.jsonl` and a detection section to `RESULTS.md`. Does not sign. A second poll for the same OfferID does not append again. |
+| RPC error | Exit 1. An outage is not a sale. |
+
+GitHub Action `.github/workflows/walk-in-remint-watch.yml` runs the watcher every 30 minutes and on `workflow_dispatch`. It commits the plan, ledger line, and RESULTS only when those files change. It does not load seeds or sign.
+
+To exercise the writer without touching this checkout:
+
+```bash
+node src/walk-in-remint-watch.js --simulate-sold-out --root /tmp/walk-in-sim
+```
+
+That event is tagged `"simulated": true`. Do not commit it over a live OPEN listing.
+
 ### When the offer is taken
 
-1. Confirm SOLD OUT: desk card, or `account_objects` on W2 with `type: nft_offer` returns no sell offer (`Flags` bit `1`).
-2. From W2, `NFTokenMint` — taxon `20260927`, flag `tfTransferable` (`8`), TransferFee `1000`, URI = hex of  
+1. Confirm SOLD OUT: the watcher, the desk card, or `account_objects` on W2 with `type: nft_offer` returns no sell offer (`Flags` bit `1`).
+2. On the founder box (secrets outside the repo), run `npm run remint:walk-in`. That submits the two transactions below and refuses while a sell offer is still open. It also refuses when `CI` or `GITHUB_ACTIONS` is set.
+3. `NFTokenMint` — taxon `20260927`, flag `tfTransferable` (`8`), TransferFee `1000`, URI = hex of  
    `https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/walk-in-window/INBOUND.md`
-3. From W2, `NFTokenCreateOffer` — Amount `10000000`, flag `tfSellNFToken` (`1`), no Destination.
-4. Confirm the new object via `account_objects` / the desk (status OPEN). Append mint hash, create-offer hash, NFTokenID, and OfferID to `RESULTS.md`.
-5. Do not accept the new offer.
+4. `NFTokenCreateOffer` — Amount `10000000`, flag `tfSellNFToken` (`1`), no Destination.
+5. Confirm the new object via `account_objects` / the desk (status OPEN). The one-click script appends mint hash, create-offer hash, NFTokenID, and OfferID to `RESULTS.md` and `lab/ledger-log.jsonl`.
+6. Do not accept the new offer.
 
-Secrets stay in the operator env outside the repo (`/workspace/aether-foundry-secrets/.env` or the equivalent path on the operator box). The desk never loads them.
+Secrets stay in the operator env outside the repo (`AETHER_SECRETS`, or `/workspace/aether-foundry-secrets/.env` on the Foundry box). The desk and the GitHub Action never load them.
 
-There is no in-repo signer for v2. `src/walk-in-window-session.js` is the v0 session script only.
+`src/walk-in-window-session.js` is the v0 session script only. It accepted a sale; the v2 one-click does not.
 
 ## v0 session (historical)
 
@@ -41,6 +67,7 @@ There is no in-repo signer for v2. `src/walk-in-window-session.js` is the v0 ses
 
 ## Verify
 
+- `npm run watch:walk-in` exits 0 while the listing is OPEN (`--quiet` is silent).
 - `account_objects` on W2 (`type: nft_offer`, validated ledger) shows one sell offer, or the desk card says SOLD OUT while a remint is pending.
 - `INBOUND.md` matches the token URI.
 - `public/xrp-ledger.toml` and `web/public/.well-known/xrp-ledger.toml` both link `INBOUND.md`.

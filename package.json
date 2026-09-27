@@ -10,9 +10,11 @@
     "health": "node src/health.js",
     "offers": "node src/place-four-clean.js",
     "trials": "node src/work-ticket-trials-finish.js",
-    "test": "node --test src/time/rippleEpoch.test.js",
+    "test": "node --test src/time/rippleEpoch.test.js src/walk-in-remint-watch.test.js",
     "epoch-test": "node --test src/time/rippleEpoch.test.js",
-    "report:nav": "node src/report/nav.js"
+    "report:nav": "node src/report/nav.js",
+    "watch:walk-in": "node src/walk-in-remint-watch.js",
+    "remint:walk-in": "node src/walk-in-storefront-v2.js"
   },
   "repository": {
     "type": "git",
