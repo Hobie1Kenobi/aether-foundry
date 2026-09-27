@@ -1,0 +1,25 @@
+# Secrets — NEVER commit seeds or live env
+.env
+.env.local
+.env.*.local
+**/secrets/
+**/*seed*
+**/*secret*
+
+# Node / Python
+node_modules/
+dist/
+build/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Lab scratch (keep tracked JSONL and markdown)
+lab/sessions/*.tmp
