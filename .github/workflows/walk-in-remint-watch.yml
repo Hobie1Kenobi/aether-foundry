@@ -1,0 +1,48 @@
+# Dry-run detect only. This job must not mint, sign, or load operator secrets.
+
+name: Walk-In Window remint watch
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: walk-in-remint-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm test
+
+      - name: Detect standing sell offer
+        run: node src/walk-in-remint-watch.js --quiet
+
+      - name: Commit sold-out plan
+        run: |
+          git add -- lab/ledger-log.jsonl machines/walk-in-window/RESULTS.md
+          if [ -d lab/remint-plans ]; then
+            git add -- lab/remint-plans
+          fi
+          if git diff --cached --quiet; then
+            echo "OPEN or already recorded — no commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(walk-in): record sold-out detection"
+          git push

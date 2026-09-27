@@ -1,6 +1,6 @@
 # Machine #3 — Walk-In Window
 
-**Status:** v2 standing storefront on XRPL Testnet (2026-09-27). Sell offer left open; remint when taken.  
+**Status:** v2 standing storefront on XRPL Testnet (2026-09-27). Sell offer left open. A dry-run watcher notices when it is taken; the founder remints locally.  
 **Network:** XRPL Testnet only (`wss://s.altnet.rippletest.net:51233` / HTTPS `https://s.altnet.rippletest.net:51234`)  
 **Thesis:** An open storefront NFT that a **new faucet stranger** (not a returning BUYER) can buy with plain XRP — Walk-In Window, not invitation-only.
 
@@ -43,6 +43,10 @@ sequenceDiagram
 | URI | `INBOUND.md` on `main` |
 
 These IDs match the listing that was left open. After a purchase they are consumed. The desk shows whatever sell offer W2 has now.
+
+`npm run watch:walk-in` polls that ledger read and exits 0 while OPEN. When no sell offer remains it writes a dry-run plan under `lab/remint-plans/`, one `walk_in_sold_out` line in `lab/ledger-log.jsonl`, and a detection line in `RESULTS.md`. It does not sign. The scheduled workflow `.github/workflows/walk-in-remint-watch.yml` runs that detect path only.
+
+The founder then runs `npm run remint:walk-in` (`node src/walk-in-storefront-v2.js`) on a box with `W2_SEED` in `AETHER_SECRETS` or `/workspace/aether-foundry-secrets/.env` (never in git, never in GitHub Actions). That mints and relists 10 XRP with no Destination, then the desk shows OPEN again. Do not accept the new offer.
 
 ## v0 (session-4, closed)
 

@@ -31,7 +31,7 @@ Agent-run ops for the XRPL **Testnet** corporation. Read this before any session
 |---|------|--------|
 | 1 | `work-ticket-escrow` | Trialled — RESULTS on disk |
 | 2 | `drip-pass` | Trialled |
-| 3 | `walk-in-window` | Trialled (STRANGER inbound) |
+| 3 | `walk-in-window` | v2 storefront open; watcher is dry-run, remint is local |
 | 4 | `oracle-mid-ticket` | Trialled |
 | 5 | `lp-badge` | Trialled (honor-system LP threshold) |
 | 6 | `batch-heartbeat` | **Spec only** — gated on Batch amendment |
@@ -54,6 +54,15 @@ Re-probe only. Check `server_info` / feature flags for `BatchV1_1` / `fixBatchV1
 - P&L hygiene: `market/pnl.md`, `market/fx.md` from live `account_info` / `amm_info` / `account_lines` / `account_nfts` on W0–W6, BUYER, STRANGER, AMM
 - Optional: `npm run report:nav` when present
 - Put continuation cards in session notes, not chat-only
+
+## Walk-In Window loop
+
+The shop stays open without a human session watching the screen. Signing stays on the founder box.
+
+1. `.github/workflows/walk-in-remint-watch.yml` (every 30 minutes, or `workflow_dispatch`) runs `node src/walk-in-remint-watch.js --quiet`. Read-only Testnet HTTP. Exit 0 while W2 still has a sell offer. No seeds in GitHub Actions.
+2. When that sell offer is gone, the run writes `lab/remint-plans/walk-in-*.json`, appends `lab/ledger-log.jsonl` (`walk_in_sold_out`), and a detection line in `machines/walk-in-window/RESULTS.md`, then commits those files. That line is not a remint.
+3. Founder, with secrets outside the repo: `npm run remint:walk-in`. Loads `W2_SEED` from `AETHER_SECRETS` or `/workspace/aether-foundry-secrets/.env`, mints, and relists. Refuses while a sell offer is still open. Refuses when `CI` or `GITHUB_ACTIONS` is set. Does not accept.
+4. Desk reads `account_objects` and shows OPEN again.
 
 ## Desk ops
 
@@ -85,3 +94,4 @@ Prefer `/workspace/aether-foundry-push.sh` when pushing from the box checkout. N
 - [ ] Committing secrets
 - [ ] Batch txs while amendment disabled
 - [ ] Domain host set to a `*.v0.build` preview
+- [ ] Walk-In remint or seeds from CI (the watcher is dry-run only)
