@@ -1,0 +1,72 @@
+{
+  "network": "Xahau Testnet",
+  "network_id": 21338,
+  "ws": "wss://xahau-test.net",
+  "rpc": "https://xahau-test.net",
+  "note": "Public addresses only. Seeds are not in this file.",
+  "accounts": {
+    "W7": {
+      "role": "XAHAU treasury (hook account)",
+      "address": "r9YjdAzgL4hHvqDUeb4sTf4yF2MDQ5kq7h",
+      "seed_env": "W7_SEED",
+      "faucet_hash": "790970F4154B376DD6457AB0EE0AD007D8CF2310A2C261EF41EE3350387ED49E",
+      "amount_xah": 1000,
+      "xrpl_testnet_twin": null,
+      "xrpl_testnet_twin_id": null
+    },
+    "MARKET": {
+      "role": "40% MARKET inventory",
+      "address": "rUV6zDW72xLRWtECfAivjfQ67EXUE5cq38",
+      "seed_env": "W7_MARKET_SEED",
+      "faucet_hash": "4C5EFC5F46D87B2432FCE8B09A90810096329B3683189769B6C29B77CCCDF80C",
+      "amount_xah": 1000,
+      "xrpl_testnet_twin": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+      "xrpl_testnet_twin_id": "W1"
+    },
+    "ATELIER": {
+      "role": "25% ATELIER mint budget",
+      "address": "rU98zDxthCRjoQLURzhrPJoo2t851gvExk",
+      "seed_env": "W7_ATELIER_SEED",
+      "faucet_hash": "82F4A90E8E2BE1FC3F7B8EEB3F560CB871647A444FAE0A175838A8EE25A83047",
+      "amount_xah": 1000,
+      "xrpl_testnet_twin": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+      "xrpl_testnet_twin_id": "W2"
+    },
+    "RESEARCH": {
+      "role": "20% R&D",
+      "address": "rB5jFnmc7BdBAJdquSMwhkTKjJaJGfnB8m",
+      "seed_env": "W7_RD_SEED",
+      "faucet_hash": "493DDBD419D516DFD84D462A606799234EF82AA9DE9B3EF41E37E3078A503F1B",
+      "amount_xah": 1000,
+      "xrpl_testnet_twin": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+      "xrpl_testnet_twin_id": "W5"
+    },
+    "GRANTS": {
+      "role": "10% GRANTS",
+      "address": "rHjzEwwBAB7BRwfjFMVGsmGduEahSCPkBh",
+      "seed_env": "W7_GRANTS_SEED",
+      "faucet_hash": "FD1E4B2C76D317DE2FD99EA6F63C8C28E6B62869F21FD6160F591E1FFB62DA63",
+      "amount_xah": 1000,
+      "xrpl_testnet_twin": "rfnqxYQWKsVGFuWLjky41puXHJkT2v8yTf",
+      "xrpl_testnet_twin_id": "W6"
+    },
+    "SINK": {
+      "role": "5% sink",
+      "address": "rLwvjUEuSBe8PByEnpwWxUryG4KRCXqt6K",
+      "seed_env": "W7_SINK_SEED",
+      "faucet_hash": "78DF459332A561BEB90169D3C2E8B129F6B30B0088B7819728A1D38B3DE133DF",
+      "amount_xah": 1000,
+      "xrpl_testnet_twin": null,
+      "xrpl_testnet_twin_id": null
+    },
+    "PAYER": {
+      "role": "trial payer",
+      "address": "rKteu2WyN5nm7i8txzw1VCgN14DDGxztC9",
+      "seed_env": "W7_PAYER_SEED",
+      "faucet_hash": "226BF40FF8C177DE25C354748407DAD5B7434703B1E4615690881871D3B4D830",
+      "amount_xah": 1000,
+      "xrpl_testnet_twin": null,
+      "xrpl_testnet_twin_id": null
+    }
+  }
+}

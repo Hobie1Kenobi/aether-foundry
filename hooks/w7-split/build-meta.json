@@ -1,0 +1,28 @@
+{
+  "source": "hooks/w7-split/w7-split.c",
+  "wasm": "hooks/w7-split/w7-split.wasm",
+  "bytes": 9164,
+  "sha256": "9d214b465e05660a95dc18e3bb51cd1f8972bd597e97840863cb9330fb24812a",
+  "compiler": "clang --target=wasm32 -Os && wasm-strip",
+  "headers": "hooks/vendor/xahau",
+  "headers_commit": "a7f9c683c427637ba8b534171af30f1d5c937dec",
+  "exports": [
+    "memory",
+    "cbak",
+    "hook"
+  ],
+  "imports": [
+    "_g",
+    "accept",
+    "hook_account",
+    "rollback",
+    "otxn_field",
+    "otxn_type",
+    "trace_num",
+    "hook_param",
+    "etxn_reserve",
+    "prepare",
+    "emit"
+  ],
+  "compiled_at": "2026-09-27T20:30:14.919Z"
+}

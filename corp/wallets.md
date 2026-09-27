@@ -9,7 +9,7 @@
 | W4 | ESCROW | ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN | XRPL Testnet | yes |
 | W5 | R&D | rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ | XRPL Testnet | yes |
 | W6 | GRANTS | rfnqxYQWKsVGFuWLjky41puXHJkT2v8yTf | XRPL Testnet | yes |
-| W7 | XAHAU | _pending_ | Xahau Testnet | no |
+| W7 | XAHAU treasury (hook account) | r9YjdAzgL4hHvqDUeb4sTf4yF2MDQ5kq7h | Xahau Testnet | yes (faucet, 1000 XAH) |
 | W8 | EVM | _deferred_ | XRPL EVM Testnet | n/a |
 | BUYER | work-ticket client (session-2) | rEbUaXDXZnzR8wJjGqULKn1YLXNd5CARth | XRPL Testnet | yes (faucet) |
 | STRANGER | walk-in purchaser (session-4) | rh4c6qMMyafccZrPFCPCN742BNMXfjKYss | XRPL Testnet | yes (faucet) |
@@ -17,6 +17,22 @@
 | FOREIGN | x402 outbound counterparty (not a Foundry anchor; do not add to desk `WALLETS`) | r3JbqcVQ4Pov4MhFUMSdnro7s3VgpaqssZ | XRPL Testnet | yes (faucet) |
 
 Seeds live in founder local `.env` only (`/workspace/aether-foundry-secrets/.env`, mode 600 — outside git tree).
+
+## Xahau Testnet split destinations (W7 hook)
+
+These are Xahau accounts. They are not the XRPL Testnet twins and they are not in the desk `WALLETS` map. Public addresses only. Seed env names are placeholders in `.env.example`.
+
+| Role | Share | Address | Seed env | XRPL Testnet twin |
+|------|------:|---------|----------|-------------------|
+| W7 treasury | hook account | `r9YjdAzgL4hHvqDUeb4sTf4yF2MDQ5kq7h` | `W7_SEED` | none |
+| MARKET | 40% | `rUV6zDW72xLRWtECfAivjfQ67EXUE5cq38` | `W7_MARKET_SEED` | W1 `rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS` |
+| ATELIER | 25% | `rU98zDxthCRjoQLURzhrPJoo2t851gvExk` | `W7_ATELIER_SEED` | W2 `rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw` |
+| R&D | 20% | `rB5jFnmc7BdBAJdquSMwhkTKjJaJGfnB8m` | `W7_RD_SEED` | W5 `rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ` |
+| GRANTS | 10% | `rHjzEwwBAB7BRwfjFMVGsmGduEahSCPkBh` | `W7_GRANTS_SEED` | W6 `rfnqxYQWKsVGFuWLjky41puXHJkT2v8yTf` |
+| SINK | remainder | `rLwvjUEuSBe8PByEnpwWxUryG4KRCXqt6K` | `W7_SINK_SEED` | none |
+| Trial payer | n/a | `rKteu2WyN5nm7i8txzw1VCgN14DDGxztC9` | `W7_PAYER_SEED` | none |
+
+HookHash `B9B6A6D5DDCF4212CC046217500AB3D90D54C7E63684F98E7991F4EBA9BC6C09`. SetHook `7DBFE10ECFFDB2ACE8D83CA570ECF64F64712DBDE962B9C6756F83E655273447`. Details: `machines/xahau-split-treasury/RESULTS.md`.
 
 ## On-chain identity / issuance (2026-09-27 boot-onchain)
 
