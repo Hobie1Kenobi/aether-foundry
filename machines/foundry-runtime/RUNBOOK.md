@@ -63,6 +63,26 @@ Optional crontab on the Foundry box (path is the checkout; no seed is required):
 */30 * * * * cd /path/aether-foundry && npm run director:snapshot && npm run director:wake -- --check --routine morning-health
 ```
 
+## Heartbeat
+
+W5 pays W3 one drop. SourceTag `202609280`. Memos are `purpose=aether-heartbeat`, `experiment=foundry-runtime`, and `ledger` set to the validated index already in `lab/director-state.json`. Destination may be W6. The cap is 4 heartbeats on a UTC day, with the rolling 24h backstop still in force, and at least 6 hours between them.
+
+```bash
+npm run heartbeat:dry
+```
+
+That is `node src/runtime/actions/heartbeat.js --dry-run`. It prints one unsigned `Payment` and does not open `W5_REGULAR_SEED`. Exit `0` when the plan is due. Exit `2` when the rate limit or a stale director file refuses it. There is no hash in that print.
+
+Live, Foundry box only:
+
+```bash
+FOUNDRY_DAEMON_LIVE=yes npm run heartbeat:live
+```
+
+The env name is `W5_REGULAR_SEED`. GitHub Actions throws `CI` before that file is read. A `tesSUCCESS` hash is appended to `lab/ledger-log.jsonl` as `action` `heartbeat` and copied into `lab/metrics.json` `last_heartbeat`. Do not type a hash into either file. The skeleton in git has `last_heartbeat.hash` null. Counts in that skeleton are the integers already published in `market/pnl.md`.
+
+`GET /api/status` on the desk reads that public JSON (or `market/pnl.md` if the metrics file is not on `main` yet). It does not sign.
+
 ## What not to run
 
 - `npm run runtime:live` in GitHub Actions.

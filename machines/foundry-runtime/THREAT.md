@@ -6,7 +6,7 @@ Adversary checks from the runtime activation list. This pack is Workstream 1. La
 
 **Claim:** a test, an Actions log, or the public desk JSON contains a family seed or a `seed` / `private_key` field.
 
-**Check:** `src/runtime/policy.test.js` rejects object keys that match the director secret-key rule, including `seed`, `private_key`, and `W2_REGULAR_SEED`. A seed-shaped value is rejected by the same schema helper the director uses. The dry-run spawn env does not carry a seed, and the test fails if the printer emits an `sEd…` string. No fixture in `src/runtime/` holds a seed. This PR does not add `web/app/api/status`. The desk still has no `Wallet.sign`. `.github/workflows/walk-in-remint-watch.yml` does not print env and does not call `runtime:live`.
+**Check:** `src/runtime/policy.test.js` rejects object keys that match the director secret-key rule, including `seed`, `private_key`, and `W2_REGULAR_SEED`. A seed-shaped value is rejected by the same schema helper the director uses. The dry-run spawn env does not carry a seed, and the test fails if the printer emits an `sEd…` string. No fixture in `src/runtime/` holds a seed. `web/app/api/status/route.ts` does not import `Wallet` or a `*_SEED` name. `src/desk/status.test.js` refuses a metrics document that contains a seed-shaped string and does not copy that string into the JSON. The desk still has no `Wallet.sign`. `.github/workflows/walk-in-remint-watch.yml` does not print env and does not call `runtime:live`.
 
 ## Actions job that runs `runtime:live`
 
@@ -36,7 +36,7 @@ Adversary checks from the runtime activation list. This pack is Workstream 1. La
 
 **Claim:** `runtime:watch` emits a 1-drop payment every minute until W5 is empty.
 
-**Check:** default amount is `1` drop and the hard max is `1000`. A fifth heartbeat inside 24 hours throws `RATE`. A second heartbeat inside 6 hours throws `RATE`. Destination must be W3 or W6. Amounts at or above 50 XRP throw `FIFTY_XRP`. The watch loop still runs the same plan function on every tick. Dry-run never signs, so a tight loop cannot spend.
+**Check:** default amount is `1` drop and the hard max is `1000`. A fifth heartbeat on the same UTC day throws `RATE`. A fifth heartbeat inside 24 hours throws `RATE` even when the earlier four were yesterday. A second heartbeat inside 6 hours throws `RATE`. Destination must be W3 or W6. Amounts at or above 50 XRP throw `FIFTY_XRP`. `npm run heartbeat:dry` and the daemon dry-run both call `assertHeartbeat` and neither reads `W5_REGULAR_SEED`. The watch loop still runs the same plan function on every tick. Dry-run never signs, so a tight loop cannot spend. `heartbeat:live` is not in any Actions workflow.
 
 ## Snapshot overwriting `next_actions`
 

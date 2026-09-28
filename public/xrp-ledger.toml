@@ -4,7 +4,7 @@
 # Served also at web/public/.well-known/xrp-ledger.toml for Vercel desk deploy.
 
 [METADATA]
-modified = "2026-09-27T19:30:00Z"
+modified = "2026-09-28T21:15:00Z"
 network = "XRPL Testnet"
 expires = "2027-09-27T00:00:00Z"
 
@@ -110,3 +110,8 @@ title = "x402 desk merchant (Testnet, pay W3)"
 url = "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/x402-desk/INBOUND.md"
 type = "documentation"
 title = "x402 desk inbound (npm run x402:pay)"
+
+[[WEBLINKS]]
+url = "https://aether-foundry-desk.vercel.app/api/status"
+type = "info"
+title = "Desk status JSON (read-only, seedless)"

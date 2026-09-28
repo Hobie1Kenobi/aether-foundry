@@ -13,10 +13,11 @@ XRPL **Testnet** public desk. No seeds, no `Wallet.sign`, no private-key APIs.
    - `NEXT_PUBLIC_NETWORK_LABEL` — display label
 5. Deploy. No secrets required. Mainnet hosts in those vars are ignored.
 
-After deploy, verify toml:
+After deploy, verify toml and the public status route. Root Directory stays `web`, so `web/app/api/status/route.ts` is `GET /api/status`.
 
 ```bash
 curl -sS https://HOST_PLACEHOLDER/.well-known/xrp-ledger.toml | head
+curl -sS https://aether-foundry-desk.vercel.app/api/status
 ```
 
 ## Domain host

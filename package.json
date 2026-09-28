@@ -10,7 +10,7 @@
     "health": "node src/health.js",
     "offers": "node src/place-four-clean.js",
     "trials": "node src/work-ticket-trials-finish.js",
-    "test": "node --test src/time/rippleEpoch.test.js src/walk-in-remint-watch.test.js src/walk-in-buy.test.js src/x402-rules.test.js src/x402-hits.test.js src/x402-outbound.test.js src/xahau-split.test.js src/lp-badge-bound.test.js src/governance/policy.test.js src/director/director.test.js src/grants/grants.test.js src/runtime/policy.test.js src/mcp/server.test.js",
+    "test": "node --test src/time/rippleEpoch.test.js src/walk-in-remint-watch.test.js src/walk-in-buy.test.js src/x402-rules.test.js src/x402-hits.test.js src/x402-outbound.test.js src/xahau-split.test.js src/lp-badge-bound.test.js src/governance/policy.test.js src/director/director.test.js src/grants/grants.test.js src/runtime/policy.test.js src/runtime/heartbeat.test.js src/desk/status.test.js src/mcp/server.test.js",
     "buy:walk-in": "node src/walk-in-buy.js",
     "director:snapshot": "node src/director/snapshot.js",
     "director:wake": "node src/director/wake.js",
@@ -36,6 +36,8 @@
     "runtime:dry": "node src/runtime/daemon.js --dry-run --once",
     "runtime:live": "node src/runtime/daemon.js --live --once",
     "runtime:watch": "node src/runtime/daemon.js --live",
+    "heartbeat:dry": "node src/runtime/actions/heartbeat.js --dry-run",
+    "heartbeat:live": "node src/runtime/actions/heartbeat.js --live",
     "mcp": "node src/mcp/server.js",
     "mcp:test": "node --test src/mcp/server.test.js"
   },

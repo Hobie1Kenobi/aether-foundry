@@ -64,3 +64,7 @@ The company is still session-operated.
 ## Director clock
 
 Session `2026-09-28-director-clock`. No new snapshot. XRPL validated ledger stays `21102567`. Xahau validated ledger stays `12696465`. No signing hash. The unattended path is `.github/workflows/director-clock.yml`: `director:snapshot`, then `director:wake --check`. Wake exit 2 fails the job. The job does not remint.
+
+## Desk status and heartbeat
+
+Session `2026-09-28-desk-status`. No new snapshot and no submitted heartbeat. `lab/metrics.json` is a skeleton: counts copied from `market/pnl.md`, `last_heartbeat.hash` null. `npm run heartbeat:dry` prints an unsigned W5→W3 `Payment` of 1 drop. That print is not a hash. `GET /api/status` is seedless. Live `heartbeat:live` stays on the Foundry box.

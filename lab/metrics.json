@@ -1,0 +1,15 @@
+{
+  "updated_at": "2026-09-28T16:15:00-05:00",
+  "x402_hits": 0,
+  "x402_outbound_hits": 1,
+  "grants_paid": 1,
+  "inbound_counterparties": 1,
+  "last_grant_hash": null,
+  "last_outbound_hash": null,
+  "last_heartbeat_hash": null,
+  "last_heartbeat": {
+    "hash": null,
+    "ledger_index": null,
+    "ts": null
+  }
+}
