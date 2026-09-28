@@ -242,7 +242,7 @@ function buildOracleSet(opts) {
     PriceDataSeries: [
       {
         PriceData: {
-          BaseAsset: "AETH",
+          BaseAsset: AETH_HEX,
           QuoteAsset: "XRP",
           AssetPrice: encoded.asset_price_hex,
           Scale: encoded.scale,
@@ -354,6 +354,7 @@ function ledgerEntryParams() {
 module.exports = {
   ORACLE_DOCUMENT_ID,
   PRICE_SCALE,
+  XRP_HEX,
   INTENT,
   README_URL,
   PROVIDER_ASCII,
