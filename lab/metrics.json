@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-09-28T18:01:26-05:00",
+  "updated_at": "2026-09-28T18:45:58-05:00",
   "x402_hits": 0,
   "x402_outbound_hits": 1,
   "grants_paid": 2,
@@ -12,13 +12,13 @@
     "ledger_index": 21128182,
     "ts": "2026-09-28T22:20:44.982Z"
   },
-  "oracle_id": null,
+  "oracle_id": "7CD1AB908C3A8D2E3C426E0D3083F4DD9A8A3A753AA60EB73682AA11A06DFA4E",
   "last_oracle": {
-    "hash": null,
-    "oracle_id": null,
-    "ledger_index": null,
-    "last_update_time": null,
-    "quote_xrp_per_aeth": null,
-    "ts": null
+    "hash": "B11B0B87A7C40AFA98540D2F40FF234384466729F90E259E60162714DC4DDE85",
+    "oracle_id": "7CD1AB908C3A8D2E3C426E0D3083F4DD9A8A3A753AA60EB73682AA11A06DFA4E",
+    "ledger_index": 21129718,
+    "last_update_time": 1790639158,
+    "quote_xrp_per_aeth": "0.01022008",
+    "ts": "2026-09-28T23:45:58.839Z"
   }
 }
