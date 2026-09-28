@@ -42,8 +42,10 @@
       "memo_experiment": "foundry-runtime",
       "min_interval_hours": 6,
       "max_per_24h": 4,
-      "trigger": "interval >= 6 hours",
-      "refuse": ["more_than_4_per_24h", "dest_not_w3_or_w6", "ci", "mainnet"]
+      "max_per_utc_day": 4,
+      "source_tag": 202609280,
+      "trigger": "interval >= 6 hours; at most 4 per UTC day",
+      "refuse": ["more_than_4_per_utc_day", "more_than_4_per_24h", "inside_6h", "dest_not_w3_or_w6", "ci", "mainnet"]
     },
     "x402_outbound": {
       "account": "W3",

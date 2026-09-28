@@ -9,6 +9,7 @@ The company stays session-operated until a Foundry box runs a live action and a 
 ```bash
 npm run runtime:policy
 npm run runtime:dry
+npm run heartbeat:dry
 ```
 
 `npm run runtime:live` and `npm run runtime:watch` throw `CI` when `CI`, `CI=1`, or `GITHUB_ACTIONS` is set. Live also requires `FOUNDRY_DAEMON_LIVE=yes`. Seed values stay in `AETHER_SECRETS` or `/workspace/aether-foundry-secrets/.env`. The env var names are `W2_REGULAR_SEED`, `W3_REGULAR_SEED`, `W5_REGULAR_SEED`, and `W6_REGULAR_SEED`.
@@ -19,7 +20,7 @@ npm run runtime:dry
 |---|---|---|---|---|
 | `walk_in_remint` | W2 | `W2_REGULAR_SEED` | 10 XRP offer, fees only extra | offer open; `offer_count` ≥ 1; CI; mainnet |
 | `grant_pay` | W6 | `W6_REGULAR_SEED` | `1000000` drops | labeled `WALLETS`; ≥ 50 XRP; W6 spendable under 10 XRP |
-| `heartbeat` | W5 | `W5_REGULAR_SEED` | default `1` drop, max `1000` | more than 4 / 24h; destination not W3 or W6 |
+| `heartbeat` | W5 | `W5_REGULAR_SEED` | default `1` drop, max `1000` | more than 4 per UTC day; rolling 24h backstop; inside 6h; destination not W3 or W6 |
 | `x402_outbound` | W3 | `W3_REGULAR_SEED` | `500000` drops | circular W3→W3; mainnet; missing 402 |
 | `director_snapshot` | none | none | 0 | must not sign |
 
@@ -31,4 +32,4 @@ One pass (`--once`) loads `src/runtime/allowlist.json` and `lab/director-state.j
 
 The desk does not gain a signer. `.github/workflows/walk-in-remint-watch.yml` stays detect-only.
 
-Workstreams after this one (director clock, MCP, `/api/status`, daily flywheel) are not in this pack.
+`GET /api/status` is the read-only desk route. It does not sign. The daily flywheel is not in this pack.

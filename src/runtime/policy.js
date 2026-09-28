@@ -262,12 +262,18 @@ function assertHeartbeat(opts) {
   if (!heartbeatDestinations().includes(destination)) {
     throw coded("heartbeat destination must be W3 or W6", "DEST");
   }
-  const recent = (options.history || []).filter((row) => {
+  const rows = (options.history || []).filter((row) => {
     if (!row) return false;
     if (row.action !== "heartbeat" && row.event !== "heartbeat") return false;
     const stamp = Date.parse(row.ts);
-    return !Number.isNaN(stamp) && now.getTime() - stamp < DAY_MS && now.getTime() - stamp >= 0;
+    return !Number.isNaN(stamp) && stamp <= now.getTime();
   });
+  const utcDay = now.toISOString().slice(0, 10);
+  const sameUtcDay = rows.filter((row) => new Date(Date.parse(row.ts)).toISOString().slice(0, 10) === utcDay);
+  const recent = rows.filter((row) => now.getTime() - Date.parse(row.ts) < DAY_MS);
+  if (sameUtcDay.length >= HEARTBEAT_MAX_PER_DAY) {
+    throw coded("refusing more than 4 heartbeats on this UTC day", "RATE");
+  }
   if (recent.length >= HEARTBEAT_MAX_PER_DAY) {
     throw coded("refusing more than 4 heartbeats in 24h", "RATE");
   }
