@@ -11,14 +11,14 @@ Live refresh via `npm run report:nav` — ledger **21094528**, CT **2026-09-27 ~
 | artifacts_minted | 5 (#0 genesis, #1 work-ticket, drip-pass, epoch-scar, walk-in-0001) | session-4 |
 | artifacts_sold | 3 (#1 + drip-pass → BUYER; walk-in → STRANGER) | |
 | machines_with_results | **3** (work-ticket-escrow, drip-pass, walk-in-window) | Night packs = spec only |
-| inbound_counterparties | **1** | distinct buyers and grant destinations outside WALLETS |
+| inbound_counterparties | **2** | distinct buyers and grant destinations outside WALLETS |
 | escrow_finished_xrp | 10 → W4 | Trial A |
 | escrow_cancelled_xrp | 2 → BUYER | Trial B |
 | escrow_stuck_xrp | 10 on BUYER (Unix-vs-Ripple epoch bug) — **do not touch** | Unix scar |
 | passive_offers_live | 4 (W1 CLOB wings) | live |
 | x402_hits | 0 | append desk x402_hit via npm run x402:hit |
 | x402_outbound_hits | 1 | append via npm run x402:outbound -- --record |
-| grants_paid | 1 | append via npm run grants:pay -- --record |
+| grants_paid | 2 | append via npm run grants:pay -- --record |
 | surprises | 3 (epoch scar; SettleDelay dest-vs-source; Batch disabled on testnet 3.4.1) | |
 
 ## Corp wallet snapshot (spendable XRP)

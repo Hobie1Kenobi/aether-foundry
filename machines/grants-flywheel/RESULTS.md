@@ -31,3 +31,16 @@ W6 paid a non-labeled counterparty. Recorded only after `tesSUCCESS`.
 | Hash | `FEBC8E121880DC3A931233A69667235BC070AE77EE2B93E8AD50952E0EC7C2A2` |
 | Signer | `regular` |
 | Experiment | `grants-flywheel` |
+
+## Grant 2026-09-28T23:01:26.005Z
+
+W6 paid a non-labeled counterparty. Recorded only after `tesSUCCESS`.
+
+| Field | Value |
+|-------|-------|
+| Destination | `rLDbAi71mciJwCDKyTn6dohD3ypDsMLRwm` |
+| Reason | `aeth_counterparty` |
+| Drops | `1000000` |
+| Hash | `C75E0AC13941DADBE8B52FE8A7DFF9F8855F150C84613A4FB95B09F1BE3AEAA3` |
+| Signer | `regular` |
+| Experiment | `grants-flywheel` |
