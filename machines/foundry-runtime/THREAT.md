@@ -62,6 +62,12 @@ Adversary checks from the runtime activation list. This pack is Workstream 1. La
 
 **Check:** `uniqueInbound` reads `buyer`, `x402_hit` `payer`, and `grant_paid` `destination`. An address in `web/lib/xrpl-public.ts` `WALLETS` is dropped. `pay_to` on `x402_outbound` is not an inbound field, so the foreign shop is not a counterparty. A seed-shaped buyer throws `SEED` and is not written into `lab/metrics.json`. The metrics file stores the count and ledger hashes. It does not store seeds. `last_heartbeat` remains the object `/api/status` already reads. `last_grant_hash` and `last_outbound_hash` are copied from `tesSUCCESS` rows already in `lab/ledger-log.jsonl`. A missing row stays null.
 
+## Agent signer on the public desk or in Actions
+
+**Claim:** Vercel or GitHub Actions starts `src/runtime/signer.js`, or an MCP tool accepts a seed and the signer echoes it.
+
+**Check:** `npm run signer` calls `assertAgentGate`, which throws `CI` when `CI`, `CI=1`, or `GITHUB_ACTIONS` is set, before a key file is opened. `FOUNDRY_SIGNER_BIND` must be loopback. `POST /sign` requires a bearer token and does not write that token, or a seed, into `lab/ledger-log.jsonl`. `npm run signer:dry` sets `key_loaded` false. `web/app/api/mcp/route.ts` does not name `sign_tx` or `/sign`. `.github/workflows/` does not run `npm run signer`. `sign_tx` rejects an argument named `seed`, `secret`, or `private_key`.
+
 ## Batch because the clock ran on a Monday
 
 **Claim:** a Monday cron submits `Batch` while `atomic_enabled` is false.

@@ -195,6 +195,22 @@ CRON_TZ=America/Chicago
 
 `inbound_counterparties` is the count of distinct classic buyers and grant destinations outside `WALLETS`. The metrics file keeps `last_heartbeat` as an object for `/api/status`.
 
+## Agent signer (Foundry box)
+
+Agents may POST XRPL Testnet and Xahau Testnet transactions to a signer that binds `127.0.0.1:8787`. The desk, Vercel, and GitHub Actions still do not sign. Seeds stay in `/workspace/aether-foundry-secrets/.env`. Do not put `W0_SEED` in the signer process. `FOUNDRY_SIGNER_TOKEN` is a bearer token, not a family seed.
+
+```bash
+npm run signer:dry
+FOUNDRY_DAEMON_LIVE=yes FOUNDRY_AGENT_SIGN=yes npm run signer
+FOUNDRY_DAEMON_LIVE=yes npm run runtime:watch
+```
+
+`GET /health` must be up before an agent submits. `POST /sign` checks network id on every transaction (`1` or `21338`), refuses W0, refuses mainnet hosts, refuses `Batch` while `watched.batch.atomic_enabled` is false, and refuses finish or cancel of the Unix-epoch BUYER escrow. Caps live in `src/runtime/allowlist.json` (`mode` `agent-sign`). A `tesSUCCESS` line is appended to `lab/ledger-log.jsonl`. Do not type a hash.
+
+systemd unit stubs are `machines/foundry-runtime/foundry-signer.service` and `foundry-daemon.service`. Enable both so they restart on reboot. Edit the checkout path and `ExecStart` first. Details: `machines/foundry-runtime/RUNBOOK.md`.
+
+First live proof, after merge, on the box: a W5 heartbeat of 1 drop. Leave Walk-In alone while the sell offer is open.
+
 ## Director wake
 
 Canonical state is `lab/director-state.json`. The contract, merge rules, and the exact fields each routine reads are in `lab/DIRECTOR_WAKE.md`.
@@ -237,7 +253,7 @@ Prefer `/workspace/aether-foundry-push.sh` when pushing from the box checkout. N
 - [ ] `asfDisableMaster` / `lsfDisableMaster` without a written recovery path (week-2 leaves master enabled)
 - [ ] `gov:live` or `gov:multisign` from CI
 - [ ] `grants:pay` from CI, or a grant to any `WALLETS` address (STRANGER included)
-- [ ] `runtime:live`, `grants:pay`, or `x402:outbound` inside GitHub Actions
+- [ ] `runtime:live`, `grants:pay`, `x402:outbound`, or `npm run signer` inside GitHub Actions
 - [ ] A second grant or a second outbound on the same UTC day
 - [ ] Outbound above 0.5 XRP (`500000` drops) or with `payTo` W3
 - [ ] Funding a W6 grant from W0

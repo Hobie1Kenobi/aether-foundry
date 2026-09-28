@@ -1,0 +1,16 @@
+[Unit]
+Description=Aether Foundry runtime daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/path/aether-foundry
+EnvironmentFile=/workspace/aether-foundry-secrets/.env
+ExecStart=/usr/bin/npm run runtime:watch
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

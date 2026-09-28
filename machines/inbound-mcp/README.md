@@ -26,8 +26,13 @@ Full handshake, loopback HTTP, and refusals: [`RUNBOOK.md`](./RUNBOOK.md).
 | `director_status` | read | `lab/director-state.json` and `GET /api/status` (404 degrades) |
 | `grant_eligibility` | read | `npm run grants:scan` (no pay) |
 | `amm_quote` | read | public `amm_info`, unpaid composition-quote |
-| `walk_in_buy` | delegated | `npm run buy:walk-in -- --dry-run` while `MCP_SIGN=off` |
-| `x402_buy` | delegated | argv for `npm run x402:pay` ; not executed |
+| `walk_in_buy` | delegated | `npm run buy:walk-in -- --dry-run` while `MCP_SIGN=off`. Armed box signer may POST `/sign` only after `/health` is 200 and the offer is `sold_out` |
+| `x402_buy` | delegated | argv for `npm run x402:pay` ; not executed. Armed box signer may POST a W3 payment to the foreign shop |
+| `sign_tx` | loopback | POST `127.0.0.1:8787/sign` when `MCP_SIGN=on`, `FOUNDRY_AGENT_SIGN=yes`, and `/health` is 200 |
+| `dry_run_tx` | loopback | POST `/dry-run`. Does not load a key |
+| `agent_health` | read | Signer `/health` plus desk `/api/status` |
+
+`tools.json` stays the seven inbound tools. `sign_tx`, `dry_run_tx`, and `agent_health` are registered in `src/mcp/tools.js` for the box process. The desk route does not list them.
 
 Read tools take no secrets. Buy tools must not add a seed field to `inputSchema`. The Walk-In script's own environment may hold `WALKIN_BUYER_SEED` or `XRPL_BUYER_SEED`, or the command uses `--faucet`. Those names stay out of MCP arguments.
 

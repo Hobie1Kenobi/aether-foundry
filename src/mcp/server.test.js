@@ -57,6 +57,9 @@ describe("catalog", () => {
       "director_status",
       "grant_eligibility",
       "amm_quote",
+      "sign_tx",
+      "dry_run_tx",
+      "agent_health",
     ]);
     const blob = JSON.stringify(listed);
     assert.doesNotMatch(blob, /seed|secret|private_key/i);
@@ -438,9 +441,109 @@ describe("desk facade source", () => {
   it("stays seedless and does not sign", () => {
     const route = fs.readFileSync(path.join(ROOT, "web", "app", "api", "mcp", "route.ts"), "utf8");
     assert.equal(route.includes("Wallet.sign"), false);
+    assert.equal(route.includes("sign_tx"), false);
+    assert.equal(route.includes("/sign"), false);
     assert.doesNotMatch(route, /sEd[1-9A-HJ-NP-Za-km-z]{15,}/);
     assert.match(route, /delegated:\s*true/);
     assert.match(route, /VERCEL|deskSigns/);
     assert.match(route, /npm run buy:walk-in -- --dry-run/);
+  });
+});
+
+describe("agent signer hooks", () => {
+  const TOKEN = "test-signer-token-ok";
+
+  function armedFetch(routes) {
+    const calls = [];
+    const fetch = async (url, init) => {
+      calls.push({ url: String(url), init });
+      const target = String(url);
+      if (routes[target]) return routes[target](url, init);
+      throw new Error(`unexpected fetch ${target}`);
+    };
+    return { calls, fetch };
+  }
+
+  it("posts /sign for a sold-out walk-in remint and refuses an open offer", async () => {
+    const health = "http://127.0.0.1:8787/health";
+    const walk = `${DESK}/api/inbound/walk-in`;
+    const sign = "http://127.0.0.1:8787/sign";
+    const open = armedFetch({
+      [health]: () => jsonRes({ network_id: 1, wallets_ready: ["W2"], signing: true }),
+      [walk]: () => jsonRes({ networkId: 1, status: "open", seller: "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw", offers: [] }),
+    });
+    const held = await tools.callTool("walk_in_buy", {}, {
+      env: { MCP_SIGN: "on", FOUNDRY_AGENT_SIGN: "yes", FOUNDRY_SIGNER_TOKEN: TOKEN },
+      fetch: open.fetch,
+      deskUrl: DESK,
+    });
+    assert.equal(held.posted, false);
+    assert.equal(held.code, "OFFER_OPEN");
+    assert.equal(open.calls.some((call) => call.url === sign), false);
+    const sold = armedFetch({
+      [health]: () => jsonRes({ network_id: 1, wallets_ready: ["W2"], signing: true }),
+      [walk]: () => jsonRes({ networkId: 1, status: "sold_out", offers: [] }),
+      [sign]: (_url, init) => {
+        const body = JSON.parse(init.body);
+        assert.equal(body.wallet, "W2");
+        assert.equal(body.intent, "walk_in_remint");
+        assert.equal(body.tx.TransactionType, "NFTokenMint");
+        assert.equal(init.headers.authorization, `Bearer ${TOKEN}`);
+        return jsonRes({ hash: "A".repeat(64), ledger_index: 1, result: "tesSUCCESS" });
+      },
+    });
+    const posted = await tools.callTool("walk_in_buy", {}, {
+      env: { MCP_SIGN: "on", FOUNDRY_AGENT_SIGN: "yes", FOUNDRY_SIGNER_TOKEN: TOKEN },
+      fetch: sold.fetch,
+      deskUrl: DESK,
+    });
+    assert.equal(posted.posted, true);
+    assert.equal(posted.result, "tesSUCCESS");
+    assert.equal(JSON.stringify(posted).includes(TOKEN), false);
+  });
+
+  it("posts an allowlisted W3 payment for x402_buy and rejects a key argument", async () => {
+    const health = "http://127.0.0.1:8787/health";
+    const sign = "http://127.0.0.1:8787/sign";
+    const dry = "http://127.0.0.1:8787/dry-run";
+    const { calls, fetch } = armedFetch({
+      [health]: () => jsonRes({ network_id: 1, wallets_ready: ["W3"], signing: true }),
+      [sign]: () => jsonRes({ hash: "B".repeat(64), ledger_index: 2, result: "tesSUCCESS" }),
+      [dry]: () => jsonRes({ dry_run: true, key_loaded: false, signed: false }),
+      [`${DESK}/api/status`]: () => jsonRes({ networkId: 1, deskSigns: false }),
+    });
+    const env = { MCP_SIGN: "on", FOUNDRY_AGENT_SIGN: "yes", FOUNDRY_SIGNER_TOKEN: TOKEN };
+    const bought = await tools.callTool("x402_buy", { sku: "machine-spec" }, { env, fetch, deskUrl: DESK });
+    const body = JSON.parse(calls.find((call) => call.url === sign).init.body);
+    assert.equal(body.tx.Account, "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw");
+    assert.equal(body.tx.Destination, "r3JbqcVQ4Pov4MhFUMSdnro7s3VgpaqssZ");
+    assert.notEqual(body.tx.Destination, body.tx.Account);
+    assert.equal(body.tx.Amount, "100000");
+    assert.equal(bought.executed, true);
+    assert.equal(JSON.stringify(bought).includes(TOKEN), false);
+    await throwsCode(
+      tools.callTool("sign_tx", { wallet: "W5", tx: { seed: SENTINEL } }, { env, fetch, deskUrl: DESK }),
+      "FORBIDDEN_ARG"
+    );
+    const healthOut = await tools.callTool("agent_health", {}, { env: {}, fetch, deskUrl: DESK });
+    assert.equal(healthOut.deskSigns, false);
+    assert.equal(healthOut.signer.body.signing, true);
+    assert.equal(healthOut.desk.body.networkId, 1);
+    await throwsCode(
+      tools.callTool("x402_buy", { sku: "reserve-audit" }, {
+        env: { MCP_SIGN: "on", FOUNDRY_AGENT_SIGN: "yes", CI: "true", FOUNDRY_SIGNER_TOKEN: TOKEN },
+        fetch: async () => { throw new Error("fetch should not run"); },
+        deskUrl: DESK,
+      }),
+      "CI"
+    );
+    await throwsCode(
+      tools.callTool("sign_tx", { wallet: "W1", tx: { TransactionType: "Payment" } }, {
+        env: { MCP_SIGN: "on", FOUNDRY_AGENT_SIGN: "yes", VERCEL: "1", FOUNDRY_SIGNER_TOKEN: TOKEN },
+        fetch: async () => { throw new Error("fetch should not run"); },
+        deskUrl: DESK,
+      }),
+      "DESK"
+    );
   });
 });

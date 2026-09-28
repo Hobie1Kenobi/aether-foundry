@@ -65,8 +65,10 @@ function parseArgs(argv) {
   return out;
 }
 
-function readSeed(name, env, io) {
-  if (!policy.KEY_ENVS.includes(name)) throw policy.coded(`refusing seed key ${name}`, "SEED");
+function readSeed(name, env, io, allow) {
+  const allowed = allow || policy.KEY_ENVS;
+  if (name === "W0_SEED") throw policy.coded("refusing W0 master seed", "W0");
+  if (!allowed.includes(name)) throw policy.coded(`refusing seed key ${name}`, "SEED");
   if (env && env[name]) return env[name];
   const file = (env && env.AETHER_SECRETS) || "/workspace/aether-foundry-secrets/.env";
   const exists = (io && io.existsSync) || fs.existsSync;

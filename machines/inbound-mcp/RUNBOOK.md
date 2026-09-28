@@ -40,10 +40,13 @@ Run that command yourself, on the operator machine, if you want a dry-run. A liv
 | `director_status` | no | Read `lab/director-state.json`. `GET /api/status`. HTTP 404 is `{ available: false, status: 404 }` until that route exists |
 | `grant_eligibility` | no | `grants:scan` via `executeScan` (dry-run). No `grants:pay` |
 | `amm_quote` | no | `server_info` then `amm_info` on `https://s.altnet.rippletest.net:51234`. Unpaid `GET /api/x402/composition-quote`. No `PAYMENT-SIGNATURE` |
-| `walk_in_buy` | delegated | Default: the dry-run command above. `MCP_SIGN=on` still only returns argv |
-| `x402_buy` | delegated | Default: `argv` for `npm run x402:pay -- <sku>`. Not executed |
+| `walk_in_buy` | delegated, or POST `/sign` | Default: the dry-run command above. `MCP_SIGN=on` without `FOUNDRY_AGENT_SIGN=yes` still only returns argv. When `MCP_SIGN=on`, `FOUNDRY_AGENT_SIGN=yes`, and signer `/health` is 200, a `sold_out` shop POSTs a W2 `NFTokenMint` to `/sign`. An open offer is not reminted |
+| `x402_buy` | delegated, or POST `/sign` | Default: `argv` for `npm run x402:pay -- <sku>`. Not executed. Armed the same way, it POSTs a W3 Payment to the foreign shop for the SKU amount. It does not pay W3 |
+| `sign_tx` | POST `/sign` | Wallet `W1`–`W7` plus a transaction object. Refuses W0. Requires the three gates above |
+| `dry_run_tx` | POST `/dry-run` | Unsigned autofill. Does not load a key |
+| `agent_health` | no | `GET` signer `/health` and desk `/api/status` |
 
-Catalog file: `machines/inbound-mcp/tools.json`.
+Inbound catalog file: `machines/inbound-mcp/tools.json` (seven tools). `sign_tx`, `dry_run_tx`, and `agent_health` are registered in `src/mcp/tools.js` and are not rows in that file.
 
 ## Refusals
 
@@ -51,6 +54,8 @@ Catalog file: `machines/inbound-mcp/tools.json`.
 |------|--------|
 | Argument named `seed`, `secret`, or `private_key` | Error `FORBIDDEN_ARG`. Stderr says the name was rejected. The value is not logged |
 | `MCP_SIGN=on` and `CI` / `GITHUB_ACTIONS` / `CI=1` on a buy that would sign | Error `CI`. Nothing is submitted |
+| Argument named `seed`, `secret`, or `private_key` on `sign_tx` | Error `FORBIDDEN_ARG`. The value is not logged |
+| `VERCEL` set on `sign_tx` / an armed buy | Error `DESK`. Do not deploy this MCP on Vercel |
 | Host `ripple.com`, `xrplcluster.com`, `xrpl.ws`, `xrpl.link`, `xahau.network` | Error `MAINNET` before fetch |
 | Network id `0` or `21337` | Error `MAINNET` |
 | `server_info` omits `network_id` | Error `RPC`. No guessed ledger index |

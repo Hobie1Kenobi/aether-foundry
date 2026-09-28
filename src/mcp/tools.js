@@ -9,16 +9,79 @@
 const fs = require("fs");
 const path = require("path");
 const anchors = require("../director/anchors");
+const grants = require("../grants/policy");
 const runtimePolicy = require("../runtime/policy");
+const foreignShop = require("../../machines/x402-outbound/foreign-public");
+const x402Rules = require("../../web/lib/x402-rules");
 
 const CATALOG_PATH = path.join(anchors.repoRoot(), "machines", "inbound-mcp", "tools.json");
 const DESK_URL = String(anchors.DESK_URL).replace(/\/$/, "");
 const XRPL_HTTP = anchors.XRPL_HTTP;
 const SKUS = ["machine-spec", "reserve-audit", "composition-quote"];
 const WALK_IN_DRY = "npm run buy:walk-in -- --dry-run";
+const WALLETS = ["W1", "W2", "W3", "W4", "W5", "W6", "W7"];
+
+const BOX_SIGNER_TOOLS = [
+  {
+    name: "sign_tx",
+    description: "POST a wallet id and transaction to the loopback signer. W1-W7 only. The desk never calls this.",
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    inputSchema: {
+      type: "object",
+      properties: {
+        wallet: { type: "string", enum: WALLETS },
+        tx: { type: "object", description: "Unsigned transaction JSON. Account must match the wallet." },
+        intent: { type: "string", description: "Short label archived with a tesSUCCESS hash." },
+      },
+      required: ["wallet", "tx"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "dry_run_tx",
+    description: "POST the loopback signer /dry-run for an unsigned autofill. Does not load a key.",
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    inputSchema: {
+      type: "object",
+      properties: {
+        wallet: { type: "string", enum: WALLETS },
+        tx: { type: "object" },
+        intent: { type: "string" },
+      },
+      required: ["wallet", "tx"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "agent_health",
+    description: "GET the loopback signer /health and the desk /api/status. Does not sign.",
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+];
 
 function signingEnabled(env) {
   return String((env && env.MCP_SIGN) || "off").trim().toLowerCase() === "on";
+}
+
+function agentSignEnabled(env) {
+  return String((env && env.FOUNDRY_AGENT_SIGN) || "").trim() === "yes";
+}
+
+function signerHost(env) {
+  const value = String((env && env.FOUNDRY_SIGNER_BIND) || "127.0.0.1").trim().toLowerCase();
+  if (value === "localhost" || value === "127.0.0.1") return "127.0.0.1";
+  if (value === "::1") return "::1";
+  throw runtimePolicy.coded("refusing non-loopback signer bind", "BIND");
+}
+
+function signerOrigin(env) {
+  const host = signerHost(env);
+  const port = Number((env && env.FOUNDRY_SIGNER_PORT) || 8787);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw runtimePolicy.coded("refusing signer port", "BIND");
+  }
+  return `http://${host}:${port}`;
 }
 
 function loadCatalog(file) {
@@ -30,17 +93,25 @@ function loadCatalog(file) {
   return doc;
 }
 
-function listTools(file) {
-  return loadCatalog(file).tools.map((tool) => ({
+function publicTool(tool) {
+  return {
     name: tool.name,
     description: tool.description,
     inputSchema: tool.inputSchema,
     annotations: tool.annotations,
-  }));
+  };
+}
+
+function listTools(file) {
+  return loadCatalog(file).tools.map(publicTool).concat(BOX_SIGNER_TOOLS.map(publicTool));
 }
 
 function findTool(name, file) {
-  return loadCatalog(file).tools.find((tool) => tool.name === name) || null;
+  return (
+    loadCatalog(file).tools.find((tool) => tool.name === name) ||
+    BOX_SIGNER_TOOLS.find((tool) => tool.name === name) ||
+    null
+  );
 }
 
 function resolveIo(io) {
@@ -386,11 +457,97 @@ function commandFromArgv(argv) {
   return argv.map(shellQuote).join(" ");
 }
 
+async function signerHealth(io) {
+  const origin = signerOrigin(io.env);
+  return requestJson(io, `${origin}/health`, { method: "GET", headers: { accept: "application/json" } });
+}
+
+async function requireArmed(io) {
+  if (io.env && (io.env.VERCEL || io.env.VERCEL === "1")) {
+    throw runtimePolicy.coded("refusing signing MCP on Vercel", "DESK");
+  }
+  if (!signingEnabled(io.env)) throw runtimePolicy.coded("MCP_SIGN is off", "SIGNER");
+  if (!agentSignEnabled(io.env)) throw runtimePolicy.coded("FOUNDRY_AGENT_SIGN is not yes", "AGENT_SIGN");
+  runtimePolicy.assertNotCi(io.env);
+  const health = await signerHealth(io);
+  if (health.status !== 200 || !health.body || health.body.signing !== true) {
+    throw runtimePolicy.coded("signer health is not 200", "SIGNER");
+  }
+  return health.body;
+}
+
+async function postSigner(io, pathname, payload) {
+  const token = io.env && io.env.FOUNDRY_SIGNER_TOKEN;
+  if (!token) throw runtimePolicy.coded("refusing empty signer token", "TOKEN");
+  runtimePolicy.assertNoSeedFields(payload);
+  const origin = signerOrigin(io.env);
+  const res = await requestJson(io, `${origin}${pathname}`, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const packed = JSON.stringify(res.body || {});
+  if (packed.includes(token)) throw runtimePolicy.coded("signer echoed the token", "TOKEN");
+  if (res.body) runtimePolicy.assertNoSeedFields(res.body);
+  if (!res.ok) {
+    const code = res.body && res.body.code ? res.body.code : "SIGNER";
+    const message = res.body && res.body.error ? res.body.error : "signer refused";
+    throw runtimePolicy.coded(runtimePolicy.redact(message, [token]), code);
+  }
+  return Object.assign({
+    posted: true,
+    delegated: false,
+    signed: pathname === "/sign",
+    executed: pathname === "/sign",
+  }, res.body);
+}
+
+async function agentHealth(io) {
+  const origin = signerOrigin(io.env);
+  let signer;
+  try {
+    const health = await signerHealth(io);
+    signer = { available: health.status === 200, status: health.status, body: health.body };
+  } catch (error) {
+    if (error && (error.code === "MAINNET" || error.code === "BIND" || error.code === "DESK")) throw error;
+    signer = { available: false, status: null };
+  }
+  let desk;
+  try {
+    const res = await requestJson(io, `${io.deskUrl}/api/status`, { method: "GET", headers: { accept: "application/json" } });
+    if (res.body) assertDeskNetwork(res.body);
+    desk = { available: Boolean(res.ok && res.body), status: res.status, body: res.ok ? res.body : null };
+  } catch (error) {
+    if (error && (error.code === "MAINNET" || error.code === "SCHEMA" || error.code === "SEED")) throw error;
+    desk = { available: false, status: null };
+  }
+  const payload = { signing: "none", deskSigns: false, signer, desk, origin };
+  runtimePolicy.assertNoSeedFields(payload);
+  return payload;
+}
+
+async function signTx(args, io, pathname) {
+  await requireArmed(io);
+  if (!args.tx || typeof args.tx !== "object" || Array.isArray(args.tx)) {
+    throw runtimePolicy.coded("tx must be an object", "ARGS");
+  }
+  return postSigner(io, pathname, {
+    wallet: args.wallet,
+    intent: args.intent,
+    tx: args.tx,
+    dry_run: pathname === "/dry-run",
+  });
+}
+
 function walkInWouldSign(argv) {
   return argv.includes("--faucet") || argv.includes("--record") || argv.includes("--with-aeth") || !argv.includes("--dry-run");
 }
 
-function walkInBuy(args, io) {
+async function walkInBuy(args, io) {
   if (!signingEnabled(io.env)) {
     return {
       delegated: true,
@@ -410,17 +567,42 @@ function walkInBuy(args, io) {
   if (args.offer_id) argv.push("--offer", String(args.offer_id).toUpperCase());
   if (args.record) argv.push("--record");
   if (argv.length === 4) argv.push("--dry-run");
-  if (walkInWouldSign(argv)) runtimePolicy.assertNotCi(io.env);
-  return {
-    delegated: true,
-    signed: false,
-    executed: false,
-    command: commandFromArgv(argv),
-    argv,
-  };
+  if (!agentSignEnabled(io.env)) {
+    if (walkInWouldSign(argv)) runtimePolicy.assertNotCi(io.env);
+    return {
+      delegated: true,
+      signed: false,
+      executed: false,
+      command: commandFromArgv(argv),
+      argv,
+    };
+  }
+  runtimePolicy.assertNotCi(io.env);
+  await requireArmed(io);
+  const status = await walkInStatus(io);
+  if (status.status !== "sold_out") {
+    return {
+      delegated: true,
+      signed: false,
+      executed: false,
+      posted: false,
+      code: "OFFER_OPEN",
+      command: WALK_IN_DRY,
+      argv: ["npm", "run", "buy:walk-in", "--", "--dry-run"],
+      message: "Walk-In is open. The signer will not remint.",
+    };
+  }
+  const remint = require("../runtime/actions/remint");
+  const built = remint.buildUnsigned();
+  return postSigner(io, args.dry_run ? "/dry-run" : "/sign", {
+    wallet: "W2",
+    intent: "walk_in_remint",
+    dry_run: Boolean(args.dry_run),
+    tx: built.mint,
+  });
 }
 
-function x402Buy(args, io) {
+async function x402Buy(args, io) {
   const sku = args.sku;
   if (!SKUS.includes(sku)) throw runtimePolicy.coded("unknown sku", "ARGS");
   const argv = ["npm", "run", "x402:pay", "--", sku];
@@ -434,18 +616,35 @@ function x402Buy(args, io) {
       desk: io.deskUrl,
     };
   }
+  if (!agentSignEnabled(io.env)) {
+    runtimePolicy.assertNotCi(io.env);
+    if (args.prompt) argv.push("--prompt", args.prompt);
+    if (args.units != null) argv.push("--units", String(args.units));
+    if (args.record) argv.push("--record");
+    return {
+      delegated: true,
+      signed: false,
+      executed: false,
+      command: commandFromArgv(argv),
+      argv,
+      desk: io.deskUrl,
+    };
+  }
   runtimePolicy.assertNotCi(io.env);
-  if (args.prompt) argv.push("--prompt", args.prompt);
-  if (args.units != null) argv.push("--units", String(args.units));
-  if (args.record) argv.push("--record");
-  return {
-    delegated: true,
-    signed: false,
-    executed: false,
-    command: commandFromArgv(argv),
-    argv,
-    desk: io.deskUrl,
-  };
+  await requireArmed(io);
+  const skuRow = x402Rules.getSku(sku);
+  return postSigner(io, "/sign", {
+    wallet: "W3",
+    intent: "x402_buy",
+    tx: {
+      TransactionType: "Payment",
+      Account: anchors.WALLETS.W3.address,
+      Destination: foreignShop.FOREIGN_ADDRESS,
+      Amount: skuRow.drops,
+      SourceTag: skuRow.sourceTag,
+      Memos: [grants.memo("purpose", "x402-outbound"), grants.memo("sku", sku)],
+    },
+  });
 }
 
 async function callTool(name, args, io) {
@@ -460,8 +659,11 @@ async function callTool(name, args, io) {
   else if (name === "director_status") payload = await directorStatus(ctx);
   else if (name === "grant_eligibility") payload = await grantEligibility(ctx);
   else if (name === "amm_quote") payload = await ammQuote(ctx);
-  else if (name === "walk_in_buy") payload = walkInBuy(parsed, ctx);
-  else if (name === "x402_buy") payload = x402Buy(parsed, ctx);
+  else if (name === "walk_in_buy") payload = await walkInBuy(parsed, ctx);
+  else if (name === "x402_buy") payload = await x402Buy(parsed, ctx);
+  else if (name === "sign_tx") payload = await signTx(parsed, ctx, "/sign");
+  else if (name === "dry_run_tx") payload = await signTx(parsed, ctx, "/dry-run");
+  else if (name === "agent_health") payload = await agentHealth(ctx);
   else throw runtimePolicy.coded(`unknown tool ${name}`, "UNKNOWN_TOOL");
   runtimePolicy.assertPrintSafe(JSON.stringify(payload));
   runtimePolicy.assertNoSeedFields(payload);

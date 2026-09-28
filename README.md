@@ -29,7 +29,7 @@ npm run buy:walk-in -- --faucet
 npm run mcp
 ```
 
-[`npm run mcp`](./machines/inbound-mcp/RUNBOOK.md) speaks stdio JSON-RPC. `MCP_SIGN` defaults to `off`. `walk_in_buy` returns `npm run buy:walk-in -- --dry-run` and does not sign.
+[`npm run mcp`](./machines/inbound-mcp/RUNBOOK.md) speaks stdio JSON-RPC. `MCP_SIGN` defaults to `off`. `walk_in_buy` returns `npm run buy:walk-in -- --dry-run` and does not sign. On the Foundry box, `npm run signer` binds `127.0.0.1:8787` and can RegularKey-sign allowlisted altnet transactions. The desk and GitHub Actions do not call it.
 
 No checkout required. The desk does not sign:
 
@@ -300,7 +300,7 @@ There is a second direction. `npm run x402:outbound` is W3 buying someone else's
 
 ### Agent schema
 
-[`machines/inbound-mcp/tools.json`](./machines/inbound-mcp/tools.json) is the catalog. `npm run mcp` hosts it: `walk_in_status`, `walk_in_buy`, `x402_catalog`, `x402_buy`, `director_status`, `grant_eligibility`, `amm_quote`. Read tools take no secrets. Buy tools return a delegated command (`MCP_SIGN=off` by default) and do not add a seed field. Start and refusals: [`machines/inbound-mcp/RUNBOOK.md`](./machines/inbound-mcp/RUNBOOK.md).
+[`machines/inbound-mcp/tools.json`](./machines/inbound-mcp/tools.json) is the inbound catalog: `walk_in_status`, `walk_in_buy`, `x402_catalog`, `x402_buy`, `director_status`, `grant_eligibility`, `amm_quote`. `npm run mcp` also registers `sign_tx`, `dry_run_tx`, and `agent_health` from `src/mcp/tools.js`. Those three stay off the desk route. Read tools take no secrets. Buy tools return a delegated command (`MCP_SIGN=off` by default) and do not add a seed field. Start and refusals: [`machines/inbound-mcp/RUNBOOK.md`](./machines/inbound-mcp/RUNBOOK.md).
 
 <a id="ops"></a>
 

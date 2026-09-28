@@ -5,6 +5,63 @@
   "xahau_network_id": 21338,
   "refused_network_ids": [0, 21337],
   "refused_hosts": ["ripple.com", "xrplcluster.com", "xrpl.ws", "xrpl.link", "xahau.network"],
+  "mode": "agent-sign",
+  "accounts": {
+    "W0": { "sign": false, "reason": "treasury master / signer list only" },
+    "W1": { "sign": true, "key_env": "W1_REGULAR_SEED", "daily_max_drops": "20000000" },
+    "W2": { "sign": true, "key_env": "W2_REGULAR_SEED", "daily_max_drops": "50000000" },
+    "W3": { "sign": true, "key_env": "W3_REGULAR_SEED", "daily_max_drops": "20000000" },
+    "W4": { "sign": true, "key_env": "W4_REGULAR_SEED", "daily_max_drops": "30000000" },
+    "W5": { "sign": true, "key_env": "W5_REGULAR_SEED", "daily_max_drops": "5000000" },
+    "W6": { "sign": true, "key_env": "W6_REGULAR_SEED", "daily_max_drops": "20000000" },
+    "W7": { "sign": true, "network": "xahau_testnet", "key_env": "W7_SEED", "daily_max_drops": "20000000" }
+  },
+  "tx_types": [
+    "Payment",
+    "TrustSet",
+    "OfferCreate",
+    "OfferCancel",
+    "NFTokenMint",
+    "NFTokenCreateOffer",
+    "NFTokenAcceptOffer",
+    "NFTokenCancelOffer",
+    "EscrowCreate",
+    "EscrowFinish",
+    "EscrowCancel",
+    "PaymentChannelCreate",
+    "PaymentChannelFund",
+    "PaymentChannelClaim",
+    "CheckCreate",
+    "CheckCash",
+    "CheckCancel",
+    "AMMDeposit",
+    "AMMWithdraw",
+    "DIDSet",
+    "CredentialCreate",
+    "CredentialAccept",
+    "CredentialDelete",
+    "AccountSet"
+  ],
+  "tx_types_refused": [
+    "AccountDelete",
+    "SetRegularKey",
+    "SignerListSet",
+    "Batch",
+    "EnableAmendment",
+    "UNLModify"
+  ],
+  "caps": {
+    "per_tx_drops": "10000000",
+    "motion_drops": "50000000",
+    "keep_spendable_drops": "10000000",
+    "max_tx_per_hour": 30,
+    "max_tx_per_utc_day": 200
+  },
+  "special": {
+    "epoch_scar": "do not EscrowFinish or EscrowCancel the Unix-epoch BUYER escrow",
+    "walk_in_price_drops": "10000000",
+    "batch": "refuse while watched.batch.atomic_enabled is false"
+  },
   "actions": {
     "walk_in_remint": {
       "account": "W2",
