@@ -260,6 +260,60 @@ async function getText(fetchImpl, url) {
   return { ok: Boolean(res.ok), status: res.status, text };
 }
 
+const GIT_REPO = "Hobie1Kenobi/aether-foundry";
+const GIT_SHA_RE = /^[0-9a-f]{40}$/;
+const GIT_PATHS = {
+  metrics: "lab/metrics.json",
+  pnl: "market/pnl.md",
+  director: "lab/director-state.json",
+  ledger: "lab/ledger-log.jsonl",
+};
+let mainShaCache = { sha: "", at: 0 };
+
+function gitUrlsAtSha(sha) {
+  const ref = String(sha || "").toLowerCase();
+  if (!GIT_SHA_RE.test(ref)) throw new Error("refusing git ref");
+  const base = `https://raw.githubusercontent.com/${GIT_REPO}/${ref}`;
+  return {
+    metrics: `${base}/${GIT_PATHS.metrics}`,
+    pnl: `${base}/${GIT_PATHS.pnl}`,
+    director: `${base}/${GIT_PATHS.director}`,
+    ledger: `${base}/${GIT_PATHS.ledger}`,
+  };
+}
+
+async function mainGitFiles(fetchImpl, opts) {
+  if (typeof fetchImpl !== "function") throw new Error("git ref fetch is missing");
+  const options = opts || {};
+  const now = options.now == null ? Date.now() : options.now;
+  const cacheMs = options.cacheMs == null ? 60000 : options.cacheMs;
+  if (cacheMs > 0 && mainShaCache.sha && now - mainShaCache.at < cacheMs) {
+    return gitUrlsAtSha(mainShaCache.sha);
+  }
+  const res = await fetchImpl(`https://api.github.com/repos/${GIT_REPO}/commits/main`, {
+    method: "GET",
+    headers: {
+      accept: "application/vnd.github+json",
+      "user-agent": "aether-foundry-desk",
+    },
+    cache: "no-store",
+    signal: AbortSignal.timeout(8000),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`git ref HTTP ${res.status}`);
+  let body;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    throw new Error("git ref is not JSON");
+  }
+  const sha = body && body.sha;
+  if (!GIT_SHA_RE.test(String(sha || "").toLowerCase())) throw new Error("git ref omitted sha");
+  const ref = String(sha).toLowerCase();
+  if (cacheMs > 0) mainShaCache = { sha: ref, at: now };
+  return gitUrlsAtSha(ref);
+}
+
 function networkIdOf(info) {
   const id = info && info.info ? info.info.network_id : undefined;
   if (id == null || id === "") return null;
@@ -519,4 +573,6 @@ module.exports = {
   readBatch,
   collectStatus,
   httpsUrl,
+  gitUrlsAtSha,
+  mainGitFiles,
 };

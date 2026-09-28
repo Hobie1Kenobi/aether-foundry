@@ -241,9 +241,56 @@ test("a failed count parse is null and a bad hash is not published", async () =>
   assert.doesNotMatch(JSON.stringify(refused), new RegExp(probe));
 });
 
+test("status lab files are pinned to the main commit sha", async () => {
+  const sha = "a".repeat(40);
+  assert.throws(() => status.gitUrlsAtSha("main"), /refusing git ref/);
+  const urls = status.gitUrlsAtSha(sha);
+  assert.equal(urls.metrics.includes("/main/"), false);
+  assert.equal(urls.metrics, `https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/${sha}/lab/metrics.json`);
+  assert.equal(urls.ledger, `https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/${sha}/lab/ledger-log.jsonl`);
+  const metricsText = fs.readFileSync(path.join(ROOT, "lab", "metrics.json"), "utf8");
+  const ledgerText = fs.readFileSync(path.join(ROOT, "lab", "ledger-log.jsonl"), "utf8");
+  const director = fs.readFileSync(path.join(ROOT, "lab", "director-state.json"), "utf8");
+  const pnl = fs.readFileSync(path.join(ROOT, "market", "pnl.md"), "utf8");
+  const live = JSON.parse(metricsText).last_heartbeat.hash;
+  let apiCalls = 0;
+  const fetchImpl = async (url) => {
+    const target = String(url);
+    assert.equal(target.includes("/aether-foundry/main/"), false);
+    if (target === "https://api.github.com/repos/Hobie1Kenobi/aether-foundry/commits/main") {
+      apiCalls += 1;
+      return textResponse(JSON.stringify({ sha }));
+    }
+    const pages = {
+      [urls.metrics]: metricsText,
+      [urls.pnl]: pnl,
+      [urls.director]: director,
+      [urls.ledger]: ledgerText,
+    };
+    if (pages[target] == null) return textResponse("missing", 404);
+    return textResponse(pages[target]);
+  };
+  const resolved = await status.mainGitFiles(fetchImpl, { cacheMs: 60000, now: 1 });
+  assert.equal(apiCalls, 1);
+  assert.deepEqual(resolved, urls);
+  const cached = await status.mainGitFiles(fetchImpl, { cacheMs: 60000, now: 1000 });
+  assert.equal(apiCalls, 1);
+  assert.equal(cached.metrics, urls.metrics);
+  const body = await status.collectStatus(baseOpts(fetchImpl, resolved));
+  assert.equal(body.last_heartbeat.hash, live);
+  assert.equal(body.last_heartbeat.hash, "2B298A910CB3966EF6E60AD3C3ABD167D43ED382F34E2D5963292304C0203C01");
+  assert.equal(body.director_updated_at, JSON.parse(director).updated_at);
+  await assert.rejects(
+    () => status.mainGitFiles(async () => textResponse("nope", 403), { cacheMs: 0, now: 2 }),
+    /git ref HTTP 403/
+  );
+});
+
 test("desk route and toml link status without a signer", () => {
   const route = fs.readFileSync(path.join(ROOT, "web", "app", "api", "status", "route.ts"), "utf8");
   assert.match(route, /collectStatus/);
+  assert.match(route, /mainGitFiles/);
+  assert.doesNotMatch(route, /raw\.githubusercontent\.com\/Hobie1Kenobi\/aether-foundry\/main/);
   assert.doesNotMatch(route, /Wallet|fromSeed|sign\(/);
   assert.doesNotMatch(route, /_SEED/);
   const home = fs.readFileSync(path.join(ROOT, "web", "components", "DeskCards.tsx"), "utf8");

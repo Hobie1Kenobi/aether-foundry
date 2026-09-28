@@ -21,6 +21,23 @@ export type StatusBody = {
   error?: string;
 };
 
+export function gitUrlsAtSha(sha: string): {
+  metrics: string;
+  pnl: string;
+  director: string;
+  ledger: string;
+};
+
+export function mainGitFiles(
+  fetchImpl: typeof fetch,
+  opts?: { now?: number; cacheMs?: number }
+): Promise<{
+  metrics: string;
+  pnl: string;
+  director: string;
+  ledger: string;
+}>;
+
 export function collectStatus(opts: {
   fetch: typeof fetch;
   xrplHttp: string;
