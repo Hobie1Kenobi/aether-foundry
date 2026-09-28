@@ -94,6 +94,13 @@ function recordOutbound(input, opts = {}) {
   const pnl = fs.readFileSync(pnlPath, "utf8");
   const nextPnl = updatePnl(pnl, count);
   if (nextPnl !== pnl) fs.writeFileSync(pnlPath, nextPnl);
+  if (opts.root || (!opts.logPath && !opts.pnlPath)) {
+    require("./runtime/metrics").refresh(opts.root || ROOT, {
+      now: new Date(event.ts),
+      ledgerPath: opts.logPath,
+      pnlPath: opts.pnlPath,
+    });
+  }
   return { appended: !already, count, hash: event.hash };
 }
 

@@ -34,7 +34,7 @@ npm run grants:pay -- --record
 
 Prefer `W6_REGULAR_SEED`. The signer address must be the W6 regular key in `machines/governance-board/activated.json`. `W6_SEED` or `GRANTS_SEED` is the master fallback. The command refuses CI, mainnet hosts, and NetworkID 0.
 
-Success writes `lab/grants/ledger.jsonl` immediately. `--record` also appends `lab/ledger-log.jsonl`, increments `grants_paid` in `market/pnl.md`, and appends a table to `RESULTS.md`. Without a `tesSUCCESS` hash, none of those files change.
+Success writes `lab/grants/ledger.jsonl` immediately. `--record` also appends `lab/ledger-log.jsonl`, increments `grants_paid` in `market/pnl.md`, appends a table to `RESULTS.md`, and refreshes `lab/metrics.json` from the public ledger. `last_grant_hash` is that `tesSUCCESS` hash. Without a `tesSUCCESS` hash, none of those files change. A second live payment on the same UTC day is refused before the seed file is opened. The Foundry-box clock runs the dry-run only; see `machines/foundry-runtime/RUNBOOK.md`.
 
 Optional AETH, only for an `aeth_counterparty` whose trust line is the reason you are paying:
 
@@ -51,6 +51,7 @@ Exit 3 on a live pay means nobody eligible is outside the cooldown. Do not add a
 ## Do not
 
 - Run `npm run grants:pay` without `--dry-run` in GitHub Actions.
+- Pay a second grant on the same UTC day. The daemon and `grants:pay` both stop at one.
 - Pay STRANGER, BUYER, W0–W6, or the AMM.
 - Fund the grant from W0.
 - Touch the Unix-epoch BUYER escrow.

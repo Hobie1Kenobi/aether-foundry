@@ -50,6 +50,18 @@ Adversary checks from the runtime activation list. This pack is Workstream 1. La
 
 **Check:** this PR does not start the MCP server. The allowlist schema already refuses a `seed` key and a seed-shaped value, so a later tool cannot park a secret inside `allowlist.json` without failing `loadAllowlist`. No MCP response fixture is added here.
 
+## Grant and outbound caps on the daily clock
+
+**Claim:** the Foundry-box crontab pays every candidate it prints, or an outbound invoice above 0.5 XRP, or a second grant the same UTC day.
+
+**Check:** the crontab lines are `npm run grants:scan && npm run grants:pay -- --dry-run` at 10:15 America/Chicago and `npm run x402:outbound -- --dry-run` at 10:45. Dry-run does not load a seed. `x402:outbound --dry-run` with no URL prints `seed not loaded` and exits 0. Live `grants:pay` throws `DAY` when `lab/ledger-log.jsonl` already has a `grant_paid` row for that UTC day, before `loadSeed`. Live `x402:outbound` throws when an `x402_outbound` row exists for that UTC day, and throws `CAP` when the 402 amount is above `500000` drops. The daemon allowlist still caps a grant at `1000000` drops and an outbound at `500000` drops, one of each per UTC day. `.github/workflows/` does not contain `runtime:live`, `grants:pay`, or `x402:outbound`.
+
+## Unique inbound hygiene
+
+**Claim:** `inbound_counterparties` counts STRANGER, BUYER, W0–W6, the AMM, or the foreign shop W3 paid.
+
+**Check:** `uniqueInbound` reads `buyer`, `x402_hit` `payer`, and `grant_paid` `destination`. An address in `web/lib/xrpl-public.ts` `WALLETS` is dropped. `pay_to` on `x402_outbound` is not an inbound field, so the foreign shop is not a counterparty. A seed-shaped buyer throws `SEED` and is not written into `lab/metrics.json`. The metrics file stores the count and ledger hashes. It does not store seeds. `last_heartbeat` remains the object `/api/status` already reads. `last_grant_hash` and `last_outbound_hash` are copied from `tesSUCCESS` rows already in `lab/ledger-log.jsonl`. A missing row stays null.
+
 ## Batch because the clock ran on a Monday
 
 **Claim:** a Monday cron submits `Batch` while `atomic_enabled` is false.

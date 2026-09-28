@@ -107,6 +107,14 @@ function recordGrant(row, opts) {
   if (!results.includes(event.hash)) {
     appendLine(resultsPath, resultsBlock(event), io);
   }
+  if (opts.root) {
+    require("../runtime/metrics").refresh(opts.root, {
+      io,
+      now: event.ts ? new Date(event.ts) : new Date(),
+      ledgerPath: opts.ledgerPath,
+      pnlPath: opts.pnlPath,
+    });
+  }
   return { appended: !duplicate, public: true, hash: event.hash, count };
 }
 

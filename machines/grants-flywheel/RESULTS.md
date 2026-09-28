@@ -15,6 +15,10 @@
 
 No seeds in this file.
 
+## Metrics
+
+`npm run grants:pay -- --record` refreshes `lab/metrics.json` after the public append. `last_grant_hash` is the hash in the Grant section below, read back from `lab/ledger-log.jsonl`. This note does not add a second hash.
+
 ## Grant 2026-09-27T22:36:35.521Z
 
 W6 paid a non-labeled counterparty. Recorded only after `tesSUCCESS`.

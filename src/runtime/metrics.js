@@ -1,13 +1,21 @@
 "use strict";
 
 /**
- * Public counters for the desk. Hashes stay null until a tesSUCCESS archive.
+ * Public counters for the desk. Hashes come from lab/ledger-log.jsonl.
+ * A missing hash stays null. This module does not invent one.
  * A missing file is seeded from market/pnl.md. A failed parse does not invent a number.
+ *
+ * unique_inbound is the set of classic `buyer` addresses, `x402_hit` payers,
+ * and `grant_paid` destinations that are absent from WALLETS.
  */
 
 const fs = require("fs");
 const path = require("path");
 const anchors = require("../director/anchors");
+const guard = require("../x402-outbound-guard");
+const hits = require("../x402-hits");
+const outboundRecord = require("../x402-outbound-record");
+const grantRecord = require("../grants/record");
 const policy = require("./policy");
 
 const COUNT_KEYS = ["x402_hits", "x402_outbound_hits", "grants_paid", "inbound_counterparties"];
@@ -137,6 +145,140 @@ function seedIfMissing(root, now, io) {
   return writeMetrics(root, doc, disk);
 }
 
+function parseJsonl(text) {
+  const rows = [];
+  for (const line of String(text || "").split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      rows.push(JSON.parse(line));
+    } catch {
+      /* skip torn lines */
+    }
+  }
+  return rows;
+}
+
+function isSeedShaped(value) {
+  const text = String(value);
+  return anchors.FAMILY_SEED_RE.test(text) || anchors.EMBEDDED_SEED_RE.test(text) || /sEd[1-9A-HJ-NP-Za-km-z]{15,}/.test(text);
+}
+
+function considerInbound(seen, value, labeled) {
+  if (value == null || value === "") return;
+  if (isSeedShaped(value)) {
+    throw policy.coded("refusing a seed-shaped counterparty in public records", "SEED");
+  }
+  if (!anchors.ADDRESS_RE.test(value)) return;
+  if (labeled && labeled.has(value)) return;
+  seen.add(value);
+}
+
+function uniqueInbound(text, labeled) {
+  const index = labeled || guard.foundryIndex();
+  const seen = new Set();
+  for (const row of parseJsonl(text)) {
+    if (!row || typeof row !== "object") continue;
+    const action = String(row.action || row.event || "");
+    if (row.buyer) considerInbound(seen, row.buyer, index);
+    if (action === "x402_hit" && row.payer) considerInbound(seen, row.payer, index);
+    if (action === "grant_paid" && row.destination) considerInbound(seen, row.destination, index);
+  }
+  return Array.from(seen).sort();
+}
+
+function lastValid(rows, pred) {
+  let found = null;
+  for (const row of rows) {
+    if (!row || !pred(row)) continue;
+    const hash = String(row.hash || "").toUpperCase();
+    if (!anchors.HASH_RE.test(hash)) continue;
+    found = {
+      hash,
+      ledger_index: Number.isInteger(row.ledger_index) && row.ledger_index > 0 ? row.ledger_index : null,
+      ts: typeof row.ts === "string" ? row.ts : null,
+    };
+  }
+  return found;
+}
+
+function extract(text, labeled) {
+  const rows = parseJsonl(text);
+  const grant = lastValid(rows, (row) => row.action === "grant_paid" && row.result === "tesSUCCESS");
+  const outbound = lastValid(rows, (row) => row.action === "x402_outbound");
+  const beat = lastValid(rows, (row) => row.action === "heartbeat" || row.event === "heartbeat");
+  const inbound = uniqueInbound(text, labeled);
+  return {
+    x402_hits: hits.countHits(text),
+    x402_outbound_hits: outboundRecord.countOutbound(text),
+    grants_paid: grantRecord.countGrants(text),
+    inbound,
+    last_grant_hash: grant ? grant.hash : null,
+    last_outbound_hash: outbound ? outbound.hash : null,
+    last_heartbeat_hash: beat ? beat.hash : null,
+    heartbeat: beat
+      ? { hash: beat.hash, ledger_index: beat.ledger_index, ts: beat.ts }
+      : emptyHeartbeat(),
+  };
+}
+
+function updateInboundPnl(text, count) {
+  const re = /^\| inbound_counterparties \|[^|\n]*\|[^|\n]*\|$/m;
+  if (!re.test(text)) return text;
+  return text.replace(
+    re,
+    `| inbound_counterparties | **${count}** | distinct buyers and grant destinations outside WALLETS |`
+  );
+}
+
+function refresh(root, opts) {
+  const options = opts || {};
+  const disk = ioOf(options.io);
+  const now = options.now || new Date();
+  const ledgerPath = options.ledgerPath || path.join(root, "lab", "ledger-log.jsonl");
+  const text = disk.existsSync(ledgerPath) ? disk.readFileSync(ledgerPath, "utf8") : "";
+  const extracted = extract(text, options.labeled);
+  const current = (() => {
+    try {
+      return readMetrics(root, disk);
+    } catch (error) {
+      if (error && error.code === "METRICS") throw error;
+      return null;
+    }
+  })();
+  let heartbeat = extracted.heartbeat;
+  let lastHeartbeatHash = extracted.last_heartbeat_hash;
+  if (!lastHeartbeatHash && current && current.last_heartbeat_hash) {
+    lastHeartbeatHash = current.last_heartbeat_hash;
+    heartbeat = current.last_heartbeat || {
+      hash: current.last_heartbeat_hash,
+      ledger_index: null,
+      ts: null,
+    };
+  }
+  const doc = {
+    updated_at: anchors.formatChicago(now),
+    x402_hits: extracted.x402_hits,
+    x402_outbound_hits: extracted.x402_outbound_hits,
+    grants_paid: extracted.grants_paid,
+    inbound_counterparties: extracted.inbound.length,
+    last_grant_hash: extracted.last_grant_hash,
+    last_outbound_hash: extracted.last_outbound_hash,
+    last_heartbeat_hash: lastHeartbeatHash,
+    last_heartbeat: {
+      hash: heartbeat && heartbeat.hash ? heartbeat.hash : null,
+      ledger_index: heartbeat && Number.isInteger(heartbeat.ledger_index) ? heartbeat.ledger_index : null,
+      ts: heartbeat && typeof heartbeat.ts === "string" ? heartbeat.ts : null,
+    },
+  };
+  const pnlPath = options.pnlPath || path.join(root, "market", "pnl.md");
+  if (disk.existsSync(pnlPath)) {
+    const pnl = disk.readFileSync(pnlPath, "utf8");
+    const next = updateInboundPnl(pnl, doc.inbound_counterparties);
+    if (next !== pnl) disk.writeFileSync(pnlPath, next);
+  }
+  return writeMetrics(root, doc, disk);
+}
+
 function recordHeartbeat(root, event, io) {
   const hash = hashOrNull(event && event.hash, "heartbeat hash");
   if (!hash) throw policy.coded("refusing heartbeat metrics without a ledger hash", "RECORD");
@@ -162,4 +304,8 @@ module.exports = {
   seedIfMissing,
   recordHeartbeat,
   emptyHeartbeat,
+  uniqueInbound,
+  extract,
+  updateInboundPnl,
+  refresh,
 };

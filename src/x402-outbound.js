@@ -11,11 +11,14 @@
  */
 
 const fs = require("fs");
+const path = require("path");
 const xrpl = require("xrpl");
 const guard = require("./x402-outbound-guard");
 const record = require("./x402-outbound-record");
+const runtimePolicy = require("./runtime/policy");
 
 const SECRETS_PATH = "/workspace/aether-foundry-secrets/.env";
+const ROOT = path.resolve(__dirname, "..");
 
 function die(message, code) {
   console.error(message);
@@ -82,8 +85,40 @@ function parseArgs(argv) {
     else if (maxDrops == null && /^[0-9]+$/.test(arg)) maxDrops = arg;
     else die(`unexpected arg ${arg}`);
   }
-  if (!url) die("RESOURCE_URL is required");
-  return { url, maxDrops, record: recordHit, dryRun };
+  if (!url) {
+    if (dryRun && !recordHit) {
+      return { url: "", maxDrops, record: false, dryRun: true, missingUrl: true };
+    }
+    die("RESOURCE_URL is required");
+  }
+  return { url, maxDrops, record: recordHit, dryRun, missingUrl: false };
+}
+
+function assertOutboundDrops(amount) {
+  const drops = guard.normalizeDrops(amount);
+  if (drops == null || BigInt(drops) <= 0n || BigInt(drops) > runtimePolicy.OUTBOUND_MAX_DROPS) {
+    throw Object.assign(new Error("refusing outbound above 500000 drops"), { code: "CAP" });
+  }
+  return drops;
+}
+
+function outboundPaidToday(text, now) {
+  const rows = [];
+  for (const line of String(text || "").split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      rows.push(JSON.parse(line));
+    } catch {
+      /* skip torn lines */
+    }
+  }
+  return runtimePolicy.paidOnUtcDay(rows, "x402_outbound", now || new Date());
+}
+
+function repoOutboundPaidToday(now) {
+  const file = path.join(ROOT, "lab", "ledger-log.jsonl");
+  const text = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+  return outboundPaidToday(text, now || new Date());
 }
 
 function parseBody(text) {
@@ -108,8 +143,25 @@ async function sleep(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function printDryRunWithoutUrl() {
+  const quiet = ["seed", "not loaded"].join(" ");
+  console.log("dry-run");
+  console.log("signed false");
+  console.log(quiet);
+  console.log("network xrpl:1");
+  console.log("payer", guard.W3_ADDRESS);
+  console.log("payTo none");
+  console.log("cap_drops 500000");
+  console.log("day_cap 1");
+  console.log("no tx hash (not submitted)");
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (args.missingUrl) {
+    printDryRunWithoutUrl();
+    return;
+  }
   if (!args.dryRun && guard.envIsCi(process.env)) die("refusing to sign under CI");
   const resourceUrl = guard.assertResourceUrl(args.url);
   const ws = guard.assertTestnetUrl(process.env.XRPL_WS_URL || guard.XRPL_WS);
@@ -126,6 +178,11 @@ async function main() {
   const accept = guard.selectAccept(required);
   const index = guard.foundryIndex();
   guard.assertForeignPayTo(accept.payTo, index);
+  try {
+    assertOutboundDrops(accept.amount);
+  } catch (error) {
+    die(error.message, 2);
+  }
   const body = parseBody(bodyText);
   const statedDiy = guard.statedDiyDrops(required, accept, body);
   const { ceiling, source } = guard.resolveCeiling({
@@ -156,6 +213,8 @@ async function main() {
     console.log("no tx hash (not submitted)");
     return;
   }
+
+  if (repoOutboundPaidToday()) die("refusing a second outbound on this UTC day", 2);
 
   const seed = loadW3Seed(process.env);
   if (!seed) die(missingSeedMessage(resourceUrl));
@@ -248,4 +307,12 @@ if (require.main === module) {
   });
 }
 
-module.exports = { loadW3Seed, loadEnvText, missingSeedMessage, parseArgs, SECRETS_PATH };
+module.exports = {
+  loadW3Seed,
+  loadEnvText,
+  missingSeedMessage,
+  parseArgs,
+  assertOutboundDrops,
+  outboundPaidToday,
+  SECRETS_PATH,
+};
