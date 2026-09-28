@@ -30,6 +30,17 @@ Server: rippled **3.4.1**, ledger ~21094528.
 
 Server: rippled **3.4.1**, `server_state=full`, ledger **21096312**, HTTP JSON-RPC `https://s.altnet.rippletest.net:51234`.
 
+
+### 2026-09-28 ~1:08 PM CT (Foundry Batch probe routine — first scheduled)
+
+| Name | Hash (abbrev) | enabled | supported |
+|------|---------------|---------|-----------|
+| BatchV1_1 | 9F287AED… | **false** | true |
+| fixBatchV1_2 | 14A2B45E… | **false** | true |
+| TicketBatch | 955DF3FA… | true | true |
+
+Server: rippled **3.4.1**, `server_state=full`, ledger **21123617**, HTTP JSON-RPC `https://s.altnet.rippletest.net:51234`. Atomic Batch still gated (TicketBatch alone does not count).
+
 ## Trial
 
 | Action | Result |
