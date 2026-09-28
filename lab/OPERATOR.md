@@ -92,7 +92,7 @@ WALKIN_BUYER_SEED='s...' npm run buy:walk-in -- --record
 
 Testnet only. Discovery is `account_objects` (`type: nft_offer`, validated). The script refuses mainnet hosts and NetworkID 0. It refuses any address in `web/lib/xrpl-public.ts` `WALLETS` (W0–W6, AMM, BUYER, STRANGER) — exit 2. It refuses `CI` / `GITHUB_ACTIONS` before signing. Sold out exits 3. `--with-aeth` is the only path-pay, and it is off by default. `--record` appends `lab/ledger-log.jsonl` and a RESULTS note only after a real `tesSUCCESS` hash. Do not invent that hash.
 
-The desk stays read-only. `GET /api/inbound/walk-in` returns the live offer, `howToBuy`, and the npm hint. Agent tool shapes live in `machines/inbound-mcp/tools.json` (`walk_in_status`, `walk_in_buy`, `x402_catalog`, `x402_buy`). Those buy tools delegate to the npm scripts. They do not take a seed argument.
+The desk stays read-only. `GET /api/inbound/walk-in` returns the live offer, `howToBuy`, and the npm hint. `npm run mcp` hosts `machines/inbound-mcp/tools.json` on stdio (`MCP_SIGN=off`). Buy tools return a delegated command and do not take a seed argument. See `machines/inbound-mcp/RUNBOOK.md`.
 
 Desk SKUs, one click against production:
 
