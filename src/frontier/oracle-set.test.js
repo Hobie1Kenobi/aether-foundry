@@ -5,7 +5,9 @@ const fs = require("node:fs");
 const os = require("os");
 const path = require("path");
 const test = require("node:test");
+const codec = require("ripple-binary-codec");
 const anchors = require("../director/anchors");
+const schema = require("../director/schema");
 const math = require("./oracle-math");
 const keeper = require("./oracle-set");
 const ticket = require("./oracle-ticket");
@@ -199,7 +201,7 @@ test("dry-run prints an unsigned OracleSet and does not read a seed", async () =
   assert.equal(body.tx.OracleDocumentID, 1);
   assert.equal(body.tx.LastUpdateTime, Math.floor(NOW.getTime() / 1000));
   assert.ok(body.tx.LastUpdateTime > 1_600_000_000);
-  assert.equal(body.tx.PriceDataSeries[0].PriceData.BaseAsset, "AETH");
+  assert.equal(body.tx.PriceDataSeries[0].PriceData.BaseAsset, anchors.AETH_HEX);
   assert.equal(body.tx.PriceDataSeries[0].PriceData.QuoteAsset, "XRP");
   assert.equal(body.tx.PriceDataSeries[0].PriceData.Scale, 8);
   const decoded = math.decodeScaled(
@@ -398,6 +400,213 @@ test("ticket refuses a missing oracle and a wrong network", async () => {
     (error) => error.code === "CI"
   );
   assert.equal(reads, 0);
+});
+
+test("OracleSet emits codec-submittable AETH hex and XRP", () => {
+  const tx = math.buildOracleSet({ quote_xrp_per_aeth: "0.01022008", now: NOW });
+  const pair = tx.PriceDataSeries[0].PriceData;
+  assert.equal(pair.BaseAsset, anchors.AETH_HEX);
+  assert.equal(pair.QuoteAsset, "XRP");
+  assert.equal(pair.BaseAsset.length, 40);
+  const blob = codec.encode(tx);
+  const back = codec.decode(blob);
+  assert.equal(back.PriceDataSeries[0].PriceData.BaseAsset, anchors.AETH_HEX);
+  assert.equal(back.PriceDataSeries[0].PriceData.QuoteAsset, "XRP");
+  const zeros = structuredClone(tx);
+  zeros.PriceDataSeries[0].PriceData.QuoteAsset = math.XRP_HEX;
+  assert.equal(codec.encode(zeros), blob);
+  const ascii = structuredClone(tx);
+  ascii.PriceDataSeries[0].PriceData.BaseAsset = "AETH";
+  assert.throws(() => codec.encode(ascii), /Unsupported Currency representation: AETH/);
+  const wire = sampleEntry();
+  wire.node.PriceDataSeries[0].PriceData.BaseAsset = anchors.AETH_HEX;
+  wire.node.PriceDataSeries[0].PriceData.QuoteAsset = "XRP";
+  assert.equal(math.readOraclePrice(wire).quote_xrp_per_aeth, "0.01007528");
+});
+
+function stateIo(text) {
+  return {
+    existsSync(file) {
+      return String(file).endsWith(path.join("lab", "director-state.json"));
+    },
+    readFileSync(file, encoding) {
+      if (String(file).endsWith(path.join("lab", "director-state.json"))) return text;
+      return fs.readFileSync(file, encoding);
+    },
+  };
+}
+
+test("live loads director-state from disk and still refuses the gate", async () => {
+  let reads = 0;
+  await assert.rejects(
+    () => keeper.run(["--live", "--xrpl-http", anchors.XRPL_HTTP], {
+      env: {},
+      now: NOW,
+      fetchImpl: async () => {
+        throw new Error("should not fetch");
+      },
+      loadSeed() {
+        reads += 1;
+        return "present-not-used";
+      },
+    }),
+    (error) => error.code === "LIVE_GATE"
+  );
+  await assert.rejects(
+    () => keeper.run(["--live"], {
+      env: { GITHUB_ACTIONS: "true", FOUNDRY_DAEMON_LIVE: "yes" },
+      fetchImpl: async () => {
+        throw new Error("should not fetch");
+      },
+      loadSeed() {
+        reads += 1;
+        return "present-not-used";
+      },
+    }),
+    (error) => error.code === "CI"
+  );
+  assert.equal(reads, 0);
+
+  const missing = mockLedger();
+  await assert.rejects(
+    () => keeper.run(["--live", "--xrpl-http", anchors.XRPL_HTTP], {
+      env: { FOUNDRY_DAEMON_LIVE: "yes" },
+      now: NOW,
+      root: fs.mkdtempSync(path.join(os.tmpdir(), "oracle-missing-")),
+      fetchImpl: missing.fetchImpl,
+      loadSeed() {
+        reads += 1;
+        return "present-not-used";
+      },
+    }),
+    (error) => error.code === "STALE" && /without director state/.test(error.message)
+  );
+  assert.equal(reads, 0);
+
+  const injected = mockLedger();
+  await assert.rejects(
+    () => keeper.run(["--live", "--xrpl-http", anchors.XRPL_HTTP], {
+      env: { FOUNDRY_DAEMON_LIVE: "yes" },
+      now: NOW,
+      state: null,
+      io: {
+        existsSync() {
+          throw new Error("injected state must not read disk");
+        },
+        readFileSync() {
+          throw new Error("injected state must not read disk");
+        },
+      },
+      fetchImpl: injected.fetchImpl,
+      loadSeed() {
+        reads += 1;
+        return "present-not-used";
+      },
+    }),
+    (error) => error.code === "STALE" && /without director state/.test(error.message)
+  );
+
+  const stale = schema.fixtureState();
+  stale.updated_at = "2026-09-01T12:00:00-05:00";
+  await assert.rejects(
+    () => keeper.run(["--live", "--xrpl-http", anchors.XRPL_HTTP], {
+      env: { FOUNDRY_DAEMON_LIVE: "yes" },
+      now: NOW,
+      root: anchors.repoRoot(),
+      io: stateIo(JSON.stringify(stale)),
+      fetchImpl: mockLedger().fetchImpl,
+      loadSeed() {
+        reads += 1;
+        return "present-not-used";
+      },
+    }),
+    (error) => error.code === "STALE" && /stale director state/.test(error.message)
+  );
+  assert.equal(reads, 0);
+
+  const fresh = schema.fixtureState();
+  fresh.updated_at = anchors.formatChicago(new Date(NOW.getTime() - 60 * 60 * 1000));
+  const mock = mockLedger();
+  let submitted = null;
+  const code = await keeper.run(["--live", "--xrpl-http", anchors.XRPL_HTTP], {
+    env: { FOUNDRY_DAEMON_LIVE: "yes" },
+    now: NOW,
+    root: anchors.repoRoot(),
+    io: stateIo(JSON.stringify(fresh)),
+    fetchImpl: mock.fetchImpl,
+    recordMetrics: false,
+    archive: false,
+    loadSeed() {
+      reads += 1;
+      return "present-not-used";
+    },
+    submit(tx, keyEnv, regular) {
+      submitted = { tx, keyEnv, regular };
+      return { hash: TX_HASH, result: "tesSUCCESS", ledger_index: 21130011, oracle_id: ORACLE_INDEX };
+    },
+    stdout() {},
+  });
+  assert.equal(code, 0);
+  assert.equal(reads, 0);
+  assert.equal(submitted.keyEnv, "W5_REGULAR_SEED");
+  assert.equal(submitted.regular, fresh.wallets.W5.regular_key);
+  assert.equal(submitted.tx.PriceDataSeries[0].PriceData.BaseAsset, anchors.AETH_HEX);
+  assert.equal(submitted.tx.PriceDataSeries[0].PriceData.QuoteAsset, "XRP");
+  assert.equal(codec.encode(submitted.tx).length > 0, true);
+
+  const mainnet = mockLedger({ network_id: 0 });
+  await assert.rejects(
+    () => keeper.run(["--live", "--xrpl-http", anchors.XRPL_HTTP], {
+      env: { FOUNDRY_DAEMON_LIVE: "yes" },
+      now: NOW,
+      root: anchors.repoRoot(),
+      io: stateIo(JSON.stringify(fresh)),
+      fetchImpl: mainnet.fetchImpl,
+      loadSeed() {
+        reads += 1;
+        return "present-not-used";
+      },
+    }),
+    (error) => error.code === "MAINNET"
+  );
+  assert.equal(reads, 0);
+});
+
+test("ticket live loads director-state from disk", async () => {
+  const fresh = schema.fixtureState();
+  fresh.updated_at = anchors.formatChicago(new Date(NOW.getTime() - 60 * 60 * 1000));
+  const mock = mockLedger();
+  let submitted = null;
+  const code = await ticket.run(["--live", "--xrpl-http", anchors.XRPL_HTTP], {
+    env: { FOUNDRY_DAEMON_LIVE: "yes" },
+    now: NOW,
+    root: anchors.repoRoot(),
+    io: stateIo(JSON.stringify(fresh)),
+    fetchImpl: mock.fetchImpl,
+    loadSeed() {
+      throw new Error("seed");
+    },
+    submit(tx, keyEnv, regular) {
+      submitted = { tx, keyEnv, regular };
+      return { hash: TX_HASH, result: "tesSUCCESS", ledger_index: 21130012 };
+    },
+    stdout() {},
+  });
+  assert.equal(code, 0);
+  assert.equal(submitted.keyEnv, "W2_REGULAR_SEED");
+  assert.equal(submitted.regular, fresh.wallets.W2.regular_key);
+  assert.equal(submitted.tx.TransactionType, "NFTokenMint");
+  const missing = mockLedger();
+  await assert.rejects(
+    () => ticket.run(["--live", "--xrpl-http", anchors.XRPL_HTTP], {
+      env: { FOUNDRY_DAEMON_LIVE: "yes" },
+      now: NOW,
+      root: fs.mkdtempSync(path.join(os.tmpdir(), "ticket-missing-")),
+      fetchImpl: missing.fetchImpl,
+      stdout() {},
+    }),
+    (error) => error.code === "STALE" && /without director state/.test(error.message)
+  );
 });
 
 test("keeper and ticket sources do not load a seed or a banned tx", () => {

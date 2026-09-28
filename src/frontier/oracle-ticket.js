@@ -14,7 +14,9 @@
  * EscrowCreate. FinishAfter and CancelAfter are Ripple Epoch.
  */
 
+const path = require("path");
 const anchors = require("../director/anchors");
+const schema = require("../director/schema");
 const { rpcCall } = require("../director/snapshot");
 const probe = require("./probe-amendments");
 const math = require("./oracle-math");
@@ -51,6 +53,21 @@ function parseArgs(argv) {
     } else throw math.coded(`unknown arg ${arg}`, "ARGS");
   }
   return out;
+}
+
+function loadState(root, io) {
+  const file = path.join(root, anchors.STATE_REL);
+  const exists = (io && io.existsSync) || require("fs").existsSync;
+  const read = (io && io.readFileSync) || require("fs").readFileSync;
+  if (!exists(file)) return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(read(file, "utf8"));
+  } catch (error) {
+    throw policy.coded(`director state is not JSON: ${error.message}`, "SCHEMA");
+  }
+  schema.validateState(parsed, { root });
+  return parsed;
 }
 
 function missingOracle(error) {
@@ -109,6 +126,7 @@ async function run(argv, deps) {
   }
   const env = options.env || process.env;
   const now = options.now || new Date();
+  const root = options.root || anchors.repoRoot();
   let seedReads = 0;
   const loadSeed = (name) => {
     seedReads += 1;
@@ -141,7 +159,7 @@ async function run(argv, deps) {
     write(text);
     return 0;
   }
-  const state = options.state;
+  const state = Object.prototype.hasOwnProperty.call(options, "state") ? options.state : loadState(root, options.io);
   if (!state) throw math.coded("refusing --live without director state", "STALE");
   if (policy.isStale(state, now)) throw math.coded("refusing to sign on stale director state", "STALE");
   const regular = policy.regularKey(state, "W2");
@@ -193,6 +211,7 @@ if (require.main === module) {
 module.exports = {
   HELP,
   parseArgs,
+  loadState,
   readPrice,
   run,
 };
