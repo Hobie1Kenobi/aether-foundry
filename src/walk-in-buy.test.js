@@ -315,11 +315,19 @@ describe("walk-in buy", () => {
 });
 
 describe("inbound MCP schema", () => {
-  it("exposes the four buy tools without seed arguments", () => {
+  it("exposes inbound tools without seed arguments", () => {
     const file = path.join(__dirname, "..", "machines", "inbound-mcp", "tools.json");
     const doc = JSON.parse(fs.readFileSync(file, "utf8"));
     const names = doc.tools.map((tool) => tool.name);
-    assert.deepEqual(names, ["walk_in_status", "walk_in_buy", "x402_catalog", "x402_buy"]);
+    assert.deepEqual(names, [
+      "walk_in_status",
+      "walk_in_buy",
+      "x402_catalog",
+      "x402_buy",
+      "director_status",
+      "grant_eligibility",
+      "amm_quote",
+    ]);
     const blob = JSON.stringify(doc.tools.map((tool) => tool.inputSchema));
     assert.doesNotMatch(blob, /seed|secret|private/i);
     const status = doc.tools[0];

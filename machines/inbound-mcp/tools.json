@@ -7,8 +7,9 @@
   "deskSigns": false,
   "notes": [
     "Read tools are seedless and call the public desk.",
-    "Buy tools do not accept a seed argument. The operator environment holds WALKIN_BUYER_SEED or XRPL_BUYER_SEED, or the command uses --faucet.",
+    "Buy tools do not accept a seed argument. The operator environment holds the buyer variable, or the Walk-In command uses --faucet.",
     "Signing happens in src/walk-in-buy.js and src/x402-pay.js. The desk never calls Wallet.sign.",
+    "The stdio server is src/mcp/server.js (npm run mcp). MCP_SIGN=off by default. Buy tools return a delegated command and this process does not sign.",
     "Refuse mainnet hosts and NetworkID 0. Refuse CI and GITHUB_ACTIONS on any signing path."
   ],
   "tools": [
@@ -134,6 +135,65 @@
         "seedsInArguments": false,
         "payTo": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
         "refuses": ["payer address equal to W3", "xrpl:0", "mainnet hosts", "CI", "GITHUB_ACTIONS"]
+      }
+    },
+    {
+      "name": "director_status",
+      "description": "Read lab/director-state.json and GET the desk /api/status. A missing status route is reported and does not fail the tool. Does not sign.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "binding": {
+        "mode": "read",
+        "file": "lab/director-state.json",
+        "url": "https://aether-foundry-desk.vercel.app/api/status",
+        "seeds": false
+      }
+    },
+    {
+      "name": "grant_eligibility",
+      "description": "Read-only wrap of grants:scan. Lists non-labeled counterparties. Does not pay and does not sign.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "binding": {
+        "mode": "npm",
+        "command": "npm run grants:scan",
+        "seeds": false,
+        "seedsInArguments": false,
+        "refuses": ["labeled WALLETS", "payment"]
+      }
+    },
+    {
+      "name": "amm_quote",
+      "description": "Public amm_info for the AETH/XRP pool on XRPL Testnet, plus the unpaid desk composition-quote HTTP status. Does not pay and does not sign.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "binding": {
+        "mode": "http",
+        "rpc": "https://s.altnet.rippletest.net:51234",
+        "method": "amm_info",
+        "unpaid": "https://aether-foundry-desk.vercel.app/api/x402/composition-quote",
+        "seeds": false
       }
     }
   ]

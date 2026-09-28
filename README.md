@@ -26,7 +26,10 @@ cd aether-foundry
 npm install
 npm run buy:walk-in -- --dry-run
 npm run buy:walk-in -- --faucet
+npm run mcp
 ```
+
+[`npm run mcp`](./machines/inbound-mcp/RUNBOOK.md) speaks stdio JSON-RPC. `MCP_SIGN` defaults to `off`. `walk_in_buy` returns `npm run buy:walk-in -- --dry-run` and does not sign.
 
 No checkout required. The desk does not sign:
 
@@ -209,7 +212,7 @@ Status follows [`lab/director-state.json`](./lab/director-state.json) and the pa
 | — | [xahau-split-treasury](./machines/xahau-split-treasury/) | live | Incoming XAH to W7 splits on Xahau Testnet by hook. |
 | — | [governance-board](./machines/governance-board/) | live | H1 SignerList on W0, regular keys on W1–W6. Hashes in RESULTS. |
 | — | [grants-flywheel](./machines/grants-flywheel/) | live | W6 pays non-labeled accounts that already used a house artifact. |
-| — | [inbound-mcp](./machines/inbound-mcp/) | schema | Tool contract for an outside agent. No server process in this repo. |
+| — | [inbound-mcp](./machines/inbound-mcp/) | stdio | Tool server for an outside agent. `npm run mcp`. Signing stays delegated. |
 
 <a id="interact"></a>
 
@@ -297,7 +300,7 @@ There is a second direction. `npm run x402:outbound` is W3 buying someone else's
 
 ### Agent schema
 
-[`machines/inbound-mcp/tools.json`](./machines/inbound-mcp/tools.json) names four tools: `walk_in_status`, `walk_in_buy`, `x402_catalog`, `x402_buy`. Read tools take no secrets. Buy tools delegate to the npm scripts and do not add a seed field. Contract notes: [`machines/inbound-mcp/README.md`](./machines/inbound-mcp/README.md).
+[`machines/inbound-mcp/tools.json`](./machines/inbound-mcp/tools.json) is the catalog. `npm run mcp` hosts it: `walk_in_status`, `walk_in_buy`, `x402_catalog`, `x402_buy`, `director_status`, `grant_eligibility`, `amm_quote`. Read tools take no secrets. Buy tools return a delegated command (`MCP_SIGN=off` by default) and do not add a seed field. Start and refusals: [`machines/inbound-mcp/RUNBOOK.md`](./machines/inbound-mcp/RUNBOOK.md).
 
 <a id="ops"></a>
 
