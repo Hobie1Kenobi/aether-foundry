@@ -13,6 +13,7 @@ const policy = require("./policy");
 
 const ROOT = anchors.repoRoot();
 const HASH = "AB".repeat(32);
+const LIVE_HEARTBEAT = "2B298A910CB3966EF6E60AD3C3ABD167D43ED382F34E2D5963292304C0203C01";
 
 function freshState(now) {
   return {
@@ -112,6 +113,57 @@ test("live refuses CI and mainnet before a seed read", async () => {
   }
 });
 
+test("live heartbeat only asserts XRPL Testnet id 1", async () => {
+  const now = new Date("2026-09-28T18:00:00.000Z");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "heartbeat-xrpl-"));
+  let submits = 0;
+  let captured = "";
+  const code = await heartbeat.run(["--live"], {
+    env: { FOUNDRY_DAEMON_LIVE: "yes" },
+    now,
+    state: freshState(now),
+    root: dir,
+    history: [],
+    recordMetrics: false,
+    submit: async () => {
+      submits += 1;
+      return { result: "tesSUCCESS", hash: HASH, ledger_index: 21103002 };
+    },
+    archive() {},
+    stdout(text) {
+      captured = text;
+    },
+  });
+  assert.equal(code, 0);
+  assert.equal(submits, 1);
+  const body = JSON.parse(captured);
+  assert.equal(body.mode, "live");
+  assert.equal(body.network, "xrpl:1");
+  assert.equal(body.hash, HASH);
+  assert.equal(body.signed, true);
+  const source = fs.readFileSync(path.join(ROOT, "src/runtime/actions/heartbeat.js"), "utf8");
+  assert.equal(source.includes("XAHAU_HTTP"), false);
+  assert.equal(source.includes("XAHAU_NETWORK_ID"), false);
+  assert.equal(source.includes('kind: "xahau"'), false);
+  assert.equal(policy.assertAltnet({
+    networkId: anchors.XAHAU_NETWORK_ID,
+    url: anchors.XAHAU_HTTP,
+    kind: "xahau",
+  }), undefined);
+  assert.throws(
+    () => policy.assertAltnet({ url: anchors.XAHAU_HTTP, networkId: anchors.XAHAU_NETWORK_ID }),
+    (error) => error.code === "MAINNET" && /Xahau host for W6 XRPL grants/.test(error.message)
+  );
+  assert.throws(
+    () => policy.assertAltnet({
+      url: anchors.XRPL_HTTP,
+      networkId: 1,
+      kind: "xahau",
+    }),
+    (error) => error.code === "MAINNET" && /non-Xahau-Testnet/.test(error.message)
+  );
+});
+
 test("rate limit is 4 per UTC day, a 24h backstop, and 6 hours", () => {
   const now = new Date("2026-09-28T20:00:00.000Z");
   const today = [1, 7, 13, 19].map((hour) => ({
@@ -157,8 +209,8 @@ test("metrics skeleton copies pnl counts and refuses a missing hash", () => {
   assert.equal(doc.last_outbound_hash, null);
   assert.equal(doc.last_heartbeat.hash, null);
   const committed = JSON.parse(fs.readFileSync(path.join(ROOT, "lab", "metrics.json"), "utf8"));
-  assert.equal(committed.last_heartbeat_hash, null);
-  assert.equal(committed.last_heartbeat.hash, null);
+  assert.equal(committed.last_heartbeat_hash, LIVE_HEARTBEAT);
+  assert.equal(committed.last_heartbeat.hash, LIVE_HEARTBEAT);
   assert.equal(committed.x402_hits, parsed.counts.x402_hits);
   assert.equal(committed.grants_paid, parsed.counts.grants_paid);
   assert.throws(
@@ -178,7 +230,7 @@ test("metrics skeleton copies pnl counts and refuses a missing hash", () => {
   assert.equal(written.last_heartbeat.ledger_index, 21103000);
   assert.equal(written.last_grant_hash, null);
   assert.equal(written.grants_paid, parsed.counts.grants_paid);
-  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, "lab", "metrics.json"), "utf8")).last_heartbeat.hash, null);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, "lab", "metrics.json"), "utf8")).last_heartbeat.hash, LIVE_HEARTBEAT);
 });
 
 test("live execute archives heartbeat and does not invent a hash when submit fails", async () => {

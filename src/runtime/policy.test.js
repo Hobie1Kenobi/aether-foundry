@@ -19,7 +19,7 @@ const ROOT = path.resolve(__dirname, "..", "..");
 const STRANGER = "rh4c6qMMyafccZrPFCPCN742BNMXfjKYss";
 const DAY30 = "rQsPPdwiBeVDqsdDnFcVmu7xTVHMjXRFqN";
 const FOREIGN = "r3JbqcVQ4Pov4MhFUMSdnro7s3VgpaqssZ";
-const FRESH = new Date("2026-09-28T20:35:00.000Z");
+const FRESH = new Date("2026-09-29T05:00:00.000Z");
 
 function throwsCode(fn, code) {
   assert.throws(fn, (error) => {
@@ -92,6 +92,49 @@ describe("refusals", () => {
       throwsCode(() => policy.assertAltnet({ url, signing: false }), "MAINNET");
     }
     assert.equal(policy.assertAltnet({ networkId: 1, url: anchors.XRPL_HTTP }), undefined);
+  });
+
+  it("validates Xahau with the Xahau assert and refuses the wrong kind", () => {
+    assert.equal(anchors.XAHAU_NETWORK_ID, 21338);
+    assert.equal(policy.assertAltnet({
+      networkId: anchors.XAHAU_NETWORK_ID,
+      url: anchors.XAHAU_HTTP,
+      kind: "xahau",
+    }), undefined);
+    assert.equal(policy.assertAltnet({
+      networkId: anchors.XAHAU_NETWORK_ID,
+      url: anchors.XAHAU_WS,
+      kind: "xahau",
+      signing: false,
+    }), undefined);
+    assert.throws(
+      () => policy.assertAltnet({ url: anchors.XAHAU_HTTP, networkId: anchors.XAHAU_NETWORK_ID }),
+      (error) => error.code === "MAINNET" && /Xahau host for W6 XRPL grants/.test(error.message)
+    );
+    assert.throws(
+      () => policy.assertAltnet({ url: anchors.XAHAU_WS, kind: "xrpl" }),
+      (error) => error.code === "MAINNET" && /Xahau host for W6 XRPL grants/.test(error.message)
+    );
+    throwsCode(() => policy.assertAltnet({
+      url: anchors.XRPL_HTTP,
+      networkId: anchors.XAHAU_NETWORK_ID,
+      kind: "xahau",
+    }), "MAINNET");
+    throwsCode(() => policy.assertAltnet({
+      url: anchors.XRPL_HTTP,
+      kind: "xahau",
+      signing: false,
+    }), "MAINNET");
+    throwsCode(() => policy.assertAltnet({
+      url: anchors.XAHAU_HTTP,
+      networkId: anchors.XRPL_NETWORK_ID,
+      kind: "xahau",
+    }), "MAINNET");
+    throwsCode(() => policy.assertAltnet({
+      url: "https://xahau.network",
+      networkId: anchors.XAHAU_NETWORK_ID,
+      kind: "xahau",
+    }), "MAINNET");
   });
 
   it("refuses circular W3 to W3 and a missing 402", () => {

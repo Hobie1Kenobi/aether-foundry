@@ -290,10 +290,23 @@ function assertSigningRpc(raw) {
   return grants.assertTestnetUrl(raw);
 }
 
+function assertXahauAltnetUrl(raw) {
+  try {
+    anchors.assertXahauTestnetUrl(raw);
+  } catch (error) {
+    throw coded(
+      error && error.message ? error.message : "refusing non-Xahau-Testnet host",
+      (error && error.code) || "MAINNET"
+    );
+  }
+}
+
 function assertAltnet(opts) {
   const options = opts || {};
+  const xahau = options.kind === "xahau";
   if (options.url) {
-    if (options.signing === false) assertHostAllowed(options.url);
+    if (xahau) assertXahauAltnetUrl(options.url);
+    else if (options.signing === false) assertHostAllowed(options.url);
     else assertSigningRpc(options.url);
   }
   if (options.networkId == null || options.networkId === "") return;
@@ -301,7 +314,7 @@ function assertAltnet(opts) {
   if (id === 0 || id === anchors.XAHAU_MAINNET_ID) {
     throw coded(`refusing mainnet network id ${id}`, "MAINNET");
   }
-  if (options.kind === "xahau") {
+  if (xahau) {
     if (id !== anchors.XAHAU_NETWORK_ID) throw coded(`refusing network id ${id}`, "MAINNET");
     return;
   }

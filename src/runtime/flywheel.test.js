@@ -125,7 +125,7 @@ describe("unique inbound", () => {
     );
   });
 
-  it("reads the public ledger and keeps heartbeat hashes null", () => {
+  it("reads the public ledger and the archived heartbeat hash", () => {
     const ledger = fs.readFileSync(path.join(ROOT, "lab", "ledger-log.jsonl"), "utf8");
     const extracted = metrics.extract(ledger);
     const committed = JSON.parse(fs.readFileSync(path.join(ROOT, "lab", "metrics.json"), "utf8"));
@@ -133,13 +133,13 @@ describe("unique inbound", () => {
     assert.equal(extracted.inbound.includes(DAY30), true);
     assert.equal(extracted.inbound.includes(STRANGER), false);
     assert.equal(extracted.inbound.includes(FOREIGN), false);
-    assert.equal(extracted.last_heartbeat_hash, null);
+    assert.equal(extracted.last_heartbeat_hash, "2B298A910CB3966EF6E60AD3C3ABD167D43ED382F34E2D5963292304C0203C01");
     assert.ok(anchors.HASH_RE.test(extracted.last_grant_hash));
     assert.ok(anchors.HASH_RE.test(extracted.last_outbound_hash));
     assert.equal(committed.last_grant_hash, extracted.last_grant_hash);
     assert.equal(committed.last_outbound_hash, extracted.last_outbound_hash);
-    assert.equal(committed.last_heartbeat_hash, null);
-    assert.equal(committed.last_heartbeat.hash, null);
+    assert.equal(committed.last_heartbeat_hash, extracted.last_heartbeat_hash);
+    assert.equal(committed.last_heartbeat.hash, extracted.last_heartbeat_hash);
     assert.equal(committed.grants_paid, extracted.grants_paid);
     assert.equal(committed.x402_hits, extracted.x402_hits);
     assert.equal(committed.x402_outbound_hits, extracted.x402_outbound_hits);

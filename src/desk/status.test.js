@@ -156,7 +156,7 @@ test("status JSON is seedless and uses proven ledger data", async () => {
   assert.equal(body.amm.spot_xrp_per_aeth, "0.05");
   assert.equal(body.batch_atomic_enabled, false);
   assert.equal(body.w7_hook_matches_pack, true);
-  assert.equal(body.last_heartbeat.hash, null);
+  assert.equal(body.last_heartbeat.hash, "2B298A910CB3966EF6E60AD3C3ABD167D43ED382F34E2D5963292304C0203C01");
   assert.equal(body.error, undefined);
   assert.deepEqual(body.laws, ["altnets-only", "desk-read-only", "seeds-never-in-git"]);
   const pnl = metrics.parsePnlCounts(fs.readFileSync(path.join(ROOT, "market", "pnl.md"), "utf8"));
