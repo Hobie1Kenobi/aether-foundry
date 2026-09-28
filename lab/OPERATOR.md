@@ -63,6 +63,16 @@ Re-probe only. Check `server_info` / feature flags for `BatchV1_1` / `fixBatchV1
 - If disabled: document in RESULTS / session note and **stop**. No Batch txs. No faux-batch.
 - If enabled: then pack + trial `machines/batch-heartbeat/` per its README.
 
+## Frontier amendment map
+
+Before any new transaction type:
+
+```bash
+npm run frontier:probe
+```
+
+The script reads `FOUNDRY_XRPL_HTTP`, else `XRPL_HTTP` or `XRPL_RPC_URL`, calls `server_info` and `feature`, and writes `lab/frontier/amendments.json`. It refuses a network id other than 1. RPC failure exits non-zero and leaves the file untouched. Hashes come from the feature map. A disabled amendment is not a prompt to sequential-fake Batch, TokenEscrow, or vaults. See `lab/frontier/README.md`.
+
 ## Session / archive pattern
 
 - Session notes: `lab/sessions/`
