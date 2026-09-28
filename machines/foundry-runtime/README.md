@@ -32,4 +32,6 @@ One pass (`--once`) loads `src/runtime/allowlist.json` and `lab/director-state.j
 
 The desk does not gain a signer. `.github/workflows/walk-in-remint-watch.yml` stays detect-only.
 
+`src/runtime/allowlist.json` is `mode` `agent-sign` as well as the five daemon actions. `npm run signer` is the loopback RegularKey process for W1–W6 and the W7 hook account. It is not a Vercel route. See the runbook for `foundry-signer.service` and `foundry-daemon.service`, which restart on reboot.
+
 `GET /api/status` is the read-only desk route. It does not sign. The daily flywheel is not in this pack.

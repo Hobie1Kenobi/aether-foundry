@@ -162,12 +162,19 @@ function assertActionsEnv(env) {
   if (env && (env.FOUNDRY_DAEMON_LIVE === "yes" || env.FOUNDRY_DAEMON_LIVE === "1")) {
     throw coded("refusing FOUNDRY_DAEMON_LIVE on the director clock", "CI");
   }
+  if (env && (env.FOUNDRY_AGENT_SIGN === "yes" || env.FOUNDRY_AGENT_SIGN === "1")) {
+    throw coded("refusing FOUNDRY_AGENT_SIGN on the director clock", "CI");
+  }
 }
 
 function assertWorkflow(text) {
   const banned = [
     [/runtime:live/, "runtime:live"],
     [/runtime:watch/, "runtime:watch"],
+    [/npm run signer/, "signer"],
+    [/src\/runtime\/signer\.js/, "signer"],
+    [/FOUNDRY_AGENT_SIGN/, "FOUNDRY_AGENT_SIGN"],
+    [/FOUNDRY_SIGNER_TOKEN/, "FOUNDRY_SIGNER_TOKEN"],
     [/remint:walk-in/, "remint:walk-in"],
     [new RegExp("Wal" + "let"), "signer"],
     [new RegExp("from" + "Seed"), "signer-import"],

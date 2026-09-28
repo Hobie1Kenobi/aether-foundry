@@ -107,6 +107,40 @@ Live signing stays on the daemon, with `FOUNDRY_DAEMON_LIVE=yes`:
 
 `npm run grants:pay -- --record` and `npm run x402:outbound -- --record` append the public ledger only after `tesSUCCESS`, bump `market/pnl.md`, and refresh `lab/metrics.json` from that ledger. Hashes in the metrics file are copied from `lab/ledger-log.jsonl`. A missing heartbeat row leaves `last_heartbeat.hash` null.
 
+## Agent signer
+
+The Foundry box may run a localhost signer so agents can POST allowlisted transactions. GitHub Actions, the desk, and Vercel do not call it. It binds `127.0.0.1` only (override with `FOUNDRY_SIGNER_BIND`, which must stay loopback). Default port is `8787` (`FOUNDRY_SIGNER_PORT`).
+
+```bash
+npm run signer:dry
+FOUNDRY_AGENT_SIGN=yes FOUNDRY_SIGNER_TOKEN='long-random' npm run signer
+```
+
+`signer:dry` is `node src/runtime/signer.js --self-test-dry`. It prints an unsigned autofill and does not read a key. `npm run signer` refuses `CI`, `CI=1`, and `GITHUB_ACTIONS`, and it refuses to start unless `FOUNDRY_AGENT_SIGN=yes` and `FOUNDRY_SIGNER_TOKEN` is set. The token is not a seed. There is no `W0_SEED` in this process.
+
+`POST /sign` and `POST /dry-run` require `Authorization: Bearer $FOUNDRY_SIGNER_TOKEN`. `GET /health` returns `{ network_id, wallets_ready, signing }` and does not return key material. Every submit checks the RPC network id (`1` on XRPL Testnet, `21338` on Xahau Testnet for W7). W0 is refused. `Batch` is refused while `watched.batch.atomic_enabled` is false. `EscrowFinish` and `EscrowCancel` of the Unix-epoch BUYER escrow are refused. A `tesSUCCESS` hash is appended to `lab/ledger-log.jsonl`. Do not invent one.
+
+RegularKey env names are `W1_REGULAR_SEED` through `W6_REGULAR_SEED`. W7 uses `W7_SEED` and only on Xahau Testnet. Confirm each classic address against `machines/governance-board/activated.json` before the first live POST. The signer does that check itself and refuses a mismatch.
+
+Leave Walk-In alone while a sell offer is open. A W2 mint of taxon `20260927` or a 10 XRP sell offer is refused unless `watched.walk_in_offer` is `sold_out` with `offer_count` 0.
+
+### Restart on reboot
+
+`machines/foundry-runtime/foundry-signer.service` and `foundry-daemon.service` are unit stubs. Edit `WorkingDirectory`, `ExecStart` (the box `npm`), and `EnvironmentFile` before installing. `Restart=always` and `WantedBy=multi-user.target` bring both processes back after a reboot.
+
+```bash
+sudo cp machines/foundry-runtime/foundry-signer.service /etc/systemd/system/
+sudo cp machines/foundry-runtime/foundry-daemon.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now foundry-signer.service foundry-daemon.service
+systemctl is-enabled foundry-signer.service foundry-daemon.service
+curl -sS http://127.0.0.1:8787/health
+```
+
+`foundry-daemon.service` runs `npm run runtime:watch`, which still requires `FOUNDRY_DAEMON_LIVE=yes` in the secrets file. If `/health` is down, agents are spectators again.
+
+MCP on the box may POST `/sign` only when `MCP_SIGN=on`, `FOUNDRY_AGENT_SIGN=yes`, and `/health` is HTTP 200 with `signing: true`. That MCP process is not deployed on Vercel. `web/app/api/mcp/route.ts` does not gain `sign_tx`.
+
 ## What not to run
 
 - `npm run runtime:live` in GitHub Actions.

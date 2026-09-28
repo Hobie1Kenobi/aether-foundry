@@ -14,8 +14,8 @@ The daemon does not invent a transaction type. Each action wraps a primitive the
 
 ## Not used
 
-- `Batch`. `watched.batch.atomic_enabled` is false. The daemon refuses `TransactionType` `Batch` on every weekday.
-- `EscrowFinish` and `EscrowCancel`. The Unix-epoch BUYER escrow stays untouched.
+- `Batch`. `watched.batch.atomic_enabled` is false. The daemon refuses `TransactionType` `Batch` on every weekday. The agent signer refuses it too, including when the gate is false.
+- `EscrowFinish` and `EscrowCancel` on the daemon path. The Unix-epoch BUYER escrow stays untouched. The agent signer may finish or cancel a different escrow. It refuses owner `rEbUaXDXZnzR8wJjGqULKn1YLXNd5CARth` sequence `21094052`.
 - `SetHook`. W7 is not redeployed from this process.
 - W0 master key. No daemon transaction uses the treasury account.
 - Master seeds `W2_SEED`, `W3_SEED`, `W6_SEED`. The allowlist names RegularKey env vars only.

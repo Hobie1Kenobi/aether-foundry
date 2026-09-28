@@ -26,6 +26,82 @@ const HEARTBEAT_SOURCE_TAG = 202609280;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BANNED_TYPES = new Set(["Batch", "EscrowFinish", "EscrowCancel", "SetHook"]);
 const KEY_ENVS = ["W2_REGULAR_SEED", "W3_REGULAR_SEED", "W5_REGULAR_SEED", "W6_REGULAR_SEED"];
+const ASF_DISABLE_MASTER = 4;
+const HOUR_MS = 60 * 60 * 1000;
+const EPOCH_SCAR = {
+  owner: "rEbUaXDXZnzR8wJjGqULKn1YLXNd5CARth",
+  offerSequence: 21094052,
+  hash: "6B9528CCE3F90E39A6D6E1A8A1F1E637E1A38B575F0DDB105785D3A66A319462",
+};
+const AGENT_TX_TYPES = [
+  "Payment",
+  "TrustSet",
+  "OfferCreate",
+  "OfferCancel",
+  "NFTokenMint",
+  "NFTokenCreateOffer",
+  "NFTokenAcceptOffer",
+  "NFTokenCancelOffer",
+  "EscrowCreate",
+  "EscrowFinish",
+  "EscrowCancel",
+  "PaymentChannelCreate",
+  "PaymentChannelFund",
+  "PaymentChannelClaim",
+  "CheckCreate",
+  "CheckCash",
+  "CheckCancel",
+  "AMMDeposit",
+  "AMMWithdraw",
+  "DIDSet",
+  "CredentialCreate",
+  "CredentialAccept",
+  "CredentialDelete",
+  "AccountSet",
+];
+const AGENT_TX_REFUSED = [
+  "AccountDelete",
+  "SetRegularKey",
+  "SignerListSet",
+  "Batch",
+  "EnableAmendment",
+  "UNLModify",
+];
+const AGENT_CAPS = {
+  per_tx_drops: "10000000",
+  motion_drops: "50000000",
+  keep_spendable_drops: "10000000",
+  max_tx_per_hour: 30,
+  max_tx_per_utc_day: 200,
+};
+const AGENT_SPECIAL = {
+  epoch_scar: "do not EscrowFinish or EscrowCancel the Unix-epoch BUYER escrow",
+  walk_in_price_drops: "10000000",
+  batch: "refuse while watched.batch.atomic_enabled is false",
+};
+const AGENT_ACCOUNTS = {
+  W0: { sign: false, reason: "treasury master / signer list only" },
+  W1: { sign: true, key_env: "W1_REGULAR_SEED", daily_max_drops: "20000000" },
+  W2: { sign: true, key_env: "W2_REGULAR_SEED", daily_max_drops: "50000000" },
+  W3: { sign: true, key_env: "W3_REGULAR_SEED", daily_max_drops: "20000000" },
+  W4: { sign: true, key_env: "W4_REGULAR_SEED", daily_max_drops: "30000000" },
+  W5: { sign: true, key_env: "W5_REGULAR_SEED", daily_max_drops: "5000000" },
+  W6: { sign: true, key_env: "W6_REGULAR_SEED", daily_max_drops: "20000000" },
+  W7: { sign: true, network: "xahau_testnet", key_env: "W7_SEED", daily_max_drops: "20000000" },
+};
+const AGENT_KEY_ENVS = ["W1", "W2", "W3", "W4", "W5", "W6", "W7"].map((id) => AGENT_ACCOUNTS[id].key_env);
+const OWNER_OBJECT_TYPES = new Set([
+  "EscrowCreate",
+  "OfferCreate",
+  "NFTokenCreateOffer",
+  "PaymentChannelCreate",
+  "CheckCreate",
+  "TrustSet",
+  "NFTokenMint",
+  "AMMDeposit",
+  "DIDSet",
+  "CredentialCreate",
+]);
 
 const SPEC = {
   walk_in_remint: {
@@ -141,7 +217,47 @@ function assertAllowlist(doc) {
       throw coded(`${name} must not set signs true in a way that bypasses the daemon`, "ALLOWLIST");
     }
   }
+  assertAgentAllowlist(doc);
   return doc;
+}
+
+function assertAgentAllowlist(doc) {
+  if (doc.mode !== "agent-sign") throw coded("allowlist mode drifted", "ALLOWLIST");
+  const ids = Object.keys(AGENT_ACCOUNTS);
+  if (!doc.accounts || Object.keys(doc.accounts).join("|") !== ids.join("|")) {
+    throw coded("allowlist accounts drifted", "ALLOWLIST");
+  }
+  for (const id of ids) {
+    const row = doc.accounts[id];
+    const spec = AGENT_ACCOUNTS[id];
+    if (row.sign !== spec.sign) throw coded(`${id} sign bit drifted`, "ALLOWLIST");
+    if (id === "W0") {
+      if (row.key_env) throw coded("W0 must not name a signing key", "W0");
+      same(row.reason, spec.reason, "W0 reason");
+      continue;
+    }
+    same(row.key_env, spec.key_env, `${id} key_env`);
+    same(row.daily_max_drops, spec.daily_max_drops, `${id} daily max`);
+    if (row.key_env === "W0_SEED") throw coded("allowlist named W0_SEED", "W0");
+    if (id === "W7") same(row.network, "xahau_testnet", "W7 network");
+    else if (row.network) throw coded(`${id} network drifted`, "ALLOWLIST");
+  }
+  if (!Array.isArray(doc.tx_types) || doc.tx_types.join("|") !== AGENT_TX_TYPES.join("|")) {
+    throw coded("allowlist tx_types drifted", "ALLOWLIST");
+  }
+  if (!Array.isArray(doc.tx_types_refused) || doc.tx_types_refused.join("|") !== AGENT_TX_REFUSED.join("|")) {
+    throw coded("allowlist tx_types_refused drifted", "ALLOWLIST");
+  }
+  if (!doc.caps) throw coded("allowlist caps missing", "ALLOWLIST");
+  same(doc.caps.per_tx_drops, AGENT_CAPS.per_tx_drops, "per_tx_drops");
+  same(doc.caps.motion_drops, AGENT_CAPS.motion_drops, "motion_drops");
+  same(doc.caps.keep_spendable_drops, AGENT_CAPS.keep_spendable_drops, "keep_spendable_drops");
+  if (doc.caps.max_tx_per_hour !== AGENT_CAPS.max_tx_per_hour) throw coded("max_tx_per_hour drifted", "ALLOWLIST");
+  if (doc.caps.max_tx_per_utc_day !== AGENT_CAPS.max_tx_per_utc_day) throw coded("max_tx_per_utc_day drifted", "ALLOWLIST");
+  if (!doc.special) throw coded("allowlist special missing", "ALLOWLIST");
+  same(doc.special.epoch_scar, AGENT_SPECIAL.epoch_scar, "epoch_scar");
+  same(doc.special.walk_in_price_drops, AGENT_SPECIAL.walk_in_price_drops, "walk_in_price");
+  same(doc.special.batch, AGENT_SPECIAL.batch, "batch gate");
 }
 
 function loadAllowlist(file) {
@@ -441,6 +557,320 @@ function assertPrintSafe(text) {
   }
 }
 
+function assertAgentGate(env) {
+  assertNotCi(env);
+  if (!env || env.FOUNDRY_AGENT_SIGN !== "yes") {
+    throw coded("refusing to sign without FOUNDRY_AGENT_SIGN=yes", "AGENT_SIGN");
+  }
+}
+
+function agentWallet(id) {
+  const spec = AGENT_ACCOUNTS[id];
+  if (!spec) throw coded(`unknown wallet ${id}`, "WALLET");
+  if (id === "W0" || spec.sign !== true) throw coded("refusing to sign as W0", "W0");
+  const anchor = anchors.WALLETS[id];
+  if (!anchor || !anchor.address) throw coded(`${id} has no public address`, "WALLET");
+  return {
+    id,
+    sign: true,
+    address: anchor.address,
+    key_env: spec.key_env,
+    network: spec.network || "xrpl_testnet",
+    daily_max_drops: spec.daily_max_drops,
+  };
+}
+
+function assertAgentRpc(raw, wallet) {
+  if (wallet && wallet.network === "xahau_testnet") return anchors.assertXahauTestnetUrl(raw);
+  return assertSigningRpc(raw);
+}
+
+function dropsField(value) {
+  if (typeof value !== "string" || !/^[0-9]+$/.test(value)) return null;
+  return grants.dropsOf(value);
+}
+
+function xrpFields(tx) {
+  const fields = [];
+  const push = (name, value, destination) => {
+    const drops = dropsField(value);
+    if (drops == null) return;
+    fields.push({
+      name,
+      drops,
+      destination: destination || tx.Destination || tx.Account || "",
+    });
+  };
+  const type = tx.TransactionType;
+  if (type === "Payment") {
+    push("Amount", tx.Amount, tx.Destination);
+    push("SendMax", tx.SendMax, tx.Destination);
+  } else if (type === "EscrowCreate") {
+    push("Amount", tx.Amount, tx.Destination);
+  } else if (type === "OfferCreate") {
+    push("TakerPays", tx.TakerPays, tx.Account);
+    push("TakerGets", tx.TakerGets, tx.Account);
+  } else if (type === "NFTokenCreateOffer") {
+    push("Amount", tx.Amount, tx.Destination || tx.Account);
+  } else if (type === "PaymentChannelCreate" || type === "PaymentChannelFund") {
+    push("Amount", tx.Amount, tx.Destination);
+  } else if (type === "CheckCreate") {
+    push("SendMax", tx.SendMax, tx.Destination);
+  } else if (type === "CheckCash") {
+    push("Amount", tx.Amount, tx.Account);
+  }
+  return fields;
+}
+
+function xrpOut(tx) {
+  let total = 0n;
+  const add = (value) => {
+    const drops = dropsField(value);
+    if (drops != null) total += drops;
+  };
+  const type = tx.TransactionType;
+  if (type === "Payment") add(tx.Amount);
+  else if (type === "EscrowCreate") add(tx.Amount);
+  else if (type === "OfferCreate") add(tx.TakerGets);
+  else if (type === "PaymentChannelCreate" || type === "PaymentChannelFund") add(tx.Amount);
+  else if (type === "CheckCreate") add(tx.SendMax);
+  else if (type === "CheckCash") add(tx.Amount);
+  return total;
+}
+
+function loadMotions(root, io) {
+  const exists = (io && io.existsSync) || fs.existsSync;
+  const readDir = (io && io.readdirSync) || fs.readdirSync;
+  const read = (io && io.readFileSync) || fs.readFileSync;
+  const dir = path.join(root || anchors.repoRoot(), "lab", "motions");
+  if (!exists(dir)) return [];
+  const files = [];
+  for (const name of readDir(dir)) {
+    if (!String(name).endsWith(".md") || String(name).toLowerCase() === "readme.md") continue;
+    files.push({ name, text: read(path.join(dir, name), "utf8") });
+  }
+  return files;
+}
+
+function assertAgentAmounts(tx, motions) {
+  const perTx = grants.dropsOf(AGENT_CAPS.per_tx_drops);
+  const motionLine = grants.dropsOf(AGENT_CAPS.motion_drops);
+  const files = Array.isArray(motions) ? motions : [];
+  for (const field of xrpFields(tx)) {
+    if (field.drops > perTx && field.drops < motionLine) {
+      throw coded(
+        `refusing ${field.drops.toString()} drops above per_tx_drops without raising the allowlist`,
+        "CAP"
+      );
+    }
+    if (field.drops >= motionLine) {
+      const hit = files.some((file) => grants.motionCovers(file.text, field.destination, field.drops.toString()));
+      if (!hit) {
+        throw coded(
+          `${tx.TransactionType} of ${field.drops.toString()} drops needs a motion in lab/motions/`,
+          "MOTION"
+        );
+      }
+    }
+  }
+  if (tx.TransactionType === "NFTokenCreateOffer" && tx.Account === anchors.WALLETS.W2.address) {
+    const sell = (Number(tx.Flags) & 1) === 1;
+    if (sell) {
+      if (tx.Destination) throw coded("refusing a Destination on the Walk-In sell offer", "DEST");
+      if (tx.Amount !== AGENT_SPECIAL.walk_in_price_drops) {
+        throw coded("Walk-In sell offer must be 10 XRP", "CAP");
+      }
+    }
+  }
+}
+
+function assertAgentFloat(tx, account, feeDrops) {
+  if (!account) throw coded("refusing without an account balance", "FLOAT");
+  const fee = grants.dropsOf(feeDrops || tx.Fee || "12");
+  const pay = xrpOut(tx) + fee;
+  const owners = Number(account.ownerCount || 0) + (OWNER_OBJECT_TYPES.has(tx.TransactionType) ? 1 : 0);
+  grants.assertFloat(
+    account.balance,
+    owners,
+    account.reserveBase,
+    account.reserveInc,
+    pay.toString()
+  );
+}
+
+function agentRows(history, now) {
+  return (history || []).filter((row) => {
+    if (!row || row.source !== "agent-signer") return false;
+    const stamp = Date.parse(row.ts);
+    return !Number.isNaN(stamp) && stamp <= now.getTime();
+  });
+}
+
+function assertAgentRate(history, now, wallet, tx) {
+  const when = now || new Date();
+  const rows = agentRows(history, when);
+  const hour = rows.filter((row) => when.getTime() - Date.parse(row.ts) < HOUR_MS);
+  if (hour.length >= AGENT_CAPS.max_tx_per_hour) {
+    throw coded("refusing more than 30 agent txs in an hour", "RATE");
+  }
+  const day = when.toISOString().slice(0, 10);
+  const today = rows.filter((row) => new Date(Date.parse(row.ts)).toISOString().slice(0, 10) === day);
+  if (today.length >= AGENT_CAPS.max_tx_per_utc_day) {
+    throw coded("refusing more than 200 agent txs on this UTC day", "RATE");
+  }
+  const spent = today
+    .filter((row) => row.wallet === wallet.id)
+    .reduce((sum, row) => sum + grants.dropsOf(row.amount_drops || "0"), 0n);
+  const next = spent + xrpOut(tx);
+  if (next > grants.dropsOf(wallet.daily_max_drops)) {
+    throw coded(`refusing ${wallet.id} spend above daily_max_drops`, "CAP");
+  }
+}
+
+function scarTargeted(tx) {
+  const owner = tx.Owner || tx.Account;
+  const sequence = tx.OfferSequence == null ? null : Number(tx.OfferSequence);
+  if (owner === EPOCH_SCAR.owner && sequence === EPOCH_SCAR.offerSequence) return true;
+  const hash = EPOCH_SCAR.hash.toLowerCase();
+  for (const value of Object.values(tx)) {
+    if (typeof value === "string" && value.toLowerCase() === hash) return true;
+  }
+  return false;
+}
+
+function assertEpochScar(tx) {
+  if (tx.TransactionType !== "EscrowFinish" && tx.TransactionType !== "EscrowCancel") return;
+  if (scarTargeted(tx)) {
+    throw coded("refusing to finish or cancel the Unix-epoch BUYER escrow", "EPOCH_SCAR");
+  }
+  if ((tx.Owner || "") === EPOCH_SCAR.owner && tx.OfferSequence == null) {
+    throw coded("refusing an escrow finish without the scar sequence", "EPOCH_SCAR");
+  }
+}
+
+function batchEnabled(state) {
+  return Boolean(state && state.watched && state.watched.batch && state.watched.batch.atomic_enabled === true);
+}
+
+function assertAgentBatch(tx, state) {
+  if (tx.TransactionType === "Batch" || tx.RawTransactions) {
+    const why = batchEnabled(state)
+      ? "refusing Batch"
+      : "refusing Batch while atomic_enabled is false";
+    throw coded(why, "BATCH");
+  }
+}
+
+function assertDisableMaster(tx) {
+  if (Number(tx.SetFlag) === ASF_DISABLE_MASTER) {
+    throw coded("refusing asfDisableMaster", "MASTER");
+  }
+}
+
+function assertAgentType(tx) {
+  const type = tx.TransactionType;
+  if (!type || typeof type !== "string") throw coded("refusing missing TransactionType", "TX");
+  if (type === "Batch") throw coded("refusing Batch while atomic_enabled is false", "BATCH");
+  if (AGENT_TX_REFUSED.includes(type) || !AGENT_TX_TYPES.includes(type)) {
+    throw coded(`refusing ${type}`, "TX");
+  }
+}
+
+function assertKnownIntent(tx, intent, opts) {
+  const options = opts || {};
+  const memos = grants.decodeMemos(tx);
+  let name = intent;
+  if (memos.purpose === "aether-heartbeat") name = "heartbeat";
+  if (memos.purpose === "aether-grant") name = "grant_pay";
+  if (name === "heartbeat" || name === "aether-heartbeat") {
+    assertHeartbeat({
+      drops: tx.Amount,
+      destination: tx.Destination,
+      history: options.history || [],
+      now: options.now,
+    });
+  }
+  if (name === "grant_pay" || name === "aether-grant") {
+    assertGrant({
+      destination: tx.Destination,
+      drops: tx.Amount,
+      index: options.index,
+      motions: options.motions,
+      w6: options.account
+        ? {
+            balance: options.account.balance,
+            ownerCount: options.account.ownerCount,
+            reserveBase: options.account.reserveBase,
+            reserveInc: options.account.reserveInc,
+          }
+        : null,
+    });
+  }
+  if (name === "x402_outbound" || name === "x402_buy") {
+    assertOutbound({
+      has402: options.has402 !== false,
+      payTo: tx.Destination,
+      drops: tx.Amount,
+      network: "xrpl:1",
+      index: options.index,
+    });
+    if (paidOnUtcDay(options.history || [], "x402_outbound", options.now || new Date())) {
+      throw coded("refusing a second outbound on this UTC day", "DAY");
+    }
+  }
+  if (name === "grant_pay" || name === "aether-grant") {
+    if (paidOnUtcDay(options.history || [], "grant_paid", options.now || new Date())) {
+      throw coded("refusing a second grant on this UTC day", "DAY");
+    }
+  }
+  const walkInMint = tx.TransactionType === "NFTokenMint"
+    && tx.Account === anchors.WALLETS.W2.address
+    && Number(tx.NFTokenTaxon) === 20260927;
+  const walkInSell = tx.TransactionType === "NFTokenCreateOffer"
+    && tx.Account === anchors.WALLETS.W2.address
+    && tx.Amount === AGENT_SPECIAL.walk_in_price_drops
+    && (Number(tx.Flags) & 1) === 1;
+  if (name === "walk_in_remint" || walkInMint || walkInSell) {
+    const offer = options.offer || (options.state && options.state.watched && options.state.watched.walk_in_offer);
+    assertRemint(offer);
+  }
+}
+
+function assertAgentRequest(opts) {
+  const options = opts || {};
+  assertAgentGate(options.env);
+  const wallet = agentWallet(options.wallet);
+  const tx = options.tx;
+  if (!tx || typeof tx !== "object" || Array.isArray(tx)) throw coded("refusing empty tx", "TX");
+  assertNoSeedFields(tx);
+  if (tx.Account === anchors.WALLETS.W0.address || options.wallet === "W0") {
+    throw coded("refusing to sign as W0", "W0");
+  }
+  if (options.url) assertAgentRpc(options.url, wallet);
+  if (options.networkId != null && options.networkId !== "") {
+    assertAltnet({
+      networkId: options.networkId,
+      kind: wallet.network === "xahau_testnet" ? "xahau" : undefined,
+    });
+    const expect = wallet.network === "xahau_testnet" ? anchors.XAHAU_NETWORK_ID : anchors.XRPL_NETWORK_ID;
+    if (Number(options.networkId) !== expect) {
+      throw coded(`refusing network id ${options.networkId}`, "MAINNET");
+    }
+  }
+  if (tx.Account !== wallet.address) throw coded("tx.Account does not match wallet", "ACCOUNT");
+  assertAgentBatch(tx, options.state);
+  assertAgentType(tx);
+  assertDisableMaster(tx);
+  assertAgentAmounts(tx, options.motions || []);
+  assertKnownIntent(tx, options.intent, options);
+  if (options.account) assertAgentFloat(tx, options.account, options.feeDrops);
+  else if (options.requireAccount) throw coded("refusing without an account balance", "FLOAT");
+  assertAgentRate(options.history || [], options.now || new Date(), wallet, tx);
+  assertEpochScar(tx);
+  assertAgentBatch(tx, options.state);
+  return { wallet, tx };
+}
+
 module.exports = {
   ALLOWLIST_PATH,
   SPEC,
@@ -454,6 +884,14 @@ module.exports = {
   HEARTBEAT_MIN_INTERVAL_MS,
   HEARTBEAT_SOURCE_TAG,
   KEY_ENVS,
+  AGENT_KEY_ENVS,
+  AGENT_TX_TYPES,
+  AGENT_TX_REFUSED,
+  AGENT_CAPS,
+  AGENT_ACCOUNTS,
+  AGENT_SPECIAL,
+  EPOCH_SCAR,
+  ASF_DISABLE_MASTER,
   BANNED_TYPES,
   coded,
   envIsCi,
@@ -484,4 +922,13 @@ module.exports = {
   namesOutbound,
   redact,
   assertPrintSafe,
+  assertAgentGate,
+  assertAgentAllowlist,
+  assertAgentRpc,
+  assertAgentRequest,
+  assertEpochScar,
+  agentWallet,
+  loadMotions,
+  xrpOut,
+  xrpFields,
 };
