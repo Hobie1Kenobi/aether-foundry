@@ -1,0 +1,97 @@
+# Read-only Director clock. Snapshot and wake only.
+# This job must not sign, remint, or start the Foundry daemon.
+
+name: Director clock
+
+on:
+  schedule:
+    - cron: "30 * * * *"
+    - cron: "56 13 * * 1-5"
+    - cron: "56 17 * * 1,3,5"
+    - cron: "56 13 * * 1"
+  workflow_dispatch:
+    inputs:
+      routine:
+        description: Wake routine. freshness runs director:wake --check with no --routine.
+        required: false
+        default: freshness
+        type: choice
+        options:
+          - freshness
+          - morning-health
+          - weekly-nav
+          - batch-probe
+
+permissions:
+  contents: write
+
+concurrency:
+  group: director-clock
+  cancel-in-progress: false
+
+jobs:
+  clock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm test
+
+      - name: Refuse signing env
+        run: node src/director/clock.js --assert-workflow
+
+      - name: Snapshot
+        run: npm run director:snapshot
+
+      - name: Wake
+        id: wake
+        env:
+          DIRECTOR_EVENT_NAME: ${{ github.event_name }}
+          DIRECTOR_EVENT_SCHEDULE: ${{ github.event.schedule }}
+          DIRECTOR_ROUTINE: ${{ github.event.inputs.routine }}
+        run: |
+          set +e
+          routines="$(node src/director/clock.js --print-routines)"
+          status=$?
+          if [ "$status" -ne 0 ] || [ -z "$routines" ]; then
+            echo "clock: routine name failed" >&2
+            echo "code=1" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          code=0
+          while IFS= read -r routine; do
+            [ -z "$routine" ] && continue
+            echo "director-clock routine ${routine}"
+            if [ "$routine" = "freshness" ]; then
+              npm run director:wake -- --check --quiet
+            else
+              npm run director:wake -- --check --quiet --routine "$routine"
+            fi
+            wake_status=$?
+            code="$(node src/director/clock.js --merge-exit "$code" "$wake_status")"
+          done <<< "$routines"
+          echo "code=${code}" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Commit director state if the snapshot changed it
+        run: |
+          git add -- lab/director-state.json
+          if git diff --cached --quiet; then
+            echo "director state unchanged"
+            exit 0
+          fi
+          msg="$(node src/director/clock.js --commit-message)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "$msg"
+          git push
+
+      - name: Fail on wake alert
+        run: node src/director/clock.js --require-wake-code "${{ steps.wake.outputs.code }}"

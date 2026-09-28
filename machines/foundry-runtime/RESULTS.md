@@ -60,3 +60,7 @@ No seeds in this file.
 3. Live RegularKey signing stays on the Foundry box with `FOUNDRY_DAEMON_LIVE=yes`. Caps remain grant `1000000` drops, heartbeat `1` drop, outbound `500000` drops. No Batch while `watched.batch.atomic_enabled` is false.
 
 The company is still session-operated.
+
+## Director clock
+
+Session `2026-09-28-director-clock`. No new snapshot. XRPL validated ledger stays `21102567`. Xahau validated ledger stays `12696465`. No signing hash. The unattended path is `.github/workflows/director-clock.yml`: `director:snapshot`, then `director:wake --check`. Wake exit 2 fails the job. The job does not remint.

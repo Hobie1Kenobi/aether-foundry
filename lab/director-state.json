@@ -4,7 +4,7 @@
   "source": "director:snapshot",
   "timezone": "America/Chicago",
   "updated_at": "2026-09-27T17:36:45-05:00",
-  "last_session_id": "2026-09-28-runtime",
+  "last_session_id": "2026-09-28-director-clock",
   "networks": {
     "xrpl_testnet": {
       "label": "XRPL Testnet",
@@ -318,9 +318,9 @@
     }
   },
   "next_actions": [
-    "Runtime dry-run is the gate: npm run runtime:dry with no secrets. Remint stays refused while watched.walk_in_offer.status is open.",
-    "Next unsigned work is the director clock: npm run director:snapshot then npm run director:wake -- --check. Actions must not run runtime:live.",
-    "Live RegularKey signing stays on the Foundry box with FOUNDRY_DAEMON_LIVE=yes. Caps remain grant 1000000 drops, heartbeat 1 drop, outbound 500000 drops. No Batch while watched.batch.atomic_enabled is false."
+    "Director clock is Actions .github/workflows/director-clock.yml: snapshot then wake --check. Exit 2 fails the job and does not remint.",
+    "Next unsigned work is the MCP server (walk_in_status, x402_catalog, director_status) with MCP_SIGN=off. Desk still does not sign.",
+    "Live RegularKey signing stays on the Foundry box with FOUNDRY_DAEMON_LIVE=yes. No runtime:live in Actions. No Batch while watched.batch.atomic_enabled is false."
   ],
   "blockers": []
 }

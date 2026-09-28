@@ -10,6 +10,7 @@ const anchors = require("./anchors");
 const schema = require("./schema");
 const snapshot = require("./snapshot");
 const wake = require("./wake");
+const clock = require("./clock");
 const walkIn = require("../walk-in-public");
 
 const ROOT = anchors.repoRoot();
@@ -284,7 +285,7 @@ describe("director schema", () => {
 
 describe("director snapshot", () => {
   it("does not load xrpl, xahau, dotenv, or a secrets file", () => {
-    const files = ["anchors.js", "schema.js", "snapshot.js", "wake.js"];
+    const files = ["anchors.js", "schema.js", "snapshot.js", "wake.js", "clock.js"];
     const banned = [/require\(["']xrpl["']\)/, /require\(["']xahau["']\)/, /require\(["']dotenv["']\)/, /aether-foundry-secrets/, /fromSeed/, /Wallet\.sign/];
     for (const file of files) {
       const text = fs.readFileSync(path.join(__dirname, file), "utf8");
@@ -404,6 +405,66 @@ describe("director snapshot", () => {
     );
     assert.equal(fs.existsSync(file), false);
   });
+
+  it("refuses to invent validated_ledger_index when RPC fails and keeps the card", async () => {
+    const file = tempFile();
+    const previous = schema.fixtureState();
+    previous.next_actions = ["keep-a", "keep-b", "keep-c"];
+    previous.blockers = ["founder blocker stays"];
+    previous.last_session_id = "session-keep";
+    previous.networks.xrpl_testnet.validated_ledger_index = 21102567;
+    writeChecked(file, previous);
+
+    await assert.rejects(
+      () =>
+        snapshot.run(["node", "snapshot", "--root", ROOT, "--state", file], {
+          fetchImpl: async () => {
+            throw new Error("socket hang up");
+          },
+          silent: true,
+        }),
+      /failed/
+    );
+    const afterTransport = JSON.parse(fs.readFileSync(file, "utf8"));
+    assert.equal(afterTransport.networks.xrpl_testnet.validated_ledger_index, 21102567);
+    assert.deepEqual(afterTransport.next_actions, ["keep-a", "keep-b", "keep-c"]);
+    assert.deepEqual(afterTransport.blockers, ["founder blocker stays"]);
+    assert.equal(afterTransport.last_session_id, "session-keep");
+
+    await assert.rejects(
+      () =>
+        snapshot.run(["node", "snapshot", "--root", ROOT, "--state", file], {
+          fetchImpl: async (url, init) => {
+            const base = mockFetch();
+            if (init && init.method === "POST" && JSON.parse(init.body).method === "server_state" && !String(url).includes("xahau")) {
+              return jsonResponse({ state: {} });
+            }
+            return base(url, init);
+          },
+          silent: true,
+        }),
+      /validated_ledger/
+    );
+    const afterOmitted = JSON.parse(fs.readFileSync(file, "utf8"));
+    assert.equal(afterOmitted.networks.xrpl_testnet.validated_ledger_index, 21102567);
+    assert.equal(afterOmitted.networks.xahau_testnet.validated_ledger_index, previous.networks.xahau_testnet.validated_ledger_index);
+    assert.deepEqual(afterOmitted.next_actions, ["keep-a", "keep-b", "keep-c"]);
+    assert.deepEqual(afterOmitted.blockers, ["founder blocker stays"]);
+    assert.equal(afterOmitted.last_session_id, "session-keep");
+
+    const missing = tempFile();
+    await assert.rejects(
+      () =>
+        snapshot.run(["node", "snapshot", "--root", ROOT, "--state", missing], {
+          fetchImpl: async () => {
+            throw new Error("socket hang up");
+          },
+          silent: true,
+        }),
+      /failed/
+    );
+    assert.equal(fs.existsSync(missing), false);
+  });
 });
 
 describe("director wake", () => {
@@ -478,6 +539,95 @@ describe("director wake", () => {
     assert.equal(result.status, 2);
     assert.match(result.stderr, /stale/);
     assert.equal(result.stdout, "");
+  });
+});
+
+describe("director clock", () => {
+  it("names routines from the UTC schedules and does not sign", () => {
+    const mondayMorning = new Date("2026-09-28T13:56:00Z");
+    const tuesdayMorning = new Date("2026-09-29T13:56:00Z");
+    const mondayBatch = new Date("2026-09-28T17:56:00Z");
+    const tuesdayAfternoon = new Date("2026-09-29T17:56:00Z");
+    const freshness = new Date("2026-09-28T14:30:00Z");
+    assert.deepEqual(
+      clock.resolveRoutines({ schedule: "56 13 * * 1-5", now: mondayMorning }).map((row) => row.name),
+      ["morning-health", "weekly-nav"]
+    );
+    assert.deepEqual(
+      clock.resolveRoutines({ schedule: "56 13 * * 1", now: mondayMorning }).map((row) => row.name),
+      ["weekly-nav", "morning-health"]
+    );
+    assert.deepEqual(
+      clock.resolveRoutines({ schedule: "56 13 * * 1-5", now: tuesdayMorning }).map((row) => row.name),
+      ["morning-health"]
+    );
+    assert.deepEqual(
+      clock.resolveRoutines({ schedule: "56 17 * * 1,3,5", now: mondayBatch }).map((row) => row.name),
+      ["batch-probe"]
+    );
+    assert.equal(clock.cronMatches("30 * * * *", freshness), true);
+    assert.equal(clock.cronMatches("56 17 * * 1,3,5", tuesdayAfternoon), false);
+    assert.equal(clock.cronMatches("56 13 * * 1-5", new Date("2026-10-03T13:56:00Z")), false);
+    const dispatched = clock.resolveRoutines({
+      eventName: "workflow_dispatch",
+      routineInput: "batch-probe",
+      now: mondayMorning,
+    });
+    assert.deepEqual(dispatched.map((row) => row.name), ["batch-probe"]);
+    assert.deepEqual(clock.wakeArgv(dispatched[0]), ["--check", "--quiet", "--routine", "batch-probe"]);
+    assert.deepEqual(clock.wakeArgv(clock.SCHEDULES[0]), ["--check", "--quiet"]);
+    assert.throws(() => clock.resolveRoutines({ eventName: "workflow_dispatch", routineInput: "walk-in-remint" }), /unknown routine/);
+    assert.throws(() => clock.resolveRoutines({ now: tuesdayAfternoon }), /no director routine/);
+  });
+
+  it("merges wake exits and fails the job on alert without a commit ledger guess", () => {
+    assert.equal(clock.mergeExit(0, 0), 0);
+    assert.equal(clock.mergeExit(0, 2), 2);
+    assert.equal(clock.mergeExit(2, 0), 2);
+    assert.equal(clock.mergeExit(2, 1), 1);
+    assert.throws(() => clock.requireWakeCode(2), /refusing to sign or remint/);
+    assert.throws(() => clock.requireWakeCode(1), /wake fatal/);
+    assert.throws(() => clock.requireWakeCode(""), /wake exit missing/);
+    assert.equal(clock.requireWakeCode(0), 0);
+    assert.equal(clock.requireWakeCode("0"), 0);
+    const state = schema.fixtureState();
+    assert.equal(clock.commitMessage(state), `chore(director): snapshot ${state.networks.xrpl_testnet.validated_ledger_index}`);
+    const blank = schema.fixtureState();
+    delete blank.networks.xrpl_testnet.validated_ledger_index;
+    assert.throws(() => clock.commitMessage(blank), /validated_ledger_index/);
+    blank.networks.xrpl_testnet.validated_ledger_index = 0;
+    assert.throws(() => clock.commitMessage(blank), /validated_ledger_index/);
+    const alert = spawnSync(process.execPath, [path.join(__dirname, "clock.js"), "--require-wake-code", "2"], { encoding: "utf8" });
+    assert.equal(alert.status, 2);
+    assert.match(alert.stderr, /exit 2/);
+    const quiet = spawnSync(process.execPath, [path.join(__dirname, "clock.js"), "--merge-exit", "0", "2"], { encoding: "utf8" });
+    assert.equal(quiet.status, 0);
+    assert.equal(quiet.stdout.trim(), "2");
+  });
+
+  it("refuses seed env, runtime:live, and mainnet hosts in the workflow", () => {
+    const yml = fs.readFileSync(path.join(ROOT, clock.WORKFLOW_REL), "utf8");
+    clock.assertWorkflow(yml);
+    assert.equal(yml.includes("runtime:live"), false);
+    assert.equal(yml.includes("runtime:watch"), false);
+    assert.doesNotMatch(yml, /_SEED/);
+    assert.doesNotMatch(yml, /secrets\./);
+    assert.throws(() => clock.assertWorkflow(`${yml}\nrun: npm run runtime:live\n`), /runtime:live/);
+    assert.throws(() => clock.assertWorkflow(yml.replace("npm test", "npm test\nhttps://s1.ripple.com:51234")), /ripple\.com/);
+    assert.throws(() => clock.assertActionsEnv({ GITHUB_ACTIONS: "true", W2_REGULAR_SEED: "present" }), /seed env/);
+    assert.throws(() => clock.assertActionsEnv({ FOUNDRY_DAEMON_LIVE: "yes" }), /FOUNDRY_DAEMON_LIVE/);
+    const gated = spawnSync(
+      process.execPath,
+      [path.join(__dirname, "clock.js"), "--assert-workflow"],
+      { encoding: "utf8", env: { ...process.env, GITHUB_ACTIONS: "true", W6_REGULAR_SEED: "present" } }
+    );
+    assert.equal(gated.status, 1);
+    assert.match(gated.stderr, /seed env/);
+    assert.doesNotMatch(gated.stderr, /present/);
+    const text = fs.readFileSync(path.join(__dirname, "clock.js"), "utf8");
+    assert.doesNotMatch(text, /require\(["']xrpl["']\)/);
+    assert.doesNotMatch(text, /Wallet/);
+    assert.equal(fs.existsSync(path.join(ROOT, "lab", "weekly", ".gitkeep")), true);
   });
 });
 
