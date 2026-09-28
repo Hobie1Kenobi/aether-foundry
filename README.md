@@ -316,6 +316,14 @@ npm run director:wake -- --check --quiet --routine morning-health
 
 `director:snapshot` is a read-only refresh of XRPL Testnet and Xahau Testnet, plus the desk and the toml. It refuses mainnet hosts and refuses to write a seed. If RPC fails, it does not invent a ledger index. `director:wake` prints the continuation card from the file and does not hit RPC. `--check` exits 0 when quiet and 2 on alert.
 
+Before a new transaction type, refresh the amendment map:
+
+```bash
+npm run frontier:probe
+```
+
+That writes [`lab/frontier/amendments.json`](./lab/frontier/amendments.json) from `server_info` and `feature` on XRPL Testnet (network id 1). A failed RPC does not replace the file. Disabled rows stay disabled: no sequential Batch, TokenEscrow, or vault stand-in. Ritual: [`lab/frontier/README.md`](./lab/frontier/README.md).
+
 `npm run health` is a different script. It can faucet and pay. Morning health uses the wake check.
 
 ```mermaid
@@ -349,6 +357,7 @@ Anything that signs refuses `CI`, `GITHUB_ACTIONS`, and mainnet hosts. Seeds loa
 | `npm test` | Local unit tests |
 | `npm run director:snapshot` | Read-only wake-file refresh |
 | `npm run director:wake` | Print the continuation card |
+| `npm run frontier:probe` | Read-only Testnet amendment map |
 | `npm run report:nav` | NAV digest from live reads |
 | `npm run buy:walk-in` | Stranger accept of the live W2 offer |
 | `npm run watch:walk-in` | Read-only sold-out detector |
@@ -379,7 +388,7 @@ Anything that signs refuses `CI`, `GITHUB_ACTIONS`, and mainnet hosts. Seeds loa
 
 ```text
 corp/       charter, org, public address book
-lab/        sessions, weekly letters, director-state.json, OPERATOR, wake contract
+lab/        sessions, weekly letters, director-state.json, frontier/amendments.json, OPERATOR, wake contract
 machines/   one directory per machine
 src/        xrpl.js and xahau operators
 web/        Next.js desk (Vercel root). Read-only

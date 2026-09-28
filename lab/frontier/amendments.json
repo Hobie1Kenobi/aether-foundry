@@ -1,0 +1,162 @@
+{
+  "probed_at": "2026-09-28T18:23:00-05:00",
+  "rpc": "https://s.altnet.rippletest.net:51234",
+  "network_id": 1,
+  "build_version": "3.4.1",
+  "amendments": [
+    {
+      "name": "Credentials",
+      "enabled": true,
+      "supported": true,
+      "hash": "1CB67D082CF7D9102412D34258CEDB400E659352D3B207348889297A6D90F5EF",
+      "vetoed": null
+    },
+    {
+      "name": "PermissionedDomains",
+      "enabled": true,
+      "supported": true,
+      "hash": "A730EB18A9D4BB52502C898589558B4CCEB4BE10044500EE5581137A2E80E849",
+      "vetoed": null
+    },
+    {
+      "name": "PermissionedDEX",
+      "enabled": true,
+      "supported": true,
+      "hash": "677E401A423E3708363A36BA8B3A7D019D21AC5ABD00387BDBEA6BDE4C91247E",
+      "vetoed": null
+    },
+    {
+      "name": "TokenEscrow",
+      "enabled": true,
+      "supported": true,
+      "hash": "138B968F25822EFBF54C00F97031221C47B1EAB8321D93C7C2AEAF85F04EC5DF",
+      "vetoed": null
+    },
+    {
+      "name": "MPTokensV1",
+      "enabled": true,
+      "supported": true,
+      "hash": "950AE2EA4654E47F04AA8739C0B214E242097E802FD372D24047A89AB1F5EC38",
+      "vetoed": null
+    },
+    {
+      "name": "PriceOracle",
+      "enabled": true,
+      "supported": true,
+      "hash": "96FD2F293A519AE1DB6F8BED23E4AD9119342DA7CB6BAFD00953D16C54205D8B",
+      "vetoed": null
+    },
+    {
+      "name": "DynamicNFT",
+      "enabled": true,
+      "supported": true,
+      "hash": "C1CE18F2A268E6A849C27B3DE485006771B4C01B2FCEC4F18356FE92ECD6BB74",
+      "vetoed": null
+    },
+    {
+      "name": "DID",
+      "enabled": true,
+      "supported": true,
+      "hash": "DB432C3A09D9D5DFC7859F39AE5FF767ABC59AED0A9FB441E83B814D8946C109",
+      "vetoed": null
+    },
+    {
+      "name": "Clawback",
+      "enabled": true,
+      "supported": true,
+      "hash": "56B241D7A43D40354D02A9DC4C8DF5C7A1F930D92A9035C4E12291B3CA3E1C2B",
+      "vetoed": null
+    },
+    {
+      "name": "DeepFreeze",
+      "enabled": true,
+      "supported": true,
+      "hash": "DAF3A6EB04FA5DC51E8E4F23E9B7022B693EFA636F23F22664746C77B5786B23",
+      "vetoed": null
+    },
+    {
+      "name": "DepositAuth",
+      "enabled": true,
+      "supported": true,
+      "hash": "F64E1EABBE79D55B3BB82020516CEC2C582A98A6BFE20FBE9BB6A0D233418064",
+      "vetoed": null
+    },
+    {
+      "name": "BatchV1_1",
+      "enabled": false,
+      "supported": true,
+      "hash": "9F287AED3CDB50A7BD1ACEC24296A30C9B5230CCD136219317AC790E3B884377",
+      "vetoed": null
+    },
+    {
+      "name": "fixBatchV1_2",
+      "enabled": false,
+      "supported": true,
+      "hash": "14A2B45E48A4A124D1BBA657AC7B0DC3D5EA8C256C89E8F0D8142D32960A7944",
+      "vetoed": null
+    },
+    {
+      "name": "TicketBatch",
+      "enabled": true,
+      "supported": true,
+      "hash": "955DF3FA5891195A9DAEFA1DDC6BB244B545DDE1BAA84CBB25D5F12A8DA68A0C",
+      "vetoed": null
+    },
+    {
+      "name": "PermissionDelegationV1_1",
+      "enabled": false,
+      "supported": true,
+      "hash": "0F48FF561C709540328F31F1C97FD512ACC8B4E42138A161CB0E21ECA292540B",
+      "vetoed": null
+    },
+    {
+      "name": "SingleAssetVault",
+      "enabled": false,
+      "supported": true,
+      "hash": "81BD2619B6B3C8625AC5D0BC01DE17F06C3F0AB95C7C87C93715B87A4FD240D8",
+      "vetoed": null
+    },
+    {
+      "name": "LendingProtocol",
+      "enabled": false,
+      "supported": true,
+      "hash": "565B90CA1AB2B9D42208ED10884188C64F9E19083DECB9634AAF06EB03299509",
+      "vetoed": null
+    },
+    {
+      "name": "LendingProtocolV1_1",
+      "enabled": false,
+      "supported": true,
+      "hash": "A360E2BFD775A5B0DCE1C36C16DF31B72735A57584FD163655D2F9564F8E7AC8",
+      "vetoed": null
+    },
+    {
+      "name": "Sponsor",
+      "enabled": false,
+      "supported": true,
+      "hash": "BE1F90581635DBCEBFC4678C4B54FEDDC1A17B50FD02CFE765A4132A342126AC",
+      "vetoed": null
+    },
+    {
+      "name": "ConfidentialTransfer",
+      "enabled": false,
+      "supported": true,
+      "hash": "2110E4A19966E2EF517C0A8C56A5F35099D7665B0BB89D7B126B30D50B86AAD5",
+      "vetoed": null
+    },
+    {
+      "name": "DynamicMPT",
+      "enabled": false,
+      "supported": true,
+      "hash": "58E92F338758479C06084E1B6BA366BAD8F75E5329A7F0EEAFFFDA51E5106B7F",
+      "vetoed": null
+    },
+    {
+      "name": "XChainBridge",
+      "enabled": false,
+      "supported": true,
+      "hash": "C98D98EE9616ACD36E81FDEB8D41D349BF5F1B41DD64A0ABC1FE9AA5EA267E9C",
+      "vetoed": null
+    }
+  ]
+}
