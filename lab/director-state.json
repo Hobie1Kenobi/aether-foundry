@@ -4,7 +4,7 @@
   "source": "director:snapshot",
   "timezone": "America/Chicago",
   "updated_at": "2026-09-27T17:36:45-05:00",
-  "last_session_id": "2026-09-28-director-clock",
+  "last_session_id": "2026-09-28-desk-status",
   "networks": {
     "xrpl_testnet": {
       "label": "XRPL Testnet",
@@ -318,9 +318,9 @@
     }
   },
   "next_actions": [
-    "Director clock is Actions .github/workflows/director-clock.yml: snapshot then wake --check. Exit 2 fails the job and does not remint.",
-    "Next unsigned work is the MCP server (walk_in_status, x402_catalog, director_status) with MCP_SIGN=off. Desk still does not sign.",
-    "Live RegularKey signing stays on the Foundry box with FOUNDRY_DAEMON_LIVE=yes. No runtime:live in Actions. No Batch while watched.batch.atomic_enabled is false."
+    "Desk /api/status is seedless JSON. After this deploy, curl https://aether-foundry-desk.vercel.app/api/status. The desk does not sign.",
+    "Heartbeat dry-run is npm run heartbeat:dry (W5 to W3, 1 drop, SourceTag 202609280). Live only on the Foundry box with FOUNDRY_DAEMON_LIVE=yes and W5_REGULAR_SEED. No heartbeat in Actions.",
+    "Daily flywheel is not started. No Batch while watched.batch.atomic_enabled is false. No remint while Walk-In is open."
   ],
   "blockers": []
 }
