@@ -51,7 +51,17 @@ npm run director:snapshot
 npm run director:wake -- --check
 ```
 
-Those two commands do not sign. They are not wired to Actions in this pack.
+Those two commands do not sign.
+
+## Director clock
+
+GitHub Actions `.github/workflows/director-clock.yml` runs the same snapshot, then `director:wake --check`. A wake exit 2 fails that job. It does not remint and it does not run `runtime:live`.
+
+Optional crontab on the Foundry box (path is the checkout; no seed is required):
+
+```bash
+*/30 * * * * cd /path/aether-foundry && npm run director:snapshot && npm run director:wake -- --check --routine morning-health
+```
 
 ## What not to run
 

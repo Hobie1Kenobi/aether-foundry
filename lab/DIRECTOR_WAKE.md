@@ -137,6 +137,23 @@ After a session, set `last_session_id` to the session note stem (for example `20
 
 `updated_at` is ISO-8601 in `America/Chicago` with a numeric offset (`-05:00` or `-06:00`). Wake parses that offset. Do not write a naive local time.
 
+GitHub Actions `.github/workflows/director-clock.yml` is the unattended clock. It runs `npm test`, `npm run director:snapshot`, then `npm run director:wake -- --check --quiet`. Schedules are UTC:
+
+| Cron | Routine |
+|------|---------|
+| `30 * * * *` | freshness (full `--check`, no `--routine`) |
+| `56 13 * * 1-5` | weekday `morning-health` (08:56 America/Chicago while CDT, UTC−5) |
+| `56 17 * * 1,3,5` | Mon/Wed/Fri `batch-probe` (12:56 CT while CDT) |
+| `56 13 * * 1` | Monday `weekly-nav` |
+
+Monday 13:56 UTC runs both `morning-health` and `weekly-nav`. `workflow_dispatch` can pick one routine. The job has `contents: write` only so it can commit `lab/director-state.json` as `github-actions[bot]` with `chore(director): snapshot <ledger>` when the file changed. The ledger number is read from the file. A missing index is not filled in. Wake exit 2 fails the job. The job does not remint and does not run `runtime:live`.
+
+Optional Foundry box cron (not Actions; still no signing):
+
+```bash
+*/30 * * * * cd /path/aether-foundry && npm run director:snapshot && npm run director:wake -- --check --routine morning-health
+```
+
 ## What this file is not
 
 - Not a seed store. A `seed` / `secret` / `private_key` key, or a family-seed value, fails validation and is not written.

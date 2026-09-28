@@ -12,7 +12,7 @@ Adversary checks from the runtime activation list. This pack is Workstream 1. La
 
 **Claim:** GitHub Actions starts the signer.
 
-**Check:** `runtime:live` is `node src/runtime/daemon.js --live --once`. `runtime:watch` is `node src/runtime/daemon.js --live`. Both call `assertLiveGate`, which throws code `CI` when `CI=true`, `CI=1`, or `GITHUB_ACTIONS=true`, before a seed file is opened. The Walk-In workflow file does not contain `runtime:live` or `runtime:watch`. It is still detect-only. This PR does not add a director-clock workflow.
+**Check:** `runtime:live` is `node src/runtime/daemon.js --live --once`. `runtime:watch` is `node src/runtime/daemon.js --live`. Both call `assertLiveGate`, which throws code `CI` when `CI=true`, `CI=1`, or `GITHUB_ACTIONS=true`, before a seed file is opened. The Walk-In workflow file does not contain `runtime:live` or `runtime:watch`. It is still detect-only. `.github/workflows/director-clock.yml` runs `director:snapshot` and `director:wake --check` only. `src/director/clock.js` `assertWorkflow` rejects `runtime:live`, `runtime:watch`, a `*_SEED` env name, and `FOUNDRY_DAEMON_LIVE` in that file. Under `GITHUB_ACTIONS=true`, `assertActionsEnv` rejects a seed env var before wake.
 
 ## Daemon treating STRANGER as inbound
 
@@ -54,4 +54,4 @@ Adversary checks from the runtime activation list. This pack is Workstream 1. La
 
 **Claim:** a Monday cron submits `Batch` while `atomic_enabled` is false.
 
-**Check:** `Batch` is not an allowlisted action. `assertSigningTx` throws `BATCH` for `TransactionType` `Batch` whether or not the weekday is Monday, including when `watched.batch.atomic_enabled` is false. `EscrowFinish` and `EscrowCancel` throw `BANNED`. The daemon does not read the Unix-epoch BUYER escrow.
+**Check:** `Batch` is not an allowlisted action. `assertSigningTx` throws `BATCH` for `TransactionType` `Batch` whether or not the weekday is Monday, including when `watched.batch.atomic_enabled` is false. `EscrowFinish` and `EscrowCancel` throw `BANNED`. The daemon does not read the Unix-epoch BUYER escrow. The Monday director clock runs `weekly-nav` and `batch-probe` as read-only wake checks. `batch_enabled` fails the job. It does not submit a transaction.
