@@ -180,6 +180,12 @@
       "results": "machines/grants-flywheel/RESULTS.md",
       "last_result_hash": null,
       "note": "operational; no trial hash until a tesSUCCESS grant"
+    },
+    "native-price-oracle": {
+      "status": "spec-only",
+      "results": "machines/native-price-oracle/RESULTS.md",
+      "last_result_hash": null,
+      "note": "PriceOracle enabled; no Oracle object hash until OracleSet tesSUCCESS"
     }
   },
   "watched": {

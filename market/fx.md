@@ -19,7 +19,7 @@ AMM constant-product mid is **not** a firm quote. Live books (W1) show:
 | Bid (buy AETH) | 0.475 XRP / 50 AETH | 0.0095 |
 | Bid | 1.8 XRP / 200 AETH | 0.0090 |
 
-**Labor-unit FX for work tickets:** use AMM mid ± fee (0.5% trading_fee) as *indicative*; settle with Escrow/Payment in XRP until an oracle machine (see `machines/oracle-mid-ticket/`) freezes a mid into a quote NFT/check.
+**Labor-unit FX for work tickets:** the published figure is the W5 `Oracle` (document 1, AETH/XRP, scale 8) once the box has submitted it. Until that object exists, `npm run frontier:oracle-ticket` refuses rather than using a local float. Machine #4 (`machines/oracle-mid-ticket/`) remains the honor-system trial. Keeper: `machines/native-price-oracle/`.
 
 ## AMM AETH/XRP snapshot (live 2026-09-27 ~10:13 AM CT)
 

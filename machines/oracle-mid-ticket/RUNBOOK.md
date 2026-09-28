@@ -21,4 +21,4 @@ node src/oracle-mid-ticket-session.js
 
 - Testnet only. Never print/commit seeds.  
 - Do not touch the Unix-epoch BUYER escrow scar.  
-- No Batch; no OracleSet.
+- No Batch. This trial did not submit `OracleSet`. The ledger oracle is `machines/native-price-oracle/`.

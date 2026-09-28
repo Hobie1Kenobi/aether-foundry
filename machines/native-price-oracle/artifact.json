@@ -1,0 +1,18 @@
+{
+  "name": "Aether Foundry — Native Price Oracle",
+  "description": "F1 OracleSet on W5. Work-ticket drops are decoded from ledger_entry, not from a local AMM float.",
+  "machine": "native-price-oracle",
+  "version": "0.1.0",
+  "network": "XRPL Testnet",
+  "network_id": 1,
+  "provider_account": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+  "oracle_document_id": 1,
+  "base_asset": "AETH",
+  "quote_asset": "XRP",
+  "scale": 8,
+  "intent": "oracle_set",
+  "key_env": "W5_REGULAR_SEED",
+  "oracle_id": null,
+  "last_oracle_set_hash": null,
+  "note": "oracle_id and last_oracle_set_hash stay null until a tesSUCCESS OracleSet. Do not invent them."
+}

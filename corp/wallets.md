@@ -85,6 +85,7 @@ Booted 2026-09-27 via faucet + on-chain boot. Explorer: https://testnet.xrpl.org
 | Oracle Mid-Ticket NFTokenID | `000803E8D25E64BC6D436EA502CE71902FE64120C571FCF19A5519C90141DD5B` |
 | Oracle Mid-Ticket holder | BUYER `rEbUaXDXZnzR8wJjGqULKn1YLXNd5CARth` |
 | Oracle quote file | `lab/oracle/2026-09-27-1144.json` |
+| F1 OracleSet | W5 document `1`, pair AETH/XRP, scale 8. No `oracle_id` until the box submits. Pack `machines/native-price-oracle/`. |
 
 | LP Badge v0 NFTokenID | `000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1B3732AC80141DD5C` |
 | LP Badge bound issuer | `rPXJrQEJN2K9grJJBqQHQ2V5nazcZQo5Cn` (XRPL Testnet, not W2) |

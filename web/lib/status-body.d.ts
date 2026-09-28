@@ -16,6 +16,18 @@ export type StatusBody = {
   grants_paid: number | null;
   inbound_counterparties: number | null;
   last_heartbeat: { hash: string | null; ledger_index: number | null; ts: string | null };
+  oracle_id: string | null;
+  oracle: {
+    account: string;
+    oracle_document_id: number | null;
+    last_update_time: number | null;
+    quote_xrp_per_aeth: string | null;
+    asset_price: string | null;
+    scale: number | null;
+    ledger_index: number | null;
+    base_asset: string | null;
+    quote_asset: string | null;
+  };
   director_updated_at: string | null;
   laws: string[];
   error?: string;
@@ -49,6 +61,8 @@ export function collectStatus(opts: {
   aethIssuer: string;
   packHookHash: string;
   walkInDrops?: string;
+  w5?: string;
+  oracleDocumentId?: number;
   git?: {
     metrics?: string;
     pnl?: string;

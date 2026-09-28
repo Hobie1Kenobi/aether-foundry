@@ -1,5 +1,5 @@
 import { collectStatus, mainGitFiles } from "@/lib/status-body";
-import { AETH_HEX, WALLETS, XAHAU_W7, XRPL_HTTP } from "@/lib/xrpl-public";
+import { AETH_HEX, ORACLE, WALLETS, XAHAU_W7, XRPL_HTTP } from "@/lib/xrpl-public";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,6 +28,8 @@ export async function GET() {
     xrplHttp: XRPL_HTTP,
     xahauHttp: XAHAU_W7.rpc,
     w2: WALLETS.W2.address,
+    w5: ORACLE.account,
+    oracleDocumentId: ORACLE.documentId,
     ammAccount: WALLETS.AMM.address,
     w7: XAHAU_W7.address,
     aethCurrency: AETH_HEX,
