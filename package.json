@@ -10,7 +10,7 @@
     "health": "node src/health.js",
     "offers": "node src/place-four-clean.js",
     "trials": "node src/work-ticket-trials-finish.js",
-    "test": "node --test src/time/rippleEpoch.test.js src/walk-in-remint-watch.test.js src/walk-in-buy.test.js src/x402-rules.test.js src/x402-hits.test.js src/x402-outbound.test.js src/xahau-split.test.js src/lp-badge-bound.test.js src/governance/policy.test.js src/director/director.test.js src/grants/grants.test.js",
+    "test": "node --test src/time/rippleEpoch.test.js src/walk-in-remint-watch.test.js src/walk-in-buy.test.js src/x402-rules.test.js src/x402-hits.test.js src/x402-outbound.test.js src/xahau-split.test.js src/lp-badge-bound.test.js src/governance/policy.test.js src/director/director.test.js src/grants/grants.test.js src/runtime/policy.test.js",
     "buy:walk-in": "node src/walk-in-buy.js",
     "director:snapshot": "node src/director/snapshot.js",
     "director:wake": "node src/director/wake.js",
@@ -31,7 +31,11 @@
     "watch:walk-in": "node src/walk-in-remint-watch.js",
     "remint:walk-in": "node src/walk-in-storefront-v2.js",
     "grants:scan": "node src/grants/scan.js",
-    "grants:pay": "node src/grants/pay.js"
+    "grants:pay": "node src/grants/pay.js",
+    "runtime:policy": "node --test src/runtime/policy.test.js",
+    "runtime:dry": "node src/runtime/daemon.js --dry-run --once",
+    "runtime:live": "node src/runtime/daemon.js --live --once",
+    "runtime:watch": "node src/runtime/daemon.js --live"
   },
   "repository": {
     "type": "git",

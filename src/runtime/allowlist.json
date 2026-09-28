@@ -1,0 +1,67 @@
+{
+  "schema": "aether.foundry-runtime.allowlist",
+  "network": "XRPL Testnet",
+  "network_id": 1,
+  "xahau_network_id": 21338,
+  "refused_network_ids": [0, 21337],
+  "refused_hosts": ["ripple.com", "xrplcluster.com", "xrpl.ws", "xrpl.link", "xahau.network"],
+  "actions": {
+    "walk_in_remint": {
+      "account": "W2",
+      "address": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+      "key_env": "W2_REGULAR_SEED",
+      "max_offer_drops": "10000000",
+      "fees_only_extra": true,
+      "taxon": 20260927,
+      "destination": null,
+      "trigger": "watched.walk_in_offer.status === sold_out",
+      "refuse": ["offer_open", "offer_count", "ci", "mainnet"]
+    },
+    "grant_pay": {
+      "account": "W6",
+      "address": "rfnqxYQWKsVGFuWLjky41puXHJkT2v8yTf",
+      "key_env": "W6_REGULAR_SEED",
+      "max_drops": "1000000",
+      "memo_purpose": "aether-grant",
+      "memo_experiment": "grants-flywheel",
+      "trigger": "grants:scan candidate, 7-day cooldown, one per UTC day",
+      "refuse": ["labeled_wallets", "fifty_xrp", "spendable_under_10_xrp", "ci", "mainnet"]
+    },
+    "heartbeat": {
+      "account": "W5",
+      "address": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+      "key_env": "W5_REGULAR_SEED",
+      "default_drops": "1",
+      "max_drops": "1000",
+      "destinations": ["W3", "W6"],
+      "destination_addresses": [
+        "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+        "rfnqxYQWKsVGFuWLjky41puXHJkT2v8yTf"
+      ],
+      "memo_purpose": "aether-heartbeat",
+      "memo_experiment": "foundry-runtime",
+      "min_interval_hours": 6,
+      "max_per_24h": 4,
+      "trigger": "interval >= 6 hours",
+      "refuse": ["more_than_4_per_24h", "dest_not_w3_or_w6", "ci", "mainnet"]
+    },
+    "x402_outbound": {
+      "account": "W3",
+      "address": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+      "key_env": "W3_REGULAR_SEED",
+      "max_drops": "500000",
+      "trigger": "director next_action names outbound; foreign payTo != W3",
+      "refuse": ["circular", "mainnet", "missing_402", "ci"]
+    },
+    "director_snapshot": {
+      "account": null,
+      "address": null,
+      "key_env": null,
+      "max_drops": "0",
+      "signs": false,
+      "trigger": "every loop / stale > 36h",
+      "preserves": ["next_actions", "blockers", "last_session_id"],
+      "refuse": ["must_not_sign"]
+    }
+  }
+}

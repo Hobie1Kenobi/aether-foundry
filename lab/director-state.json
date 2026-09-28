@@ -4,7 +4,7 @@
   "source": "director:snapshot",
   "timezone": "America/Chicago",
   "updated_at": "2026-09-27T17:36:45-05:00",
-  "last_session_id": null,
+  "last_session_id": "2026-09-28-runtime",
   "networks": {
     "xrpl_testnet": {
       "label": "XRPL Testnet",
@@ -318,9 +318,9 @@
     }
   },
   "next_actions": [
-    "Morning health: read probes.desk, probes.toml, wallets.W0.spendable_drops, and watched.w0_signer_list before acting.",
-    "Batch probe: read watched.batch.atomic_enabled and stay quiet while it is false; do not submit a Batch transaction.",
-    "Grants flywheel is operational: npm run grants:scan, then npm run grants:pay -- --dry-run from W6 to non-labeled counterparties. No trial hash until tesSUCCESS. Walk-In buy remains npm run buy:walk-in while the offer is open; remint only on the Foundry box after sold_out."
+    "Runtime dry-run is the gate: npm run runtime:dry with no secrets. Remint stays refused while watched.walk_in_offer.status is open.",
+    "Next unsigned work is the director clock: npm run director:snapshot then npm run director:wake -- --check. Actions must not run runtime:live.",
+    "Live RegularKey signing stays on the Foundry box with FOUNDRY_DAEMON_LIVE=yes. Caps remain grant 1000000 drops, heartbeat 1 drop, outbound 500000 drops. No Batch while watched.batch.atomic_enabled is false."
   ],
   "blockers": []
 }

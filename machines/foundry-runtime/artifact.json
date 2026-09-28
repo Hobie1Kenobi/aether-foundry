@@ -1,0 +1,23 @@
+{
+  "machine": "foundry-runtime",
+  "network": "XRPL Testnet",
+  "network_id": 1,
+  "dry_run_default": true,
+  "live_env": "FOUNDRY_DAEMON_LIVE",
+  "signs_in_ci": false,
+  "actions": [
+    "walk_in_remint",
+    "grant_pay",
+    "heartbeat",
+    "x402_outbound",
+    "director_snapshot"
+  ],
+  "key_env": [
+    "W2_REGULAR_SEED",
+    "W3_REGULAR_SEED",
+    "W5_REGULAR_SEED",
+    "W6_REGULAR_SEED"
+  ],
+  "trial_hash": null,
+  "note": "null means not submitted. The allowlist is a spec. Do not treat null as a ledger hash."
+}
