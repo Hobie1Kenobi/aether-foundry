@@ -18,6 +18,20 @@ function emptyHeartbeat() {
   return { hash: null, ledger_index: null, ts: null };
 }
 
+function emptyOracle() {
+  return {
+    account: "",
+    oracle_document_id: null,
+    last_update_time: null,
+    quote_xrp_per_aeth: null,
+    asset_price: null,
+    scale: null,
+    ledger_index: null,
+    base_asset: null,
+    quote_asset: null,
+  };
+}
+
 function baseStatus(error) {
   const body = {
     network: null,
@@ -31,6 +45,8 @@ function baseStatus(error) {
     grants_paid: null,
     inbound_counterparties: null,
     last_heartbeat: emptyHeartbeat(),
+    oracle_id: null,
+    oracle: emptyOracle(),
     director_updated_at: null,
     laws: LAWS.slice(),
   };
@@ -120,6 +136,8 @@ function parseMetrics(text) {
   }
   const ledger = beat && Number.isInteger(beat.ledger_index) && beat.ledger_index > 0 ? beat.ledger_index : null;
   const ts = beat && typeof beat.ts === "string" ? beat.ts : null;
+  const oracle = readMetricsOracle(doc);
+  if (!oracle.ok) return oracle;
   return {
     ok: true,
     counts,
@@ -127,6 +145,108 @@ function parseMetrics(text) {
       hash: fromBeat || fromField,
       ledger_index: fromBeat ? ledger : null,
       ts: fromBeat ? ts : null,
+    },
+    oracle_id: oracle.oracle_id,
+    oracle: oracle.oracle,
+  };
+}
+
+function decimalFromScaled(assetPrice, scale) {
+  const raw = String(assetPrice == null ? "" : assetPrice).trim();
+  let n;
+  if (/^[0-9]+$/.test(raw)) n = BigInt(raw);
+  else if (/^[0-9a-fA-F]+$/.test(raw)) n = BigInt(`0x${raw}`);
+  else return null;
+  const s = Number(scale);
+  if (!Number.isInteger(s) || s < 0 || s > 10 || n < 0n) return null;
+  const den = 10n ** BigInt(s);
+  const whole = n / den;
+  const frac = (n % den).toString().padStart(s, "0").replace(/0+$/, "");
+  const quote = s === 0 || !frac ? whole.toString() : `${whole.toString()}.${frac}`;
+  return { quote, asset_price: n.toString(10), scale: s };
+}
+
+function isAethAsset(asset) {
+  const code = String(asset || "").toUpperCase();
+  return code === "AETH" || code === "4145544800000000000000000000000000000000";
+}
+
+function isXrpAsset(asset) {
+  const code = String(asset || "").toUpperCase();
+  return code === "XRP" || code === "0000000000000000000000000000000000000000";
+}
+
+function readLedgerOracle(result, expectedAccount, documentId) {
+  const node = result && result.node && typeof result.node === "object" ? result.node : result;
+  if (!node || !Array.isArray(node.PriceDataSeries)) return { ok: false, error: "ledger_entry omitted the Oracle node" };
+  const owner = typeof node.Owner === "string" ? node.Owner : "";
+  if (expectedAccount && owner && owner !== expectedAccount) {
+    return { ok: false, error: "oracle Owner is not W5" };
+  }
+  const docId = node.OracleDocumentID == null ? null : Number(node.OracleDocumentID);
+  if (documentId != null && docId != null && docId !== documentId) {
+    return { ok: false, error: "oracle document id drifted" };
+  }
+  const series = node.PriceDataSeries.map((row) => (row && row.PriceData) || row);
+  const pair = series.find((row) => row && isAethAsset(row.BaseAsset) && isXrpAsset(row.QuoteAsset));
+  if (!pair) return { ok: false, error: "oracle omitted the AETH/XRP pair" };
+  const decoded = decimalFromScaled(pair.AssetPrice, pair.Scale);
+  if (!decoded) return { ok: false, error: "oracle AssetPrice is not an integer" };
+  const index = result && (result.index || result.node_index);
+  const oracleId = hashOrNull(index);
+  if (index != null && !oracleId) return { ok: false, error: "oracle index is not 64 hex" };
+  const updated = Number(node.LastUpdateTime);
+  const ledger = result && Number.isInteger(result.ledger_index) && result.ledger_index > 0 ? result.ledger_index : null;
+  return {
+    ok: true,
+    oracle_id: oracleId,
+    oracle: {
+      account: owner,
+      oracle_document_id: docId,
+      last_update_time: Number.isInteger(updated) && updated > 0 ? updated : null,
+      quote_xrp_per_aeth: decoded.quote,
+      asset_price: decoded.asset_price,
+      scale: decoded.scale,
+      ledger_index: ledger,
+      base_asset: "AETH",
+      quote_asset: "XRP",
+    },
+  };
+}
+
+function readMetricsOracle(doc) {
+  const blank = { ok: true, oracle_id: null, oracle: emptyOracle() };
+  if (doc.oracle_id == null && doc.last_oracle == null) return blank;
+  const id = hashOrNull(doc.oracle_id);
+  if (doc.oracle_id != null && !id) return { ok: false, error: "metrics.json oracle_id is not 64 hex" };
+  const row = doc.last_oracle;
+  if (row == null) return { ok: true, oracle_id: id, oracle: emptyOracle() };
+  if (!row || typeof row !== "object" || Array.isArray(row)) {
+    return { ok: false, error: "metrics.json last_oracle is not an object" };
+  }
+  const rowId = hashOrNull(row.oracle_id);
+  const rowHash = hashOrNull(row.hash);
+  if ((row.oracle_id != null && !rowId) || (row.hash != null && !rowHash)) {
+    return { ok: false, error: "metrics.json last_oracle hash is not 64 hex" };
+  }
+  if (row.quote_xrp_per_aeth != null && !/^\d+(\.\d+)?$/.test(String(row.quote_xrp_per_aeth))) {
+    return { ok: false, error: "metrics.json last_oracle quote is not a decimal" };
+  }
+  const ledger = Number.isInteger(row.ledger_index) && row.ledger_index > 0 ? row.ledger_index : null;
+  const updated = Number.isInteger(row.last_update_time) && row.last_update_time > 0 ? row.last_update_time : null;
+  return {
+    ok: true,
+    oracle_id: id || rowId,
+    oracle: {
+      account: "",
+      oracle_document_id: 1,
+      last_update_time: updated,
+      quote_xrp_per_aeth: row.quote_xrp_per_aeth == null ? null : String(row.quote_xrp_per_aeth),
+      asset_price: null,
+      scale: null,
+      ledger_index: ledger,
+      base_asset: row.quote_xrp_per_aeth ? "AETH" : null,
+      quote_asset: row.quote_xrp_per_aeth ? "XRP" : null,
     },
   };
 }
@@ -343,16 +463,24 @@ async function accountObjects(fetchImpl, url, params) {
 function resolveCounts(metricsText, metricsStatus, pnlText, pnlStatus, errors) {
   if (metricsStatus === 200 && metricsText) {
     const parsed = parseMetrics(metricsText);
-    if (parsed.ok) return { counts: parsed.counts, heartbeat: parsed.last_heartbeat, metricsOk: true };
+    if (parsed.ok) {
+      return {
+        counts: parsed.counts,
+        heartbeat: parsed.last_heartbeat,
+        oracle_id: parsed.oracle_id || null,
+        oracle: parsed.oracle || emptyOracle(),
+        metricsOk: true,
+      };
+    }
     errors.push(parsed.error);
-    return { counts: null, heartbeat: null, metricsOk: false };
+    return { counts: null, heartbeat: null, oracle_id: null, oracle: emptyOracle(), metricsOk: false };
   }
   if (metricsStatus != null && metricsStatus !== 404) errors.push(`metrics.json HTTP ${metricsStatus}`);
   if (pnlStatus === 200 && pnlText) {
     const parsed = parsePnlCounts(pnlText);
     if (parsed.errors.length) {
       errors.push(parsed.errors.join("; "));
-      return { counts: null, heartbeat: null, metricsOk: false };
+      return { counts: null, heartbeat: null, oracle_id: null, oracle: emptyOracle(), metricsOk: false };
     }
     return {
       counts: {
@@ -361,11 +489,13 @@ function resolveCounts(metricsText, metricsStatus, pnlText, pnlStatus, errors) {
         inbound_counterparties: parsed.counts.inbound_counterparties,
       },
       heartbeat: null,
+      oracle_id: null,
+      oracle: emptyOracle(),
       metricsOk: false,
     };
   }
   errors.push(pnlStatus == null ? "pnl.md was not fetched" : `pnl.md HTTP ${pnlStatus}`);
-  return { counts: null, heartbeat: null, metricsOk: false };
+  return { counts: null, heartbeat: null, oracle_id: null, oracle: emptyOracle(), metricsOk: false };
 }
 
 function resolveHeartbeat(metricsBeat, ledgerText, ledgerStatus, errors) {
@@ -406,18 +536,18 @@ async function loadXrpl(opts, errors) {
   const checked = httpsUrl(opts.xrplHttp);
   if (checked.error) {
     errors.push(checked.error);
-    return { network: null, ledger_index: null, walk_in: baseStatus().walk_in, amm: baseStatus().amm, batch: null };
+    return { network: null, ledger_index: null, walk_in: baseStatus().walk_in, amm: baseStatus().amm, batch: null, oracle_id: null, oracle: emptyOracle() };
   }
   try {
     const info = await rpc(opts.fetch, checked.url, "server_info", {});
     const id = networkIdOf(info);
     if (id !== 1) {
       errors.push(id == null ? "RPC did not prove XRPL network id" : `refusing network id ${id}`);
-      return { network: null, ledger_index: null, walk_in: baseStatus().walk_in, amm: baseStatus().amm, batch: null };
+      return { network: null, ledger_index: null, walk_in: baseStatus().walk_in, amm: baseStatus().amm, batch: null, oracle_id: null, oracle: emptyOracle() };
     }
   } catch (error) {
     errors.push(error instanceof Error ? error.message : String(error));
-    return { network: null, ledger_index: null, walk_in: baseStatus().walk_in, amm: baseStatus().amm, batch: null };
+    return { network: null, ledger_index: null, walk_in: baseStatus().walk_in, amm: baseStatus().amm, batch: null, oracle_id: null, oracle: emptyOracle() };
   }
   const out = {
     network: "xrpl:1",
@@ -425,6 +555,8 @@ async function loadXrpl(opts, errors) {
     walk_in: { status: "error", offer_id: "", amount_drops: null },
     amm: { account: "", spot_xrp_per_aeth: null },
     batch: null,
+    oracle_id: null,
+    oracle: emptyOracle(),
   };
   try {
     const state = await rpc(opts.fetch, checked.url, "server_state", {});
@@ -464,6 +596,24 @@ async function loadXrpl(opts, errors) {
     else out.amm = { account: read.account, spot_xrp_per_aeth: read.spot_xrp_per_aeth };
   } catch (error) {
     errors.push(error instanceof Error ? error.message : String(error));
+  }
+  if (opts.w5 && ADDRESS_RE.test(opts.w5)) {
+    const documentId = opts.oracleDocumentId == null ? 1 : opts.oracleDocumentId;
+    try {
+      const entry = await rpc(opts.fetch, checked.url, "ledger_entry", {
+        oracle: { account: opts.w5, oracle_document_id: documentId },
+        ledger_index: "validated",
+      });
+      const read = readLedgerOracle(entry, opts.w5, documentId);
+      if (!read.ok) errors.push(read.error);
+      else {
+        out.oracle_id = read.oracle_id;
+        out.oracle = read.oracle;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/entryNotFound|actNotFound/i.test(message)) errors.push(message);
+    }
   }
   try {
     const feature = await rpc(opts.fetch, checked.url, "feature", {});
@@ -552,6 +702,8 @@ async function collectStatus(opts) {
     grants_paid: counts.counts ? counts.counts.grants_paid : null,
     inbound_counterparties: counts.counts ? counts.counts.inbound_counterparties : null,
     last_heartbeat: heartbeat,
+    oracle_id: xrpl.oracle_id || (counts.oracle_id || null),
+    oracle: xrpl.oracle_id ? xrpl.oracle : (counts.oracle_id ? counts.oracle : xrpl.oracle),
     director_updated_at: director,
     laws: LAWS.slice(),
   };
@@ -571,6 +723,7 @@ module.exports = {
   lastHeartbeatFromLog,
   spotXrpPerAeth,
   readBatch,
+  readLedgerOracle,
   collectStatus,
   httpsUrl,
   gitUrlsAtSha,

@@ -158,6 +158,13 @@ const MACHINES = [
     results: "machines/grants-flywheel/RESULTS.md",
     note: "operational; no trial hash until a tesSUCCESS grant",
   },
+  {
+    slug: "native-price-oracle",
+    status: "spec-only",
+    last_result_hash: null,
+    results: "machines/native-price-oracle/RESULTS.md",
+    note: "PriceOracle enabled; no Oracle object hash until OracleSet tesSUCCESS",
+  },
 ];
 
 // Stranger buy is executable (`npm run buy:walk-in`) while the offer is open.

@@ -11,5 +11,14 @@
     "hash": "2B298A910CB3966EF6E60AD3C3ABD167D43ED382F34E2D5963292304C0203C01",
     "ledger_index": 21128182,
     "ts": "2026-09-28T22:20:44.982Z"
+  },
+  "oracle_id": null,
+  "last_oracle": {
+    "hash": null,
+    "oracle_id": null,
+    "ledger_index": null,
+    "last_update_time": null,
+    "quote_xrp_per_aeth": null,
+    "ts": null
   }
 }

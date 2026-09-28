@@ -45,6 +45,8 @@ function baseOpts(fetchImpl, gitText) {
     w7: anchors.WALLETS.W7.address,
     aethCurrency: anchors.AETH_HEX,
     aethIssuer: anchors.WALLETS.W0.address,
+    w5: anchors.WALLETS.W5.address,
+    oracleDocumentId: 1,
     packHookHash: anchors.PACK_HOOK_HASH,
     walkInDrops: "10000000",
     git: gitText || GIT,
@@ -107,6 +109,7 @@ function happyPages() {
           amount2: "50000000",
         },
       },
+      ledger_entry: { status: "error", error: "entryNotFound" },
       feature: {
         status: "success",
         features: {
@@ -157,6 +160,8 @@ test("status JSON is seedless and uses proven ledger data", async () => {
   assert.equal(body.batch_atomic_enabled, false);
   assert.equal(body.w7_hook_matches_pack, true);
   assert.equal(body.last_heartbeat.hash, "2B298A910CB3966EF6E60AD3C3ABD167D43ED382F34E2D5963292304C0203C01");
+  assert.equal(body.oracle_id, null);
+  assert.equal(body.oracle.quote_xrp_per_aeth, null);
   assert.equal(body.error, undefined);
   assert.deepEqual(body.laws, ["altnets-only", "desk-read-only", "seeds-never-in-git"]);
   const pnl = metrics.parsePnlCounts(fs.readFileSync(path.join(ROOT, "market", "pnl.md"), "utf8"));
@@ -290,6 +295,9 @@ test("desk route and toml link status without a signer", () => {
   const route = fs.readFileSync(path.join(ROOT, "web", "app", "api", "status", "route.ts"), "utf8");
   assert.match(route, /collectStatus/);
   assert.match(route, /mainGitFiles/);
+  assert.match(route, /ORACLE/);
+  assert.match(route, /oracleDocumentId/);
+  assert.doesNotMatch(route, /OracleSet/);
   assert.doesNotMatch(route, /raw\.githubusercontent\.com\/Hobie1Kenobi\/aether-foundry\/main/);
   assert.doesNotMatch(route, /Wallet|fromSeed|sign\(/);
   assert.doesNotMatch(route, /_SEED/);
@@ -302,4 +310,70 @@ test("desk route and toml link status without a signer", () => {
   const sold = status.readBatch({ features: {} });
   assert.equal(sold.ok, false);
   assert.equal(status.spotXrpPerAeth("50000000", "1000"), "0.05");
+});
+
+test("status publishes the ledger oracle and falls back to lab metrics", async () => {
+  const pages = happyPages();
+  const oracleIndex = "AB".repeat(32);
+  pages.xrpl.ledger_entry = {
+    status: "success",
+    validated: true,
+    ledger_index: 21111111,
+    index: oracleIndex,
+    node: {
+      LedgerEntryType: "Oracle",
+      Owner: anchors.WALLETS.W5.address,
+      OracleDocumentID: 1,
+      LastUpdateTime: 1759099800,
+      PriceDataSeries: [
+        {
+          PriceData: {
+            BaseAsset: "AETH",
+            QuoteAsset: "XRP",
+            AssetPrice: "f5fa8",
+            Scale: 8,
+          },
+        },
+      ],
+    },
+  };
+  const priced = await status.collectStatus(baseOpts(router(pages)));
+  assert.equal(priced.error, undefined);
+  assert.equal(priced.oracle_id, oracleIndex);
+  assert.equal(priced.oracle.quote_xrp_per_aeth, "0.01007528");
+  assert.equal(priced.oracle.asset_price, "1007528");
+  assert.equal(priced.oracle.scale, 8);
+  assert.equal(priced.oracle.last_update_time, 1759099800);
+  assert.equal(priced.oracle.account, anchors.WALLETS.W5.address);
+  const filed = JSON.parse(fs.readFileSync(path.join(ROOT, "lab", "metrics.json"), "utf8"));
+  filed.oracle_id = "EF".repeat(32);
+  filed.last_oracle = {
+    hash: "EF".repeat(32),
+    oracle_id: "EF".repeat(32),
+    ledger_index: 21112222,
+    last_update_time: 1759099800,
+    quote_xrp_per_aeth: "0.02",
+    ts: "2026-09-28T23:30:00.000Z",
+  };
+  const fallbackPages = happyPages();
+  fallbackPages.git[GIT.metrics] = { text: JSON.stringify(filed) };
+  const fallback = await status.collectStatus(baseOpts(router(fallbackPages)));
+  assert.equal(fallback.oracle_id, "EF".repeat(32));
+  assert.equal(fallback.oracle.quote_xrp_per_aeth, "0.02");
+  const chainFetch = async (url, init) => {
+    const target = String(url);
+    if (init && init.method === "GET" && target === "https://metrics.example/lab.json") {
+      return textResponse(JSON.stringify(filed));
+    }
+    return router(pages)(url, init);
+  };
+  const won = await status.collectStatus(baseOpts(chainFetch, {
+    metrics: "https://metrics.example/lab.json",
+    pnl: GIT.pnl,
+    director: GIT.director,
+    ledger: GIT.ledger,
+  }));
+  assert.equal(won.oracle_id, oracleIndex);
+  assert.equal(won.oracle.quote_xrp_per_aeth, "0.01007528");
+  assert.doesNotMatch(JSON.stringify(priced), /sEd|"seed"|"secret"|"private_key"/);
 });

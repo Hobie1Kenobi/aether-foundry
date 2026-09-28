@@ -38,6 +38,41 @@ function emptyHeartbeat() {
   return { hash: null, ledger_index: null, ts: null };
 }
 
+function emptyOracle() {
+  return {
+    hash: null,
+    oracle_id: null,
+    ledger_index: null,
+    last_update_time: null,
+    quote_xrp_per_aeth: null,
+    ts: null,
+  };
+}
+
+function assertOracle(doc) {
+  if (doc.oracle_id != null) hashOrNull(doc.oracle_id, "oracle_id");
+  if (doc.last_oracle == null) return;
+  const row = doc.last_oracle;
+  if (!row || typeof row !== "object" || Array.isArray(row)) {
+    throw policy.coded("metrics.json last_oracle is not an object", "METRICS");
+  }
+  policy.assertNoSeedFields(row);
+  hashOrNull(row.hash, "last_oracle.hash");
+  if (row.oracle_id != null) hashOrNull(row.oracle_id, "last_oracle.oracle_id");
+  if (!(row.ledger_index == null || (Number.isInteger(row.ledger_index) && row.ledger_index > 0))) {
+    throw policy.coded("metrics.json last_oracle.ledger_index is not a ledger", "METRICS");
+  }
+  if (!(row.last_update_time == null || (Number.isInteger(row.last_update_time) && row.last_update_time > 0))) {
+    throw policy.coded("metrics.json last_oracle.last_update_time is not unix seconds", "METRICS");
+  }
+  if (row.quote_xrp_per_aeth != null && !/^\d+(\.\d+)?$/.test(String(row.quote_xrp_per_aeth))) {
+    throw policy.coded("metrics.json last_oracle.quote_xrp_per_aeth is not a decimal", "METRICS");
+  }
+  if (!(row.ts == null || typeof row.ts === "string")) {
+    throw policy.coded("metrics.json last_oracle.ts is not a timestamp", "METRICS");
+  }
+}
+
 function parsePnlCounts(text) {
   const counts = {};
   const errors = [];
@@ -89,6 +124,7 @@ function assertDoc(doc) {
       throw policy.coded("metrics.json last_heartbeat.ts is not a timestamp", "METRICS");
     }
   }
+  assertOracle(doc);
   return doc;
 }
 
@@ -107,6 +143,8 @@ function skeletonFromPnl(text, now) {
     last_outbound_hash: null,
     last_heartbeat_hash: null,
     last_heartbeat: emptyHeartbeat(),
+    oracle_id: null,
+    last_oracle: emptyOracle(),
   };
   return assertDoc(doc);
 }
@@ -269,6 +307,8 @@ function refresh(root, opts) {
       ledger_index: heartbeat && Number.isInteger(heartbeat.ledger_index) ? heartbeat.ledger_index : null,
       ts: heartbeat && typeof heartbeat.ts === "string" ? heartbeat.ts : null,
     },
+    oracle_id: current && current.oracle_id ? current.oracle_id : null,
+    last_oracle: current && current.last_oracle ? current.last_oracle : emptyOracle(),
   };
   const pnlPath = options.pnlPath || path.join(root, "market", "pnl.md");
   if (disk.existsSync(pnlPath)) {
@@ -295,6 +335,31 @@ function recordHeartbeat(root, event, io) {
   return writeMetrics(root, current, disk);
 }
 
+function recordOracle(root, event, io) {
+  const hash = hashOrNull(event && event.hash, "oracle hash");
+  if (!hash) throw policy.coded("refusing oracle metrics without a ledger hash", "RECORD");
+  const disk = ioOf(io);
+  const current = readMetrics(root, disk) || seedIfMissing(root, event && event.now, disk);
+  const oracleId = event && event.oracle_id != null ? hashOrNull(event.oracle_id, "oracle_id") : null;
+  const quote = event && event.quote_xrp_per_aeth;
+  if (quote != null && !/^\d+(\.\d+)?$/.test(String(quote))) {
+    throw policy.coded("refusing oracle metrics with a non-decimal quote", "RECORD");
+  }
+  const ledger = event && event.ledger_index;
+  const updated = event && event.last_update_time;
+  current.updated_at = anchors.formatChicago((event && event.now) || new Date());
+  current.oracle_id = oracleId;
+  current.last_oracle = {
+    hash,
+    oracle_id: oracleId,
+    ledger_index: Number.isInteger(ledger) && ledger > 0 ? ledger : null,
+    last_update_time: Number.isInteger(updated) && updated > 0 ? updated : null,
+    quote_xrp_per_aeth: quote == null ? null : String(quote),
+    ts: event && typeof event.ts === "string" ? event.ts : null,
+  };
+  return writeMetrics(root, current, disk);
+}
+
 module.exports = {
   COUNT_KEYS,
   HASH_KEYS,
@@ -303,7 +368,9 @@ module.exports = {
   readMetrics,
   seedIfMissing,
   recordHeartbeat,
+  recordOracle,
   emptyHeartbeat,
+  emptyOracle,
   uniqueInbound,
   extract,
   updateInboundPnl,

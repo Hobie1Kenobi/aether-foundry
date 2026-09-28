@@ -131,6 +131,18 @@ export const GRANTS_FLYWHEEL = {
 
 export type WalletId = keyof typeof WALLETS;
 
+/**
+ * F1 native price oracle. W5 publishes OracleSet document 1.
+ * The desk only reads it. It does not sign OracleSet.
+ */
+export const ORACLE = {
+  account: WALLETS.W5.address,
+  documentId: 1,
+  intent: "oracle_set",
+  readme:
+    "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/native-price-oracle/README.md",
+} as const;
+
 /** Machine #1-#5 RESULTS hashes (from machines RESULTS.md) — display only */
 export const MACHINES = {
   "work-ticket-escrow": {

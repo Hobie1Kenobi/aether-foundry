@@ -21,3 +21,5 @@ Day-1 map, probed 2026-09-28 on rippled **3.4.1**:
 | C | Disabled: SingleAssetVault, LendingProtocol, LendingProtocolV1_1, Sponsor, ConfidentialTransfer, DynamicMPT, XChainBridge |
 
 Until a later probe says otherwise, do not submit Batch, and do not stand in for TokenEscrow or vaults with a sequence of other transactions.
+
+F1 keeper: `npm run frontier:oracle-set` reads this map's live twin via `feature` and refuses `OracleSet` unless `PriceOracle` is enabled on network id 1. Default is dry-run. The ticket command is `npm run frontier:oracle-ticket`. Pack: `machines/native-price-oracle/`.
