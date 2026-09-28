@@ -1,4 +1,4 @@
-import { collectStatus } from "@/lib/status-body";
+import { collectStatus, mainGitFiles } from "@/lib/status-body";
 import { AETH_HEX, WALLETS, XAHAU_W7, XRPL_HTTP } from "@/lib/xrpl-public";
 
 export const dynamic = "force-dynamic";
@@ -9,13 +9,20 @@ const HEADERS = {
   "Access-Control-Allow-Origin": "*",
 };
 
-const GIT = "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main";
-
 /**
  * Public seedless status. HTTPS JSON-RPC to altnets only.
+ * Lab files are read at the current main commit SHA so a stale
+ * raw.githubusercontent.com /main blob cannot hide a newer heartbeat.
  * The desk does not sign and does not read a seed.
  */
 export async function GET() {
+  let git;
+  let gitError = "";
+  try {
+    git = await mainGitFiles(fetch);
+  } catch (error) {
+    gitError = error instanceof Error ? error.message : "git ref failed";
+  }
   const body = await collectStatus({
     fetch,
     xrplHttp: XRPL_HTTP,
@@ -27,13 +34,9 @@ export async function GET() {
     aethIssuer: WALLETS.W0.address,
     packHookHash: XAHAU_W7.hookHash,
     walkInDrops: "10000000",
-    git: {
-      metrics: `${GIT}/lab/metrics.json`,
-      pnl: `${GIT}/market/pnl.md`,
-      director: `${GIT}/lab/director-state.json`,
-      ledger: `${GIT}/lab/ledger-log.jsonl`,
-    },
+    git,
   });
+  if (gitError) body.error = body.error ? `${gitError}; ${body.error}` : gitError;
   return Response.json(body, {
     status: body.network == null ? 502 : 200,
     headers: HEADERS,

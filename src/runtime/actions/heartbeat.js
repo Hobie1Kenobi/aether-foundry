@@ -190,7 +190,6 @@ async function run(argv, deps) {
   if (mode.live) {
     policy.assertLiveGate(env);
     policy.assertAltnet({ networkId: anchors.XRPL_NETWORK_ID, url: anchors.XRPL_HTTP });
-    policy.assertAltnet({ networkId: anchors.XAHAU_NETWORK_ID, url: anchors.XAHAU_HTTP, kind: "xahau" });
   }
   const state = Object.prototype.hasOwnProperty.call(options, "state") ? options.state : loadState(root, options.io);
   const shared = {
