@@ -81,7 +81,31 @@ FOUNDRY_DAEMON_LIVE=yes npm run heartbeat:live
 
 The env name is `W5_REGULAR_SEED`. GitHub Actions throws `CI` before that file is read. A `tesSUCCESS` hash is appended to `lab/ledger-log.jsonl` as `action` `heartbeat` and copied into `lab/metrics.json` `last_heartbeat`. Do not type a hash into either file. The skeleton in git has `last_heartbeat.hash` null. Counts in that skeleton are the integers already published in `market/pnl.md`.
 
-`GET /api/status` on the desk reads that public JSON (or `market/pnl.md` if the metrics file is not on `main` yet). It does not sign.
+`GET /api/status` on the desk reads that public JSON (or `market/pnl.md` if the metrics file is not on `main` yet). It does not sign. `last_heartbeat` in `lab/metrics.json` stays an object (`hash`, `ledger_index`, `ts`) because `/api/status` reads that object. `last_heartbeat_hash` repeats the same hash for the file shape.
+
+## Daily flywheel (Foundry box crontab)
+
+This clock is not a GitHub Actions job. Actions keeps `director-clock.yml` on snapshot and wake. It does not run `runtime:live`, `grants:pay`, or `x402:outbound`.
+
+On the Foundry box, America/Chicago:
+
+```bash
+CRON_TZ=America/Chicago
+15 10 * * * cd /path/aether-foundry && npm run grants:scan && npm run grants:pay -- --dry-run
+45 10 * * * cd /path/aether-foundry && npm run x402:outbound -- --dry-run
+```
+
+Both lines are dry-run. They exit 0 without a secrets file. `x402:outbound --dry-run` with no `--url` prints an unsigned plan and does not fetch a 402. A live pay still needs a foreign URL.
+
+Live signing stays on the daemon, with `FOUNDRY_DAEMON_LIVE=yes`:
+
+- one `grant_paid` per UTC day, from W6, at most `1000000` drops
+- one `x402_outbound` per UTC day, from W3, at most `500000` drops (0.5 XRP)
+- `payTo` is not W3 and is not an address in `WALLETS`
+- `npm run grants:pay` without `--dry-run` refuses CI and a second grant on the same UTC day before it reads `W6_REGULAR_SEED`
+- `npm run x402:outbound` without `--dry-run` refuses CI, a `payTo` of W3, an amount above `500000` drops, and a second outbound on the same UTC day
+
+`npm run grants:pay -- --record` and `npm run x402:outbound -- --record` append the public ledger only after `tesSUCCESS`, bump `market/pnl.md`, and refresh `lab/metrics.json` from that ledger. Hashes in the metrics file are copied from `lab/ledger-log.jsonl`. A missing heartbeat row leaves `last_heartbeat.hash` null.
 
 ## What not to run
 
@@ -90,3 +114,6 @@ The env name is `W5_REGULAR_SEED`. GitHub Actions throws `CI` before that file i
 - Any `Batch` transaction while `watched.batch.atomic_enabled` is false.
 - Escrow finish or cancel on the Unix-epoch BUYER escrow.
 - A grant to STRANGER, BUYER, AMM, or W0–W6.
+- A second grant or a second outbound on the same UTC day.
+- An outbound `payTo` of W3, or an outbound above `500000` drops.
+- `npm run runtime:live` or `npm run grants:pay` from GitHub Actions.

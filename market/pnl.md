@@ -11,7 +11,7 @@ Live refresh via `npm run report:nav` — ledger **21094528**, CT **2026-09-27 ~
 | artifacts_minted | 5 (#0 genesis, #1 work-ticket, drip-pass, epoch-scar, walk-in-0001) | session-4 |
 | artifacts_sold | 3 (#1 + drip-pass → BUYER; walk-in → STRANGER) | |
 | machines_with_results | **3** (work-ticket-escrow, drip-pass, walk-in-window) | Night packs = spec only |
-| inbound_counterparties | **1** unique non-self: STRANGER `rh4c6q…` (BUYER = affiliate, not counted) | Day-14 goal progress |
+| inbound_counterparties | **1** | distinct buyers and grant destinations outside WALLETS |
 | escrow_finished_xrp | 10 → W4 | Trial A |
 | escrow_cancelled_xrp | 2 → BUYER | Trial B |
 | escrow_stuck_xrp | 10 on BUYER (Unix-vs-Ripple epoch bug) — **do not touch** | Unix scar |

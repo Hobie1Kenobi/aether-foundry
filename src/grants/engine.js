@@ -301,6 +301,9 @@ async function execute(argv, io) {
   if (plan.float === "short") {
     throw policy.coded("W6 grant would breach the spendable float", "FLOAT");
   }
+  if (grantPaidThisUtcDay(plan.report.paid, hooks.now == null ? Date.now() : hooks.now)) {
+    throw policy.coded("refusing a second grant on this UTC day", "DAY");
+  }
   const loader = hooks.loadSeed || loadSignerSeed;
   const loaded = loader(env, hooks);
   if (!loaded || !loaded.seed) {
@@ -408,6 +411,7 @@ async function execute(argv, io) {
       ledgerPath: plan.files.ledgerPath,
       pnlPath: plan.files.pnlPath,
       resultsPath: plan.files.resultsPath,
+      root: plan.files.root,
       public: Boolean(args.record),
     });
     return {
@@ -437,6 +441,12 @@ async function executeScan(argv, io) {
     report: plan.report,
     text: discover.renderScan(plan.report),
   };
+}
+
+function grantPaidThisUtcDay(paid, now) {
+  const clock = now == null ? Date.now() : now;
+  const day = new Date(clock).toISOString().slice(0, 10);
+  return (paid || []).some((row) => row && String(row.ts || "").startsWith(day));
 }
 
 function exitCode(error) {
@@ -479,6 +489,7 @@ module.exports = {
   prepare,
   execute,
   executeScan,
+  grantPaidThisUtcDay,
   exitCode,
   mainPay,
   mainScan,

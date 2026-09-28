@@ -177,7 +177,23 @@ npm run grants:pay -- --dry-run
 npm run grants:pay -- --record
 ```
 
-Scan is read-only public Testnet HTTP, capped at 20 txs per account and 20 NFTs. `--dry-run` prints the unsigned Payment and does not load a seed. Live signing prefers `W6_REGULAR_SEED`, then `W6_SEED`, then `GRANTS_SEED`. `Account` stays W6. It refuses CI, mainnet hosts, and NetworkID 0. The same destination and reason inside 7 days does not pay twice (`lab/grants/ledger.jsonl`). `--record` updates `grants_paid` in `market/pnl.md` and `RESULTS.md` only after `tesSUCCESS`. Do not invent that hash.
+Scan is read-only public Testnet HTTP, capped at 20 txs per account and 20 NFTs. `--dry-run` prints the unsigned Payment and does not load a seed. Live signing prefers `W6_REGULAR_SEED`, then `W6_SEED`, then `GRANTS_SEED`. `Account` stays W6. It refuses CI, mainnet hosts, and NetworkID 0. The same destination and reason inside 7 days does not pay twice (`lab/grants/ledger.jsonl`). A second live grant on the same UTC day is refused before the seed is read. `--record` updates `grants_paid` in `market/pnl.md` and `RESULTS.md` only after `tesSUCCESS`, then refreshes `lab/metrics.json` from `lab/ledger-log.jsonl`. Do not invent that hash.
+
+The Day-30 faucet buyer `rQsPPdwiBeVDqsdDnFcVmu7xTVHMjXRFqN` stays eligible only after the 7-day cooldown from the archived grant. Scan output does not list W0–W6, AMM, BUYER, or STRANGER.
+
+## Foundry-box flywheel clock
+
+Not GitHub Actions. The box crontab uses America/Chicago. Both commands are dry-run and exit 0 without a secrets file.
+
+```bash
+CRON_TZ=America/Chicago
+15 10 * * * cd /path/aether-foundry && npm run grants:scan && npm run grants:pay -- --dry-run
+45 10 * * * cd /path/aether-foundry && npm run x402:outbound -- --dry-run
+```
+
+`x402:outbound --dry-run` with no URL does not sign and does not require a 402. Live daemon passes, with `FOUNDRY_DAEMON_LIVE=yes`, stay at one grant per UTC day and one outbound per UTC day. Outbound amount stays at or under `500000` drops. `payTo` stays off W3 and off `WALLETS`. `npm run x402:outbound -- --record` bumps `x402_outbound_hits` and `lab/metrics.json` only after HTTP 200 and a real hash.
+
+`inbound_counterparties` is the count of distinct classic buyers and grant destinations outside `WALLETS`. The metrics file keeps `last_heartbeat` as an object for `/api/status`.
 
 ## Director wake
 
@@ -221,6 +237,9 @@ Prefer `/workspace/aether-foundry-push.sh` when pushing from the box checkout. N
 - [ ] `asfDisableMaster` / `lsfDisableMaster` without a written recovery path (week-2 leaves master enabled)
 - [ ] `gov:live` or `gov:multisign` from CI
 - [ ] `grants:pay` from CI, or a grant to any `WALLETS` address (STRANGER included)
+- [ ] `runtime:live`, `grants:pay`, or `x402:outbound` inside GitHub Actions
+- [ ] A second grant or a second outbound on the same UTC day
+- [ ] Outbound above 0.5 XRP (`500000` drops) or with `payTo` W3
 - [ ] Funding a W6 grant from W0
 - [ ] Seeds or mainnet hosts in `lab/director-state.json`
 - [ ] Inventing a ledger index when `director:snapshot` RPC fails

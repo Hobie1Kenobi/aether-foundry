@@ -55,7 +55,15 @@ The payer retries the HTTP call if the shop has not seen the tx yet. It submits 
 npm run x402:outbound -- --url https://example.test/resource --max-drops 10000 --record
 ```
 
-The URL must return 402 / `PAYMENT-REQUIRED` for `xrpl:1`. Foundry payTo is refused. Mainnet networks and mainnet XRPL hosts are refused.
+The URL must return 402 / `PAYMENT-REQUIRED` for `xrpl:1`. Foundry payTo is refused. Mainnet networks and mainnet XRPL hosts are refused. The payment amount must be at most `500000` drops. A second live outbound on the same UTC day is refused before `W3_SEED` is read.
+
+Foundry-box clock (dry-run, no URL, no seed), America/Chicago:
+
+```bash
+45 10 * * * cd /path/aether-foundry && npm run x402:outbound -- --dry-run
+```
+
+That line exits 0. It does not submit. `--record` refreshes `lab/metrics.json` `last_outbound_hash` from the ledger hash after HTTP 200.
 
 ## 5. Do not
 

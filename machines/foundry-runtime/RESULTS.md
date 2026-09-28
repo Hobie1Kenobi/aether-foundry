@@ -67,4 +67,8 @@ Session `2026-09-28-director-clock`. No new snapshot. XRPL validated ledger stay
 
 ## Desk status and heartbeat
 
-Session `2026-09-28-desk-status`. No new snapshot and no submitted heartbeat. `lab/metrics.json` is a skeleton: counts copied from `market/pnl.md`, `last_heartbeat.hash` null. `npm run heartbeat:dry` prints an unsigned W5→W3 `Payment` of 1 drop. That print is not a hash. `GET /api/status` is seedless. Live `heartbeat:live` stays on the Foundry box.
+Session `2026-09-28-desk-status`. No new snapshot and no submitted heartbeat. `lab/metrics.json` keeps `last_heartbeat.hash` null. `npm run heartbeat:dry` prints an unsigned W5→W3 `Payment` of 1 drop. That print is not a hash. `GET /api/status` is seedless. Live `heartbeat:live` stays on the Foundry box.
+
+## Daily flywheel
+
+Session `2026-09-28-flywheel`. No new snapshot. No new payment. `lab/metrics.json` `last_grant_hash` and `last_outbound_hash` are copied from `grant_paid` and `x402_outbound` rows already in `lab/ledger-log.jsonl`. `last_heartbeat_hash` stays null because that file has no heartbeat row. `inbound_counterparties` counts classic buyers and grant destinations outside `WALLETS`. The Foundry-box crontab is dry-run only (10:15 grants, 10:45 outbound, America/Chicago). Actions does not run it.
