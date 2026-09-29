@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
+import { FrontierCards } from "@/components/FrontierCards";
 import { MerchantSection } from "@/components/MerchantSection";
 import { GrantsFlywheelCard } from "@/components/GrantsFlywheelCard";
 import { LpBadgeBoundCard } from "@/components/LpBadgeBoundCard";
 import { XahauSplitCard } from "@/components/XahauSplitCard";
+import { loadDeskStatus } from "@/lib/load-desk-status";
 import {
   EXPLORER_ACCOUNT,
   EXPLORER_TX,
@@ -226,7 +228,7 @@ export async function DeskCards() {
     WALLETS.STRANGER,
   ];
 
-  const [accounts, amm, books, nftsW2, nftsStranger, nftsBuyer, storefront] =
+  const [accounts, amm, books, nftsW2, nftsStranger, nftsBuyer, storefront, status] =
     await Promise.all([
       Promise.all(
         coreAccounts.map((w) => fetchAccountInfo(w.address, `${w.id} ${w.role}`))
@@ -237,6 +239,7 @@ export async function DeskCards() {
       fetchAccountNfts(WALLETS.STRANGER.address, "STRANGER"),
       fetchAccountNfts(WALLETS.BUYER.address, "BUYER"),
       fetchWalkInSellOffers(WALLETS.W2.address),
+      loadDeskStatus().catch(() => null),
     ]);
 
   const m1 = MACHINES["work-ticket-escrow"];
@@ -282,6 +285,7 @@ export async function DeskCards() {
         <nav className="hero-links" aria-label="Desk resources">
           <a href="/.well-known/xrp-ledger.toml">XRPL.toml ↗</a>
           <a href="/api/status">Status JSON</a>
+          <a href="#frontier-title">Frontier</a>
           <a href="#storefront-title">Walk-In storefront</a>
           <a href="/api/inbound/walk-in">Walk-In offer JSON</a>
           <a href="#x402-merchant">x402 merchant</a>
@@ -325,6 +329,8 @@ export async function DeskCards() {
           </span>
         </div>
       </section>
+
+      <FrontierCards status={status} />
 
       <WalkInStorefrontCard
         snapshot={storefront}

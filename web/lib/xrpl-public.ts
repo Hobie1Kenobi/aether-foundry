@@ -308,6 +308,12 @@ export const EXPLORER_TX = (hash: string) =>
 export const EXPLORER_ACCOUNT = (address: string) =>
   `https://testnet.xrpl.org/accounts/${address}`;
 
+export const EXPLORER_MPT = (issuanceId: string) =>
+  `https://testnet.xrpl.org/mpt/${issuanceId}`;
+
+export const EXPLORER_SEARCH = (id: string) =>
+  `https://testnet.xrpl.org/search/${id}`;
+
 export const AETH_IOU = {
   currency: AETH_HEX,
   issuer: WALLETS.W0.address,
