@@ -161,7 +161,7 @@ test("domain offer is not hybrid and is not the Walk-In NFT", () => {
   );
 });
 
-test("adversary case documents the uncredentialed refusal without a hash", () => {
+test("adversary case documents the uncredentialed refusal; pack archives live hashes", () => {
   const accounts = shop.shapeAccounts();
   const domainId = shop.domainIndex(accounts.issuer, 9);
   const adversary = shop.adversaryCase(accounts, domainId);
@@ -175,14 +175,16 @@ test("adversary case documents the uncredentialed refusal without a hash", () =>
   assert.notEqual(adversary.tx.Account, accounts.issuer);
   const results = fs.readFileSync(path.join(ROOT, "machines", "credential-domain-shop", "RESULTS.md"), "utf8");
   assert.match(results, /tecNO_PERMISSION/);
-  assert.match(results, /Documented for live verification/);
-  assert.match(results, /\*\*domain_id:\*\* null/);
-  assert.match(results, /Not hashed in this pack/);
-  assert.doesNotMatch(results, /tesSUCCESS/);
+  assert.match(results, /Live verified/);
+  assert.match(results, /\*\*domain_id:\*\* `6AF56BC1CEC72198156F650C6B425AA52905218CC889BF910BA495470352DCD4`/);
+  assert.match(results, /A1046BD20845D29E782FB9A83C82434CF87071707F9263DE06D908082E0B4A8E/);
+  assert.match(results, /A3A60DF94E038617547764742E130A63347139CD1FBC23E03AD91A2C76054EEE/);
+  assert.match(results, /tesSUCCESS/);
   const artifact = JSON.parse(fs.readFileSync(path.join(ROOT, "machines", "credential-domain-shop", "artifact.json"), "utf8"));
-  assert.equal(artifact.domain_id, null);
-  assert.equal(artifact.uncredentialed_hash, null);
-  assert.equal(artifact.live, false);
+  assert.equal(artifact.domain_id, "6AF56BC1CEC72198156F650C6B425AA52905218CC889BF910BA495470352DCD4");
+  assert.equal(artifact.uncredentialed_hash, "A1046BD20845D29E782FB9A83C82434CF87071707F9263DE06D908082E0B4A8E");
+  assert.equal(artifact.credentialed_take_hash, "A3A60DF94E038617547764742E130A63347139CD1FBC23E03AD91A2C76054EEE");
+  assert.equal(artifact.live, true);
   assert.equal(artifact.walk_in, "public");
 });
 
@@ -317,7 +319,10 @@ test("dry-run prints the composition and leaves domain_id null", async () => {
   assert.equal(captured.includes("NFTokenCreateOffer"), false);
   assert.equal(captured.includes("W0_SEED"), false);
   const filed = JSON.parse(fs.readFileSync(path.join(ROOT, "lab", "metrics.json"), "utf8"));
-  assert.equal(filed.domain_id, null);
+  // Dry-run must not paste predicted_domain_id into lab metrics; archived live id may already be present.
+  assert.equal(body.domain_id, null);
+  assert.notEqual(filed.domain_id, body.predicted_domain_id);
+  assert.equal(filed.domain_id, "6AF56BC1CEC72198156F650C6B425AA52905218CC889BF910BA495470352DCD4");
 });
 
 test("live archives the domain keylet and the uncredentialed refusal", async () => {

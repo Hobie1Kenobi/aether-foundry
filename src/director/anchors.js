@@ -181,10 +181,10 @@ const MACHINES = [
   },
   {
     slug: "credential-domain-shop",
-    status: "spec-only",
-    last_result_hash: null,
+    status: "trialled",
+    last_result_hash: "A3A60DF94E038617547764742E130A63347139CD1FBC23E03AD91A2C76054EEE",
     results: "machines/credential-domain-shop/RESULTS.md",
-    note: "Credentials, PermissionedDomains, and PermissionedDEX enabled; domain_id stays null until PermissionedDomainSet tesSUCCESS",
+    note: "Credentials+PermissionedDEX live; domain_id set; uncredentialed tecNO_PERMISSION verified",
   },
 ];
 

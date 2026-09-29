@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-09-28T19:37:13-05:00",
+  "updated_at": "2026-09-28T19:52:04-05:00",
   "x402_hits": 0,
   "x402_outbound_hits": 1,
   "grants_paid": 2,
@@ -22,5 +22,5 @@
     "ts": "2026-09-28T23:45:58.839Z"
   },
   "mpt_issuance_id": "0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED",
-  "domain_id": null
+  "domain_id": "6AF56BC1CEC72198156F650C6B425AA52905218CC889BF910BA495470352DCD4"
 }

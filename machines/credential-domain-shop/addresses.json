@@ -1,0 +1,9 @@
+{
+  "network": "XRPL Testnet",
+  "network_id": 1,
+  "issuer": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+  "agent": "rDUj1USBUYVkfsP3zQPth5dRiSjMYmofwi",
+  "stranger": "rG91X9ECAZcr869v4Xw6kWY27m7UrcLqQp",
+  "mint": "rBtvREuwPH5qhrDkZknAZ9yTqqqUr5zPdG",
+  "note": "Public addresses only. Seeds are not in this file. These accounts are not W0–W6."
+}
