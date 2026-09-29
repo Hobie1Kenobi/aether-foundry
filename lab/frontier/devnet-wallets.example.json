@@ -1,0 +1,36 @@
+{
+  "network": "XRPL Devnet",
+  "network_id": 2,
+  "rpc": "https://s.devnet.rippletest.net:51234",
+  "note": "Public addresses only. Seeds stay in env. _blank_ until the Foundry box funds an account. Do not copy Testnet W0-W6, BUYER, STRANGER, AMM, or FOREIGN.",
+  "accounts": {
+    "D0": {
+      "role": "sponsor, vault owner, confidential issuer",
+      "address": "_blank_",
+      "seed_env": "D0_SEED",
+      "elgamal_env": "D0_ELGAMAL_SEED"
+    },
+    "D1": {
+      "role": "vault depositor and loan borrower",
+      "address": "_blank_",
+      "seed_env": "D1_SEED"
+    },
+    "D2": {
+      "role": "new sponsoree. Do not faucet-fund before F8 create",
+      "address": "_blank_",
+      "seed_env": "D2_SEED"
+    },
+    "D3": {
+      "role": "confidential counterparty",
+      "address": "_blank_",
+      "seed_env": "D3_SEED",
+      "elgamal_env": "D3_ELGAMAL_SEED"
+    },
+    "SENDER": {
+      "role": "confidential holder who pays D3. Not D0 or D3",
+      "address": "_blank_",
+      "seed_env": "D_CONF_SENDER_SEED",
+      "elgamal_env": "D_CONF_SENDER_ELGAMAL_SEED"
+    }
+  }
+}

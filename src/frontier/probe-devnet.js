@@ -8,6 +8,10 @@
  * On RPC failure the process exits non-zero and does not write lab/frontier/amendments-devnet.json.
  *
  *   npm run frontier:probe-devnet
+ *
+ * F8, F9, and F10 call this module's HTTP resolver and the same server_info
+ * and feature readers before a dry-run or a --live submit. They do not rewrite
+ * amendments-devnet.json.
  */
 
 const fs = require("fs");

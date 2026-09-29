@@ -52,6 +52,10 @@ Both are disabled on Testnet. Later sequence: one confidential issuance from `D0
 
 No issuance id, no payment hash, no clawback hash.
 
+## Pack
+
+The Foundry-box commands are `npm run frontier:devnet-sponsor`, `npm run frontier:devnet-vault`, and `npm run frontier:devnet-confidential`. Dry-run is the default. `--live` takes one `--step` and is not for this agent. Operator note: [`DEVNET.md`](./DEVNET.md). Addresses stay `_blank_` in [`devnet-wallets.example.json`](./devnet-wallets.example.json). This section does not add a ledger hash.
+
 ## What stays on Testnet
 
 `BatchV1_1`, `fixBatchV1_2`, and `PermissionDelegationV1_1` are enabled on this Devnet map and disabled on Testnet. `machines/batch-heartbeat/` stays spec-only. No delegate grant. Devnet having the flag is not a Testnet submit.
