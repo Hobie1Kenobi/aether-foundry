@@ -3,7 +3,7 @@
   "kind": "aether.director-state",
   "source": "director:snapshot",
   "timezone": "America/Chicago",
-  "updated_at": "2026-09-28T19:07:10-05:00",
+  "updated_at": "2026-09-28T19:37:25-05:00",
   "last_session_id": "2026-09-28-desk-status",
   "networks": {
     "xrpl_testnet": {
@@ -12,7 +12,7 @@
       "http": "https://s.altnet.rippletest.net:51234",
       "ws": "wss://s.altnet.rippletest.net:51233",
       "explorer": "https://testnet.xrpl.org",
-      "validated_ledger_index": 21130092,
+      "validated_ledger_index": 21130636,
       "reserve_base_drops": "1000000",
       "reserve_inc_drops": "200000",
       "server_build": "3.4.1"
@@ -23,7 +23,7 @@
       "http": "https://xahau-test.net",
       "ws": "wss://xahau-test.net",
       "explorer": "https://xahau-testnet.xrpl.org",
-      "validated_ledger_index": 12726321,
+      "validated_ledger_index": 12726926,
       "reserve_base_drops": "1000000",
       "reserve_inc_drops": "200000",
       "server_build": "2026.6.21-release+3350"
@@ -54,10 +54,10 @@
       "role": "ATELIER",
       "network": "xrpl_testnet",
       "address": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
-      "balance_drops": "122009859",
-      "spendable_drops": "120609859",
-      "owner_count": 2,
-      "sequence": 21093736,
+      "balance_drops": "122009811",
+      "spendable_drops": "120409811",
+      "owner_count": 3,
+      "sequence": 21093740,
       "regular_key": "rNNzhkcScozB7Nzv3cWCZAEnu6MMC64rmy"
     },
     "W3": {
@@ -74,20 +74,20 @@
       "role": "ESCROW",
       "network": "xrpl_testnet",
       "address": "ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN",
-      "balance_drops": "110010027",
-      "spendable_drops": "108810027",
-      "owner_count": 1,
-      "sequence": 21093726,
+      "balance_drops": "110010003",
+      "spendable_drops": "108610003",
+      "owner_count": 2,
+      "sequence": 21093728,
       "regular_key": "rfXBxqPjprj1J5Ekq5v82D3BDqRm7ms7p2"
     },
     "W5": {
       "role": "R&D",
       "network": "xrpl_testnet",
       "address": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
-      "balance_drops": "99999927",
-      "spendable_drops": "98399927",
+      "balance_drops": "99999891",
+      "spendable_drops": "98399891",
       "owner_count": 3,
-      "sequence": 21093730,
+      "sequence": 21093733,
       "regular_key": "rav5cYVarjSaXeeqCbsghMmmVGcJWB5y7Q"
     },
     "W6": {
@@ -194,10 +194,10 @@
       "note": "MPTokensV1 enabled; mpt_issuance_id stays null until MPTokenIssuanceCreate tesSUCCESS"
     },
     "token-escrow-labor": {
-      "status": "spec-only",
+      "status": "trialled",
       "results": "machines/token-escrow-labor/RESULTS.md",
-      "last_result_hash": null,
-      "note": "TokenEscrow enabled; finish and cancel hashes stay null until tesSUCCESS"
+      "last_result_hash": "7536CB47DD446BF5E09ABC1A65CB0633FC556EB83E1C261257F07644A7815DA1",
+      "note": "TokenEscrow finish+cancel trialled; FinishAfter/CancelAfter Ripple Epoch"
     }
   },
   "watched": {
@@ -209,7 +209,7 @@
       "amount_drops": "10000000",
       "offer_count": 1,
       "pack_offer_id": "08F7769F074C8C80C4DD6A691D2CEE3A3996458D845DA3C15F62BBAF699421B0",
-      "ledger_index": 21130092
+      "ledger_index": 21130636
     },
     "amm": {
       "account": "r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w",
@@ -217,7 +217,7 @@
       "amount_xrp_drops": "50783389",
       "lp_token_currency": "0330E60FAE706EAD2C7D511D790B07A6F3B89931",
       "trading_fee": 500,
-      "ledger_index": 21130092
+      "ledger_index": 21130636
     },
     "w0_signer_list": {
       "account": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
@@ -244,7 +244,7 @@
       "matches_h1": true,
       "master_disabled": false,
       "previous_txn_id": "EDD27C458D314602E6059D8351D2DDA322A5E4BD1FD55602B3D2E667EA970299",
-      "ledger_index": 21130092
+      "ledger_index": 21130636
     },
     "regular_keys": {
       "matches_pack": true,
@@ -312,7 +312,7 @@
       ]
     },
     "aeth_outstanding": "10100",
-    "testnet_nav_spendable_drops": "674046774",
+    "testnet_nav_spendable_drops": "673646666",
     "w7_hook": {
       "account": "r9YjdAzgL4hHvqDUeb4sTf4yF2MDQ5kq7h",
       "hook_hash": "B9B6A6D5DDCF4212CC046217500AB3D90D54C7E63684F98E7991F4EBA9BC6C09",
@@ -320,7 +320,7 @@
       "previous_txn_id": "7DBFE10ECFFDB2ACE8D83CA570ECF64F64712DBDE962B9C6756F83E655273447",
       "pack_hook_hash": "B9B6A6D5DDCF4212CC046217500AB3D90D54C7E63684F98E7991F4EBA9BC6C09",
       "matches_pack": true,
-      "ledger_index": 12726322
+      "ledger_index": 12726926
     }
   },
   "probes": {

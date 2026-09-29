@@ -194,10 +194,10 @@
       "note": "MPTokensV1 enabled; mpt_issuance_id stays null until MPTokenIssuanceCreate tesSUCCESS"
     },
     "token-escrow-labor": {
-      "status": "spec-only",
+      "status": "trialled",
       "results": "machines/token-escrow-labor/RESULTS.md",
-      "last_result_hash": null,
-      "note": "TokenEscrow enabled; finish and cancel hashes stay null until tesSUCCESS"
+      "last_result_hash": "7536CB47DD446BF5E09ABC1A65CB0633FC556EB83E1C261257F07644A7815DA1",
+      "note": "TokenEscrow finish+cancel trialled; FinishAfter/CancelAfter Ripple Epoch"
     }
   },
   "watched": {

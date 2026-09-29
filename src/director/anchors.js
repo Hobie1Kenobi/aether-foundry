@@ -174,10 +174,10 @@ const MACHINES = [
   },
   {
     slug: "token-escrow-labor",
-    status: "spec-only",
-    last_result_hash: null,
+    status: "trialled",
+    last_result_hash: "7536CB47DD446BF5E09ABC1A65CB0633FC556EB83E1C261257F07644A7815DA1",
     results: "machines/token-escrow-labor/RESULTS.md",
-    note: "TokenEscrow enabled; finish and cancel hashes stay null until tesSUCCESS",
+    note: "TokenEscrow finish+cancel trialled; FinishAfter/CancelAfter Ripple Epoch",
   },
 ];
 
