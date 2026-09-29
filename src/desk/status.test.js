@@ -164,12 +164,19 @@ test("status JSON is seedless and uses proven ledger data", async () => {
   assert.equal(body.oracle.quote_xrp_per_aeth, "0.01022008");
   assert.equal(body.mpt_issuance_id, "0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED");
   assert.equal(body.domain_id, "6AF56BC1CEC72198156F650C6B425AA52905218CC889BF910BA495470352DCD4");
+  assert.equal(body.facilitator.mode, "self-verify");
+  assert.equal(body.facilitator.host, null);
+  assert.equal(body.facilitator.network, "xrpl:1");
+  assert.equal(body.facilitator.networkId, 1);
+  assert.equal(body.facilitator.settles, false);
+  assert.equal(body.x402_foreign_hits, 0);
   assert.equal(body.error, undefined);
   assert.deepEqual(body.laws, ["altnets-only", "desk-read-only", "seeds-never-in-git"]);
   const pnl = metrics.parsePnlCounts(fs.readFileSync(path.join(ROOT, "market", "pnl.md"), "utf8"));
   const parsed = status.parsePnlCounts(fs.readFileSync(path.join(ROOT, "market", "pnl.md"), "utf8"));
   assert.deepEqual(parsed, pnl);
   assert.equal(body.x402_hits, pnl.counts.x402_hits);
+  assert.equal(body.x402_outbound_hits, pnl.counts.x402_outbound_hits);
   assert.equal(body.grants_paid, pnl.counts.grants_paid);
   assert.equal(body.inbound_counterparties, pnl.counts.inbound_counterparties);
   assert.equal(body.director_updated_at, JSON.parse(fs.readFileSync(path.join(ROOT, "lab", "director-state.json"), "utf8")).updated_at);
@@ -427,4 +434,45 @@ test("status publishes domain_id only from lab metrics", async () => {
   const bad = await status.collectStatus(baseOpts(router(badPages)));
   assert.equal(bad.domain_id, null);
   assert.match(bad.error, /domain_id is not 64 hex/);
+});
+
+test("status facilitator is the testnet host or a refusal, and foreign hits stay outside WALLETS", async () => {
+  const pages = happyPages();
+  const dual = await status.collectStatus(Object.assign(baseOpts(router(pages)), {
+    env: { XRPL_FACILITATOR_URL: "https://xrpl-facilitator-testnet.t54.ai", XRPL_NETWORK: "xrpl:1" },
+  }));
+  assert.equal(dual.facilitator.mode, "dual");
+  assert.equal(dual.facilitator.host, "xrpl-facilitator-testnet.t54.ai");
+  assert.equal(dual.facilitator.networkId, 1);
+  assert.equal(dual.facilitator.settles, false);
+  assert.equal(dual.network, "xrpl:1");
+
+  const mainnet = await status.collectStatus(Object.assign(baseOpts(router(happyPages())), {
+    env: { XRPL_FACILITATOR_URL: "https://xrpl-facilitator-mainnet.t54.ai" },
+  }));
+  assert.equal(mainnet.facilitator.mode, "refused");
+  assert.equal(mainnet.facilitator.host, null);
+  assert.match(mainnet.error, /xrpl-facilitator-testnet\.t54\.ai/);
+  assert.equal(mainnet.network, "xrpl:1");
+
+  const zero = await status.collectStatus(Object.assign(baseOpts(router(happyPages())), {
+    env: {
+      XRPL_FACILITATOR_URL: "https://xrpl-facilitator-testnet.t54.ai",
+      XRPL_NETWORK: "xrpl:0",
+    },
+  }));
+  assert.equal(zero.facilitator.mode, "refused");
+  assert.match(zero.error, /xrpl:1/);
+
+  const foreign = "rForeignPayer1111111111111111111";
+  const logged = happyPages();
+  logged.git[GIT.ledger] = {
+    text: [
+      JSON.stringify({ action: "x402_hit", sku: "reserve-audit", hash: "A".repeat(64), payer: foreign, network: "xrpl:1" }),
+      JSON.stringify({ action: "x402_hit", sku: "reserve-audit", hash: "B".repeat(64), payer: anchors.WALLETS.W3.address, network: "xrpl:1" }),
+    ].join("\n"),
+  };
+  const hits = await status.collectStatus(baseOpts(router(logged)));
+  assert.equal(hits.x402_foreign_hits, 1);
+  assert.equal(hits.facilitator.mode, "self-verify");
 });

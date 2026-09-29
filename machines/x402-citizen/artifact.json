@@ -1,0 +1,19 @@
+{
+  "name": "Aether Foundry — Public x402 citizen",
+  "description": "F11 dual-mode desk: self-verify plus T54 testnet facilitator receipts. W3 outbound buy is dry-run until a foreign Testnet SKU is configured.",
+  "machine": "x402-citizen",
+  "version": "0.1.0",
+  "network": "XRPL Testnet",
+  "network_id": 1,
+  "pay_to": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+  "payer": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+  "facilitator": "https://xrpl-facilitator-testnet.t54.ai",
+  "facilitator_mainnet_refused": "https://xrpl-facilitator-mainnet.t54.ai",
+  "desk_settles": false,
+  "outbound_cap_drops": "500000",
+  "fingerprint_source_tag": 202609296,
+  "fingerprint_memo": "aether-foundry:f11",
+  "outbound_hash": null,
+  "live": false,
+  "note": "candidates.json urls is empty. Dry-run records no hash. Do not invent one."
+}

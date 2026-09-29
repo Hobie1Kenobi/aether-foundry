@@ -212,6 +212,7 @@ Status follows [`lab/director-state.json`](./lab/director-state.json) and the pa
 | F4 | [credential-domain-shop](./machines/credential-domain-shop/) | dry-run | `aether-agent` credential, permissioned domain, domain OfferCreate. Open Walk-In stays public. |
 | — | [batch-heartbeat](./machines/batch-heartbeat/) | spec only | Atomic Batch of accept + deposit + DID. Amendment still off. No Batch transaction. |
 | — | [x402-desk](./machines/x402-desk/) | live | HTTP 402 merchant. Buyer pays W3. Desk verifies. |
+| F11 | [x402-citizen](./machines/x402-citizen/) | dry-run | Self-verify plus T54 testnet facilitator receipts. W3 outbound buy, cap 0.5 XRP. |
 | — | [x402-outbound](./machines/x402-outbound/) | live | W3 pays a foreign Testnet shop. That shop is not Foundry revenue. |
 | — | [xahau-split-treasury](./machines/xahau-split-treasury/) | live | Incoming XAH to W7 splits on Xahau Testnet by hook. |
 | — | [governance-board](./machines/governance-board/) | live | H1 SignerList on W0, regular keys on W1–W6. Hashes in RESULTS. |
@@ -376,6 +377,7 @@ Anything that signs refuses `CI`, `GITHUB_ACTIONS`, and mainnet hosts. Seeds loa
 | `npm run x402:pay` | Buy a desk SKU |
 | `npm run x402:hit` | Archive a 200 body |
 | `npm run x402:outbound` | W3 pays a foreign URL |
+| `npm run x402:citizen` | Daily W3 buy. Dry-run unless `--live`. Cap 0.5 XRP |
 | `npm run x402:foreign` | Local foreign shop process |
 | `npm run grants:scan` | Read-only candidate list |
 | `npm run grants:pay` | W6 grant. Dry-run does not load a seed |
@@ -422,7 +424,7 @@ Honest leftovers. No dates attached.
 - **Machine #4's quote NFT is still honor-system.** The ledger object that replaces that attestation is [`machines/native-price-oracle/`](./machines/native-price-oracle/). The keeper is dry-run until the box submits `OracleSet`. A stranger reproduces the ticket from `ledger_entry`, not from the URI text.
 - **Labor MPT is issued.** `mpt_issuance_id` `0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED` is in `lab/metrics.json` (create `1DDA337DD81833BEE768DED7E54889A4F92D5DC5958F75760417801909C02BCB`). W2 opted in, then W5 authorized (`MPToken` Flags `2`). [`machines/token-escrow-labor/`](./machines/token-escrow-labor/) locks 1 of that MPT. 1 AETH is the lock only when the metrics id is absent.
 - **LP Badge v0 was not upgraded in place.** The NFT on W1 still claims a bond the ledger does not enforce. The bond that *is* enforced is the separate door in [`machines/lp-badge-bound/`](./machines/lp-badge-bound/).
-- **x402 has no facilitator.** The buyer submits. The desk reads. The same validated Payment can be replayed until an operator records the hit. The server cannot durably mark an invoice spent.
+- **x402 self-verify is still the default.** The buyer submits. The desk reads. Set `XRPL_FACILITATOR_URL` to `https://xrpl-facilitator-testnet.t54.ai` and the desk also checks T54 receipts without calling settle ([`machines/x402-citizen`](./machines/x402-citizen/)). The same validated Payment can be replayed until an operator records the hit. The server cannot durably mark an invoice spent. A mainnet facilitator host is refused.
 - **W8 is deferred.** XRPL EVM Testnet has a row in the address book and no account.
 - **Hooks do not run on this XRPL Testnet.** The hook that exists is on Xahau Testnet, account W7.
 - **Conditioned escrow** is not what F3 shipped. The labor lock is a Ripple-Epoch time lock (`FinishAfter` / `CancelAfter`). A crypto-condition is a later pack. Machine #1 remains the XRP ticket, including the Unix scar.

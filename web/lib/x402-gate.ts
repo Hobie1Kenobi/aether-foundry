@@ -9,9 +9,9 @@ import {
   howToPay,
   listSkus,
   newInvoiceId,
-  verifyPaymentProof,
   type Sku,
 } from "./x402-rules";
+import { publicFacilitator, verifyDeskPayment } from "./x402-facilitator";
 import { ResourceError } from "./x402-resources";
 
 const seenProofs = new Set<string>();
@@ -62,7 +62,13 @@ function jsonResponse(
 function paymentRequiredResponse(
   req: Request,
   sku: Sku,
-  opts?: { error?: string; code?: string; invoiceId?: string; txHash?: string }
+  opts?: {
+    error?: string;
+    code?: string;
+    invoiceId?: string;
+    txHash?: string;
+    facilitatorVerified?: boolean;
+  }
 ): Response {
   const invoiceId = opts?.invoiceId || newInvoiceId(sku.id);
   const paymentRequired = buildPaymentRequired({
@@ -76,9 +82,10 @@ function paymentRequiredResponse(
     code: opts?.code || "payment_required",
     x402Version: 2,
     paymentRequired,
-    howToPay: howToPay(sku, invoiceId),
+    howToPay: howToPay(sku, invoiceId, process.env),
   };
   if (opts?.txHash) body.txHash = opts.txHash;
+  if (opts?.facilitatorVerified) body.facilitatorVerified = true;
   return jsonResponse(402, body, {
     "PAYMENT-REQUIRED": encodeHeader(paymentRequired),
   });
@@ -89,6 +96,7 @@ function hitEvent(sku: Sku, proof: {
   payer: string;
   invoiceId: string;
   ledgerIndex: number | null;
+  via?: string;
 }, duplicate: boolean) {
   return {
     ts: new Date().toISOString(),
@@ -105,6 +113,7 @@ function hitEvent(sku: Sku, proof: {
     ledger_index: proof.ledgerIndex,
     duplicate,
     persisted: false,
+    verify: proof.via || "self-verify",
     log_with: "npm run x402:hit",
   };
 }
@@ -126,18 +135,22 @@ function assertTestnetDesk(req: Request): Response | null {
   return null;
 }
 
-export function x402Catalog() {
+export function x402Catalog(env: Record<string, string | undefined> = process.env) {
+  const facilitator = publicFacilitator(env);
   return {
     merchant: "aether-foundry-desk",
     network: "xrpl:1",
+    networkId: 1,
     refusedNetwork: "xrpl:0",
     scheme: "exact",
     asset: "XRP",
     payTo: PAY_TO,
     payToRole: "W3 CHANNELS",
-    facilitator: null,
+    facilitator,
     verifier:
-      "validated exact Payment on the public XRPL Testnet RPC; signed blobs are not submitted",
+      facilitator.mode === "dual"
+        ? "self-verify of a validated exact Payment, plus a T54 testnet facilitator receipt. /verify is read-only. The desk does not settle."
+        : "validated exact Payment on the public XRPL Testnet RPC; signed blobs are not submitted. Facilitator receipts stay unwired until XRPL_FACILITATOR_URL is the testnet host.",
     hits: "Response includes x402_hit. Vercel does not write market/pnl.md. Append with npm run x402:hit.",
     skus: listSkus(),
   };
@@ -162,11 +175,13 @@ export async function handlePaidSku(
     req.headers.get("payment-signature") || req.headers.get("x-payment");
   if (!header) return paymentRequiredResponse(req, sku);
 
-  const proof = await verifyPaymentProof({
+  const proof = await verifyDeskPayment({
     header,
     sku,
     lookupTx: fetchValidatedTransaction,
     hashSignedTx,
+    env: process.env,
+    fetchImpl: fetch,
   });
   if (!proof.ok) {
     const keepInvoice =
@@ -188,6 +203,7 @@ export async function handlePaidSku(
       code: proof.code,
       invoiceId: invoiceId || undefined,
       txHash: proof.txHash,
+      facilitatorVerified: proof.facilitatorVerified === true,
     });
     const headers = new Headers(response.headers);
     for (const [key, value] of Object.entries(bodyHeaders)) headers.set(key, value);

@@ -40,4 +40,6 @@ npm run x402:pay -- composition-quote --units 10 --record
 2. Submit a Testnet Payment to W3 for that SKU's drops, with the SKU `SourceTag`, and bind `extra.invoiceId` as a memo or as `InvoiceID` = SHA-256 of the invoice string. Do not set NetworkID 0. Do not set the partial-payment flag.
 3. Retry the same URL with header `PAYMENT-SIGNATURE` containing the validated tx hash.
 
+A T54 client can instead send `payload.facilitatorReceipt` after the Payment is validated. The receipt's `transaction` is the hash, `network` is `xrpl:1`, and `facilitator` is `https://xrpl-facilitator-testnet.t54.ai`. That path is live only when the desk env points at that host. The desk still does not settle. See `machines/x402-citizen`.
+
 Full field list: `machines/x402-desk/README.md`.
