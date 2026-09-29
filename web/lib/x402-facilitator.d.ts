@@ -13,8 +13,14 @@ export function publicFacilitator(env?: Record<string, string | undefined>): {
   advertised: string;
   settles: false;
   verifyOnly: true;
+  remoteVerify: boolean;
   code?: string;
   error?: string;
+};
+
+export function facilitatorEnv(env?: Record<string, string | undefined>): {
+  XRPL_FACILITATOR_URL: string | undefined;
+  XRPL_NETWORK: string | undefined;
 };
 
 export function verifyDeskPayment(args: {

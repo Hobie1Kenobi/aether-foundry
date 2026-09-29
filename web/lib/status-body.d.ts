@@ -26,6 +26,7 @@ export type StatusBody = {
     advertised: string;
     settles: false;
     verifyOnly: true;
+    remoteVerify: boolean;
     code?: string;
     error?: string;
   };
@@ -44,6 +45,42 @@ export type StatusBody = {
   };
   mpt_issuance_id: string | null;
   domain_id: string | null;
+  devnet: {
+    network: "XRPL Devnet";
+    networkId: 2;
+    accounts: { D0: string | null; D1: string | null; D2: string | null; D3: string | null };
+    f8: {
+      sponsor: string | null;
+      sponsoree: string | null;
+      prior_sponsee: string | null;
+      create_hash: string | null;
+      object_hash: string | null;
+      ledger_index: number | null;
+    };
+    f9: {
+      owner: string | null;
+      depositor: string | null;
+      vault_id: string | null;
+      broker_id: string | null;
+      loan_id: string | null;
+      asset: string | null;
+      accounting: string | null;
+      create_hash: string | null;
+      repay_hash: string | null;
+      ledger_index: number | null;
+    };
+    f10: {
+      issuer: string | null;
+      counterparty: string | null;
+      sender: string | null;
+      symbol: string | null;
+      issuance_id: string | null;
+      payment_hash: string | null;
+      clawback_hash: string | null;
+      ledger_index: number | null;
+      public_ledger: string | null;
+    };
+  };
   director_updated_at: string | null;
   laws: string[];
   error?: string;
@@ -54,6 +91,8 @@ export function gitUrlsAtSha(sha: string): {
   pnl: string;
   director: string;
   ledger: string;
+  wallets: string;
+  devnetLedger: string;
 };
 
 export function mainGitFiles(
@@ -64,6 +103,8 @@ export function mainGitFiles(
   pnl: string;
   director: string;
   ledger: string;
+  wallets: string;
+  devnetLedger: string;
 }>;
 
 export function collectStatus(opts: {
@@ -84,6 +125,8 @@ export function collectStatus(opts: {
     pnl?: string;
     director?: string;
     ledger?: string;
+    wallets?: string;
+    devnetLedger?: string;
   };
   env?: Record<string, string | undefined>;
   labeled?: string[];

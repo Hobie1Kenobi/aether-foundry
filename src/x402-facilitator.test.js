@@ -81,6 +81,15 @@ describe("facilitator host gate", () => {
     assert.equal(pub.network, "xrpl:1");
     assert.equal(pub.networkId, 1);
     assert.equal(pub.settles, false);
+    assert.equal(pub.verifyOnly, true);
+    assert.equal(pub.remoteVerify, true);
+    const narrowed = facilitator.facilitatorEnv({
+      XRPL_FACILITATOR_URL: TESTNET,
+      XRPL_NETWORK: "xrpl:1",
+      D0_SEED: "sEd" + "V".repeat(20),
+    });
+    assert.deepEqual(Object.keys(narrowed).sort(), ["XRPL_FACILITATOR_URL", "XRPL_NETWORK"]);
+    assert.equal(JSON.stringify(narrowed).includes("sEd"), false);
   });
 
   it("refuses mainnet facilitator URLs and network id 0", () => {
@@ -108,6 +117,12 @@ describe("facilitator host gate", () => {
     assert.equal(network.code, "invalid_network");
     const zero = facilitator.resolveFacilitator({ XRPL_NETWORK: "0" });
     assert.equal(zero.code, "invalid_network");
+    const devnetNetwork = facilitator.resolveFacilitator({
+      XRPL_FACILITATOR_URL: TESTNET,
+      XRPL_NETWORK: "xrpl:2",
+    });
+    assert.equal(devnetNetwork.ok, false);
+    assert.equal(devnetNetwork.code, "invalid_network");
     const endpoint = facilitator.verifyEndpoint(MAINNET);
     assert.equal(endpoint.ok, false);
     assert.equal(endpoint.code, "invalid_facilitator");
@@ -130,6 +145,8 @@ describe("verifyDeskPayment", () => {
     assert.equal(bare.mode, "self-verify");
     assert.equal(bare.host, null);
     assert.equal(bare.networkId, 1);
+    assert.equal(bare.remoteVerify, false);
+    assert.equal(bare.settles, false);
     const described = rules.howToPay(sku(), INVOICE);
     assert.equal(described.facilitator.mode, "self-verify");
     assert.equal(described.facilitator.settles, false);
