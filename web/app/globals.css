@@ -323,6 +323,53 @@ section {
   color: var(--ok);
 }
 
+.status-chip.muted-chip {
+  color: var(--muted);
+}
+
+.frontier-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0 0 0.85rem;
+}
+
+.frontier-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+}
+
+.id-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.id-link {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copy-id {
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.18rem 0.45rem;
+  background: transparent;
+  color: var(--muted);
+  font: 600 0.62rem/1 var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.copy-id:hover {
+  color: var(--text);
+  border-color: var(--amber-soft);
+}
+
 .error,
 .error-chip {
   color: var(--danger);
