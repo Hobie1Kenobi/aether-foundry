@@ -26,8 +26,10 @@ Opened because `lab/frontier/amendments-devnet.json` (network id **2**, rippled 
 |----|------|---------|---------|--------|
 | D0 | DEVNET treasury (F9 vault owner, F8 sponsor source) | `rEizYPsEi1GMqiV5igtYVGzxsvwEENTFS1` | XRPL Devnet | yes (faucet) |
 | D1 | DEVNET depositor / loan counterparty (F9) | `rNk7hv8UekyPCpq4sfgtvxrdTBxa3VLFit` | XRPL Devnet | yes (faucet) |
-| D2 | DEVNET sponsoree (F8; not a Testnet labeled wallet) | `rpxsXpi7UwaPUp7opKkMGHJY6GR7MzsR1m` | XRPL Devnet | yes (faucet; already funded before F8 create) |
+| D2 | DEVNET sponsoree (F8 create-account; leave unfunded until Sponsor) | `rGK3QfP57LzBzS8KcYHmpBa8NvUHxoxAgV` | XRPL Devnet | no (sponsored create; 1 drop reserve via D0) |
 | D3 | DEVNET confidential counterparty (F10) | `rNqcmmEm9TP4pmK7UDHLf21Xr7N4xEHWG8` | XRPL Devnet | yes (faucet) |
+
+Prior faucet-funded D2 `rpxsXpi7UwaPUp7opKkMGHJY6GR7MzsR1m` kept as historical (`D2_FUNDED_*` in box secrets). That address blocked create with `tecNO_SPONSOR_PERMISSION`; DepositPreauth object path already succeeded on it. Active D2 is the fresh unfunded classic address above; create-account Sponsor `tesSUCCESS` hash `002F5E3D285FADCEED03D8CFA602C73363539BFCB1190D30E56BA4F4E3BB8BE4` (ledger `5694766`).
 
 Addresses returned by the Devnet faucet on the Foundry box (public classic addresses only; seeds stay outside git). Faucet: https://xrpl.org/resources/dev-tools/xrp-faucets (Devnet) / `POST https://faucet.devnet.rippletest.net/accounts`. F8/F9/F10 live on network id 2; see pack `RESULTS.md`. Spec notes: `lab/frontier/port-forward.md` / `lab/frontier/DEVNET.md`.
 
