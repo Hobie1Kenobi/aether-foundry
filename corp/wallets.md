@@ -24,12 +24,12 @@ Opened because `lab/frontier/amendments-devnet.json` (network id **2**, rippled 
 
 | ID | Role | Address | Network | Funded |
 |----|------|---------|---------|--------|
-| D0 | DEVNET treasury (F9 vault owner, F8 sponsor source) | _blank_ | XRPL Devnet | no |
-| D1 | DEVNET depositor / loan counterparty (F9) | _blank_ | XRPL Devnet | no |
-| D2 | DEVNET sponsoree (F8; not a Testnet labeled wallet) | _blank_ | XRPL Devnet | no |
-| D3 | DEVNET confidential counterparty (F10) | _blank_ | XRPL Devnet | no |
+| D0 | DEVNET treasury (F9 vault owner, F8 sponsor source) | `rEizYPsEi1GMqiV5igtYVGzxsvwEENTFS1` | XRPL Devnet | yes (faucet) |
+| D1 | DEVNET depositor / loan counterparty (F9) | `rNk7hv8UekyPCpq4sfgtvxrdTBxa3VLFit` | XRPL Devnet | yes (faucet) |
+| D2 | DEVNET sponsoree (F8; not a Testnet labeled wallet) | `rpxsXpi7UwaPUp7opKkMGHJY6GR7MzsR1m` | XRPL Devnet | yes (faucet; already funded before F8 create) |
+| D3 | DEVNET confidential counterparty (F10) | `rNqcmmEm9TP4pmK7UDHLf21Xr7N4xEHWG8` | XRPL Devnet | yes (faucet) |
 
-Faucet, when the Foundry box actually needs XRP: the web picker is https://xrpl.org/resources/dev-tools/xrp-faucets (choose Devnet). The Devnet POST host `https://faucet.devnet.rippletest.net/accounts` answered HTTP this session and was not called. Do not paste an address into this file until that response returns one. Spec-only sequences: `lab/frontier/port-forward.md`.
+Addresses returned by the Devnet faucet on the Foundry box (public classic addresses only; seeds stay outside git). Faucet: https://xrpl.org/resources/dev-tools/xrp-faucets (Devnet) / `POST https://faucet.devnet.rippletest.net/accounts`. F8/F9/F10 live on network id 2; see pack `RESULTS.md`. Spec notes: `lab/frontier/port-forward.md` / `lab/frontier/DEVNET.md`.
 
 ## Week-2 board (XRPL Testnet, public addresses only)
 
