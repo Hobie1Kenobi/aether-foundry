@@ -4,6 +4,8 @@
  * Public counters for the desk. Hashes come from lab/ledger-log.jsonl.
  * A missing hash stays null. This module does not invent one.
  * A missing file is seeded from market/pnl.md. A failed parse does not invent a number.
+ * oracle_id, last_oracle, mpt_issuance_id, and domain_id already on disk stay
+ * unless the caller passes clear. A partial heartbeat rewrite must not drop them.
  *
  * unique_inbound is the set of classic `buyer` addresses, `x402_hit` payers,
  * and `grant_paid` destinations that are absent from WALLETS.
@@ -20,6 +22,7 @@ const policy = require("./policy");
 
 const COUNT_KEYS = ["x402_hits", "x402_outbound_hits", "grants_paid", "inbound_counterparties"];
 const HASH_KEYS = ["last_grant_hash", "last_outbound_hash", "last_heartbeat_hash"];
+const FRONTIER_KEYS = ["oracle_id", "last_oracle", "mpt_issuance_id", "domain_id"];
 const ISSUANCE_ID_RE = /^[0-9A-F]{48}$/;
 
 function ioOf(io) {
@@ -186,10 +189,40 @@ function readMetrics(root, io) {
   return assertDoc(doc);
 }
 
-function writeMetrics(root, doc, io) {
-  const clean = assertDoc(doc);
+function frontierHeld(key, value) {
+  if (value == null) return false;
+  if (key !== "last_oracle") return true;
+  if (typeof value !== "object" || Array.isArray(value)) return false;
+  return ["hash", "oracle_id", "ledger_index", "last_update_time", "quote_xrp_per_aeth", "ts"].some(
+    (field) => value[field] != null
+  );
+}
+
+function blankFrontier(key) {
+  return key === "last_oracle" ? emptyOracle() : null;
+}
+
+function applyFrontier(doc, previous, clear) {
+  const allowed = new Set(
+    Array.isArray(clear) ? clear.filter((key) => FRONTIER_KEYS.includes(key)) : []
+  );
+  const prior = previous || {};
+  for (const key of FRONTIER_KEYS) {
+    if (frontierHeld(key, doc[key])) continue;
+    if (frontierHeld(key, prior[key]) && !allowed.has(key)) {
+      doc[key] = JSON.parse(JSON.stringify(prior[key]));
+      continue;
+    }
+    doc[key] = blankFrontier(key);
+  }
+  return doc;
+}
+
+function writeMetrics(root, doc, io, opts) {
   const disk = ioOf(io);
   const file = metricsPath(root);
+  const previous = disk.existsSync(file) ? readMetrics(root, disk) : null;
+  const clean = assertDoc(applyFrontier(doc, previous, opts && opts.clear));
   disk.mkdirSync(path.dirname(file), { recursive: true });
   disk.writeFileSync(file, `${JSON.stringify(clean, null, 2)}\n`);
   return clean;
@@ -422,6 +455,8 @@ function recordMpt(root, event, io) {
 module.exports = {
   COUNT_KEYS,
   HASH_KEYS,
+  FRONTIER_KEYS,
+  writeMetrics,
   parsePnlCounts,
   skeletonFromPnl,
   readMetrics,

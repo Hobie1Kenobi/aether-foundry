@@ -267,6 +267,79 @@ describe("signer archive", () => {
     assert.equal(line.includes(TOKEN), false);
     assert.equal(line.includes("present-not-a-family-seed"), false);
   });
+
+  it("heartbeat archive keeps frontier ids already in metrics", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "signer-frontier-"));
+    fs.mkdirSync(path.join(root, "lab"), { recursive: true });
+    const oracleId = "7CD1AB908C3A8D2E3C426E0D3083F4DD9A8A3A753AA60EB73682AA11A06DFA4E";
+    const mptId = "0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED";
+    const domainId = "6AF56BC1CEC72198156F650C6B425AA52905218CC889BF910BA495470352DCD4";
+    fs.writeFileSync(path.join(root, "lab", "metrics.json"), `${JSON.stringify({
+      updated_at: "2026-09-29T09:34:05-05:00",
+      x402_hits: 0,
+      x402_outbound_hits: 1,
+      grants_paid: 2,
+      inbound_counterparties: 2,
+      last_grant_hash: null,
+      last_outbound_hash: null,
+      last_heartbeat_hash: "D2E1DDC059FF4A6DE70EB4520D18C6A534E3825E98B1879A496476AF94AC85AD",
+      last_heartbeat: {
+        hash: "D2E1DDC059FF4A6DE70EB4520D18C6A534E3825E98B1879A496476AF94AC85AD",
+        ledger_index: 21145575,
+        ts: "2026-09-29T14:34:05.297Z",
+      },
+      oracle_id: oracleId,
+      last_oracle: {
+        hash: "B11B0B87A7C40AFA98540D2F40FF234384466729F90E259E60162714DC4DDE85",
+        oracle_id: oracleId,
+        ledger_index: 21129718,
+        last_update_time: 1790639158,
+        quote_xrp_per_aeth: "0.01022008",
+        ts: "2026-09-28T23:45:58.839Z",
+      },
+      mpt_issuance_id: mptId,
+      domain_id: domainId,
+    }, null, 2)}\n`);
+    const activated = anchors.loadActivated(ROOT);
+    const regular = activated.regular_keys.find((row) => row.id === "W5");
+    const out = await signer.evaluate({
+      wallet: "W5",
+      intent: "heartbeat",
+      tx: payment(),
+    }, ctx({
+      root,
+      dry: false,
+      metrics: true,
+      loadSeed() {
+        return "present-not-a-family-seed";
+      },
+      openWallet() {
+        return {
+          classicAddress: regular.regular_key,
+          sign() {
+            return { tx_blob: "BLOB" };
+          },
+        };
+      },
+      submit() {
+        return {
+          result: {
+            hash: HASH,
+            ledger_index: 21152365,
+            meta: { TransactionResult: "tesSUCCESS" },
+          },
+        };
+      },
+    }));
+    assert.equal(out.body.hash, HASH);
+    const saved = JSON.parse(fs.readFileSync(path.join(root, "lab", "metrics.json"), "utf8"));
+    assert.equal(saved.last_heartbeat.hash, HASH);
+    assert.equal(saved.oracle_id, oracleId);
+    assert.equal(saved.last_oracle.oracle_id, oracleId);
+    assert.equal(saved.last_oracle.hash, "B11B0B87A7C40AFA98540D2F40FF234384466729F90E259E60162714DC4DDE85");
+    assert.equal(saved.mpt_issuance_id, mptId);
+    assert.equal(saved.domain_id, domainId);
+  });
 });
 
 describe("signer process", () => {
