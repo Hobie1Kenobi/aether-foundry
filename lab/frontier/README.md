@@ -33,6 +33,8 @@ Devnet is a different measurement. `npm run frontier:probe-devnet` writes [`amen
 
 Day 7 Devnet map, Chicago `2026-09-28T20:17:31-05:00`, rippled **3.4.1**, network id **2**: every watched row was `enabled: true`, including Band B and Band C. That does not authorize a Testnet Batch, and this session did not submit Batch, Vault, Loan, Sponsor, or ConfidentialTransfer on Devnet either. Blank Devnet lines are `D0`–`D3` in `corp/wallets.md`. Sequences that are still notes: [`port-forward.md`](./port-forward.md). Letter: [`DAY7.md`](./DAY7.md).
 
+F8, F9, and F10 stay on Devnet. `npm run frontier:devnet-sponsor`, `npm run frontier:devnet-vault`, and `npm run frontier:devnet-confidential` re-read `feature` on the Devnet URL and refuse a network id other than 2. Dry-run is the default. Operator note: [`DEVNET.md`](./DEVNET.md). They do not write the Testnet ledger log.
+
 Until a later Testnet probe says otherwise, do not submit Batch on Testnet, and do not stand in for a disabled Testnet amendment with a sequence of other transactions.
 
 F1 keeper: `npm run frontier:oracle-set` reads this map's live twin via `feature` and refuses `OracleSet` unless `PriceOracle` is enabled on network id 1. Default is dry-run. The ticket command is `npm run frontier:oracle-ticket`. Pack: `machines/native-price-oracle/`.
