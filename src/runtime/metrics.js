@@ -64,6 +64,11 @@ function assertMpt(doc) {
   doc.mpt_issuance_id = issuanceOrNull(doc.mpt_issuance_id, "mpt_issuance_id");
 }
 
+function assertDomain(doc) {
+  if (!Object.prototype.hasOwnProperty.call(doc, "domain_id") || doc.domain_id == null) return;
+  doc.domain_id = hashOrNull(doc.domain_id, "domain_id");
+}
+
 function assertOracle(doc) {
   if (doc.oracle_id != null) hashOrNull(doc.oracle_id, "oracle_id");
   if (doc.last_oracle == null) return;
@@ -141,6 +146,7 @@ function assertDoc(doc) {
   }
   assertOracle(doc);
   assertMpt(doc);
+  assertDomain(doc);
   return doc;
 }
 
@@ -162,6 +168,7 @@ function skeletonFromPnl(text, now) {
     oracle_id: null,
     last_oracle: emptyOracle(),
     mpt_issuance_id: null,
+    domain_id: null,
   };
   return assertDoc(doc);
 }
@@ -327,6 +334,7 @@ function refresh(root, opts) {
     oracle_id: current && current.oracle_id ? current.oracle_id : null,
     last_oracle: current && current.last_oracle ? current.last_oracle : emptyOracle(),
     mpt_issuance_id: current && current.mpt_issuance_id ? current.mpt_issuance_id : null,
+    domain_id: current && current.domain_id ? current.domain_id : null,
   };
   const pnlPath = options.pnlPath || path.join(root, "market", "pnl.md");
   if (disk.existsSync(pnlPath)) {
@@ -378,6 +386,22 @@ function recordOracle(root, event, io) {
   return writeMetrics(root, current, disk);
 }
 
+function recordDomain(root, event, io) {
+  if (!hashOrNull(event && event.hash, "domain hash")) {
+    throw policy.coded("refusing domain metrics without a ledger hash", "RECORD");
+  }
+  const domainId = hashOrNull(event && event.domain_id, "domain_id");
+  if (!domainId) throw policy.coded("refusing domain metrics without a domain id", "RECORD");
+  const disk = ioOf(io);
+  const current = readMetrics(root, disk) || seedIfMissing(root, event && event.now, disk);
+  current.updated_at = anchors.formatChicago((event && event.now) || new Date());
+  current.domain_id = domainId;
+  if (event && event.ts != null && typeof event.ts !== "string") {
+    throw policy.coded("domain metrics ts is not a timestamp", "RECORD");
+  }
+  return writeMetrics(root, current, disk);
+}
+
 function recordMpt(root, event, io) {
   if (!hashOrNull(event && event.hash, "mpt hash")) {
     throw policy.coded("refusing MPT metrics without a ledger hash", "RECORD");
@@ -405,6 +429,7 @@ module.exports = {
   recordHeartbeat,
   recordOracle,
   recordMpt,
+  recordDomain,
   emptyHeartbeat,
   emptyOracle,
   uniqueInbound,

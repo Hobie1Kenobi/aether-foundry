@@ -209,6 +209,7 @@ Status follows [`lab/director-state.json`](./lab/director-state.json) and the pa
 | F1 | [native-price-oracle](./machines/native-price-oracle/) | dry-run | `OracleSet` on W5. Tickets call `ledger_entry` and price from that object. |
 | F2 | [labor-mpt](./machines/labor-mpt/) | dry-run | `AETH-LABOR` MPT on W5. Transferable and capped. AETH IOU stays the AMM pair. |
 | F3 | [token-escrow-labor](./machines/token-escrow-labor/) | dry-run | TokenEscrow of AETH-LABOR `0141DD60…19504ED`. Finish and cancel. Ripple Epoch only. |
+| F4 | [credential-domain-shop](./machines/credential-domain-shop/) | dry-run | `aether-agent` credential, permissioned domain, domain OfferCreate. Open Walk-In stays public. |
 | — | [batch-heartbeat](./machines/batch-heartbeat/) | spec only | Atomic Batch of accept + deposit + DID. Amendment still off. No Batch transaction. |
 | — | [x402-desk](./machines/x402-desk/) | live | HTTP 402 merchant. Buyer pays W3. Desk verifies. |
 | — | [x402-outbound](./machines/x402-outbound/) | live | W3 pays a foreign Testnet shop. That shop is not Foundry revenue. |

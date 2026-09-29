@@ -198,6 +198,12 @@
       "results": "machines/token-escrow-labor/RESULTS.md",
       "last_result_hash": "7536CB47DD446BF5E09ABC1A65CB0633FC556EB83E1C261257F07644A7815DA1",
       "note": "TokenEscrow finish+cancel trialled; FinishAfter/CancelAfter Ripple Epoch"
+    },
+    "credential-domain-shop": {
+      "status": "spec-only",
+      "results": "machines/credential-domain-shop/RESULTS.md",
+      "last_result_hash": null,
+      "note": "Credentials, PermissionedDomains, and PermissionedDEX enabled; domain_id stays null until PermissionedDomainSet tesSUCCESS"
     }
   },
   "watched": {
