@@ -1,0 +1,20 @@
+{
+  "name": "Aether Foundry — Credential domain shop",
+  "description": "F4 CredentialCreate aether-agent, CredentialAccept, PermissionedDomainSet, and a PermissionedDEX offer. Open Walk-In stays public.",
+  "machine": "credential-domain-shop",
+  "version": "0.1.0",
+  "network": "XRPL Testnet",
+  "network_id": 1,
+  "issuer_account": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+  "credential_type": "aether-agent",
+  "lp_door_type_not_used": "aether-lp-ok",
+  "intent": "credential_domain_shop",
+  "key_env": "W5_REGULAR_SEED",
+  "domain_id": null,
+  "uncredentialed_engine": "tecNO_PERMISSION",
+  "uncredentialed_hash": null,
+  "credentialed_take_hash": null,
+  "walk_in": "public",
+  "live": false,
+  "note": "domain_id and the take hashes stay null until tesSUCCESS and tecNO_PERMISSION are on the ledger. Do not invent them."
+}

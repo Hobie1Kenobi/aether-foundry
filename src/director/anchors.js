@@ -179,6 +179,13 @@ const MACHINES = [
     results: "machines/token-escrow-labor/RESULTS.md",
     note: "TokenEscrow finish+cancel trialled; FinishAfter/CancelAfter Ripple Epoch",
   },
+  {
+    slug: "credential-domain-shop",
+    status: "spec-only",
+    last_result_hash: null,
+    results: "machines/credential-domain-shop/RESULTS.md",
+    note: "Credentials, PermissionedDomains, and PermissionedDEX enabled; domain_id stays null until PermissionedDomainSet tesSUCCESS",
+  },
 ];
 
 // Stranger buy is executable (`npm run buy:walk-in`) while the offer is open.

@@ -163,6 +163,7 @@ test("status JSON is seedless and uses proven ledger data", async () => {
   assert.equal(body.oracle_id, "7CD1AB908C3A8D2E3C426E0D3083F4DD9A8A3A753AA60EB73682AA11A06DFA4E");
   assert.equal(body.oracle.quote_xrp_per_aeth, "0.01022008");
   assert.equal(body.mpt_issuance_id, "0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED");
+  assert.equal(body.domain_id, null);
   assert.equal(body.error, undefined);
   assert.deepEqual(body.laws, ["altnets-only", "desk-read-only", "seeds-never-in-git"]);
   const pnl = metrics.parsePnlCounts(fs.readFileSync(path.join(ROOT, "market", "pnl.md"), "utf8"));
@@ -405,4 +406,25 @@ test("status publishes mpt_issuance_id only from lab metrics", async () => {
   const bad = await status.collectStatus(baseOpts(router(badPages)));
   assert.equal(bad.mpt_issuance_id, null);
   assert.match(bad.error, /mpt_issuance_id is not 48 hex/);
+});
+
+test("status publishes domain_id only after the lab has one", async () => {
+  const pages = happyPages();
+  const published = await status.collectStatus(baseOpts(router(pages)));
+  assert.equal(published.domain_id, null);
+  const filed = JSON.parse(fs.readFileSync(path.join(ROOT, "lab", "metrics.json"), "utf8"));
+  const domainId = "AB".repeat(32);
+  filed.domain_id = domainId.toLowerCase();
+  pages.git[GIT.metrics] = { text: JSON.stringify(filed) };
+  const body = await status.collectStatus(baseOpts(router(pages)));
+  assert.equal(body.error, undefined);
+  assert.equal(body.domain_id, domainId);
+  assert.equal(body.desk, "read-only");
+  assert.doesNotMatch(JSON.stringify(body), /sEd|"seed"|"secret"|"private_key"/);
+  filed.domain_id = "ABCD";
+  const badPages = happyPages();
+  badPages.git[GIT.metrics] = { text: JSON.stringify(filed) };
+  const bad = await status.collectStatus(baseOpts(router(badPages)));
+  assert.equal(bad.domain_id, null);
+  assert.match(bad.error, /domain_id is not 64 hex/);
 });

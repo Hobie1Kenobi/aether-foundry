@@ -29,6 +29,7 @@ export type StatusBody = {
     quote_asset: string | null;
   };
   mpt_issuance_id: string | null;
+  domain_id: string | null;
   director_updated_at: string | null;
   laws: string[];
   error?: string;
