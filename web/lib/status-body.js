@@ -47,6 +47,7 @@ function baseStatus(error) {
     last_heartbeat: emptyHeartbeat(),
     oracle_id: null,
     oracle: emptyOracle(),
+    mpt_issuance_id: null,
     director_updated_at: null,
     laws: LAWS.slice(),
   };
@@ -138,6 +139,8 @@ function parseMetrics(text) {
   const ts = beat && typeof beat.ts === "string" ? beat.ts : null;
   const oracle = readMetricsOracle(doc);
   if (!oracle.ok) return oracle;
+  const mpt = readMetricsMpt(doc);
+  if (!mpt.ok) return mpt;
   return {
     ok: true,
     counts,
@@ -148,7 +151,17 @@ function parseMetrics(text) {
     },
     oracle_id: oracle.oracle_id,
     oracle: oracle.oracle,
+    mpt_issuance_id: mpt.mpt_issuance_id,
   };
+}
+
+function readMetricsMpt(doc) {
+  if (doc.mpt_issuance_id == null) return { ok: true, mpt_issuance_id: null };
+  const id = String(doc.mpt_issuance_id).toUpperCase();
+  if (!/^[0-9A-F]{48}$/.test(id)) {
+    return { ok: false, error: "metrics.json mpt_issuance_id is not 48 hex" };
+  }
+  return { ok: true, mpt_issuance_id: id };
 }
 
 function decimalFromScaled(assetPrice, scale) {
@@ -469,18 +482,19 @@ function resolveCounts(metricsText, metricsStatus, pnlText, pnlStatus, errors) {
         heartbeat: parsed.last_heartbeat,
         oracle_id: parsed.oracle_id || null,
         oracle: parsed.oracle || emptyOracle(),
+        mpt_issuance_id: parsed.mpt_issuance_id || null,
         metricsOk: true,
       };
     }
     errors.push(parsed.error);
-    return { counts: null, heartbeat: null, oracle_id: null, oracle: emptyOracle(), metricsOk: false };
+    return { counts: null, heartbeat: null, oracle_id: null, oracle: emptyOracle(), mpt_issuance_id: null, metricsOk: false };
   }
   if (metricsStatus != null && metricsStatus !== 404) errors.push(`metrics.json HTTP ${metricsStatus}`);
   if (pnlStatus === 200 && pnlText) {
     const parsed = parsePnlCounts(pnlText);
     if (parsed.errors.length) {
       errors.push(parsed.errors.join("; "));
-      return { counts: null, heartbeat: null, oracle_id: null, oracle: emptyOracle(), metricsOk: false };
+      return { counts: null, heartbeat: null, oracle_id: null, oracle: emptyOracle(), mpt_issuance_id: null, metricsOk: false };
     }
     return {
       counts: {
@@ -491,11 +505,12 @@ function resolveCounts(metricsText, metricsStatus, pnlText, pnlStatus, errors) {
       heartbeat: null,
       oracle_id: null,
       oracle: emptyOracle(),
+      mpt_issuance_id: null,
       metricsOk: false,
     };
   }
   errors.push(pnlStatus == null ? "pnl.md was not fetched" : `pnl.md HTTP ${pnlStatus}`);
-  return { counts: null, heartbeat: null, oracle_id: null, oracle: emptyOracle(), metricsOk: false };
+  return { counts: null, heartbeat: null, oracle_id: null, oracle: emptyOracle(), mpt_issuance_id: null, metricsOk: false };
 }
 
 function resolveHeartbeat(metricsBeat, ledgerText, ledgerStatus, errors) {
@@ -704,6 +719,7 @@ async function collectStatus(opts) {
     last_heartbeat: heartbeat,
     oracle_id: xrpl.oracle_id || (counts.oracle_id || null),
     oracle: xrpl.oracle_id ? xrpl.oracle : (counts.oracle_id ? counts.oracle : xrpl.oracle),
+    mpt_issuance_id: counts.mpt_issuance_id || null,
     director_updated_at: director,
     laws: LAWS.slice(),
   };

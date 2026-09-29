@@ -20,6 +20,7 @@ const policy = require("./policy");
 
 const COUNT_KEYS = ["x402_hits", "x402_outbound_hits", "grants_paid", "inbound_counterparties"];
 const HASH_KEYS = ["last_grant_hash", "last_outbound_hash", "last_heartbeat_hash"];
+const ISSUANCE_ID_RE = /^[0-9A-F]{48}$/;
 
 function ioOf(io) {
   return {
@@ -47,6 +48,20 @@ function emptyOracle() {
     quote_xrp_per_aeth: null,
     ts: null,
   };
+}
+
+function issuanceOrNull(value, label) {
+  if (value == null) return null;
+  const id = String(value).toUpperCase();
+  if (!ISSUANCE_ID_RE.test(id)) {
+    throw policy.coded(`${label} is not a 48-hex MPT issuance id`, "METRICS");
+  }
+  return id;
+}
+
+function assertMpt(doc) {
+  if (!Object.prototype.hasOwnProperty.call(doc, "mpt_issuance_id") || doc.mpt_issuance_id == null) return;
+  doc.mpt_issuance_id = issuanceOrNull(doc.mpt_issuance_id, "mpt_issuance_id");
 }
 
 function assertOracle(doc) {
@@ -125,6 +140,7 @@ function assertDoc(doc) {
     }
   }
   assertOracle(doc);
+  assertMpt(doc);
   return doc;
 }
 
@@ -145,6 +161,7 @@ function skeletonFromPnl(text, now) {
     last_heartbeat: emptyHeartbeat(),
     oracle_id: null,
     last_oracle: emptyOracle(),
+    mpt_issuance_id: null,
   };
   return assertDoc(doc);
 }
@@ -309,6 +326,7 @@ function refresh(root, opts) {
     },
     oracle_id: current && current.oracle_id ? current.oracle_id : null,
     last_oracle: current && current.last_oracle ? current.last_oracle : emptyOracle(),
+    mpt_issuance_id: current && current.mpt_issuance_id ? current.mpt_issuance_id : null,
   };
   const pnlPath = options.pnlPath || path.join(root, "market", "pnl.md");
   if (disk.existsSync(pnlPath)) {
@@ -360,6 +378,23 @@ function recordOracle(root, event, io) {
   return writeMetrics(root, current, disk);
 }
 
+function recordMpt(root, event, io) {
+  if (!hashOrNull(event && event.hash, "mpt hash")) {
+    throw policy.coded("refusing MPT metrics without a ledger hash", "RECORD");
+  }
+  const issuance = issuanceOrNull(event && event.mpt_issuance_id, "mpt_issuance_id");
+  if (!issuance) throw policy.coded("refusing MPT metrics without an issuance id", "RECORD");
+  const disk = ioOf(io);
+  const current = readMetrics(root, disk) || seedIfMissing(root, event && event.now, disk);
+  const ledger = event && event.ledger_index;
+  current.updated_at = anchors.formatChicago((event && event.now) || new Date());
+  current.mpt_issuance_id = issuance;
+  if (event && event.ts != null && typeof event.ts !== "string") {
+    throw policy.coded("mpt metrics ts is not a timestamp", "RECORD");
+  }
+  return writeMetrics(root, current, disk);
+}
+
 module.exports = {
   COUNT_KEYS,
   HASH_KEYS,
@@ -369,6 +404,7 @@ module.exports = {
   seedIfMissing,
   recordHeartbeat,
   recordOracle,
+  recordMpt,
   emptyHeartbeat,
   emptyOracle,
   uniqueInbound,

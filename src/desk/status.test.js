@@ -160,8 +160,9 @@ test("status JSON is seedless and uses proven ledger data", async () => {
   assert.equal(body.batch_atomic_enabled, false);
   assert.equal(body.w7_hook_matches_pack, true);
   assert.equal(body.last_heartbeat.hash, "2B298A910CB3966EF6E60AD3C3ABD167D43ED382F34E2D5963292304C0203C01");
-  assert.equal(body.oracle_id, null);
-  assert.equal(body.oracle.quote_xrp_per_aeth, null);
+  assert.equal(body.oracle_id, "7CD1AB908C3A8D2E3C426E0D3083F4DD9A8A3A753AA60EB73682AA11A06DFA4E");
+  assert.equal(body.oracle.quote_xrp_per_aeth, "0.01022008");
+  assert.equal(body.mpt_issuance_id, null);
   assert.equal(body.error, undefined);
   assert.deepEqual(body.laws, ["altnets-only", "desk-read-only", "seeds-never-in-git"]);
   const pnl = metrics.parsePnlCounts(fs.readFileSync(path.join(ROOT, "market", "pnl.md"), "utf8"));
@@ -375,5 +376,27 @@ test("status publishes the ledger oracle and falls back to lab metrics", async (
   }));
   assert.equal(won.oracle_id, oracleIndex);
   assert.equal(won.oracle.quote_xrp_per_aeth, "0.01007528");
+  assert.equal(won.mpt_issuance_id, null);
   assert.doesNotMatch(JSON.stringify(priced), /sEd|"seed"|"secret"|"private_key"/);
+});
+
+test("status publishes mpt_issuance_id only from lab metrics", async () => {
+  const pages = happyPages();
+  const blank = await status.collectStatus(baseOpts(router(pages)));
+  assert.equal(blank.mpt_issuance_id, null);
+  const filed = JSON.parse(fs.readFileSync(path.join(ROOT, "lab", "metrics.json"), "utf8"));
+  const issuance = `00000001${"AB".repeat(20)}`;
+  filed.mpt_issuance_id = issuance.toLowerCase();
+  pages.git[GIT.metrics] = { text: JSON.stringify(filed) };
+  const body = await status.collectStatus(baseOpts(router(pages)));
+  assert.equal(body.error, undefined);
+  assert.equal(body.mpt_issuance_id, issuance);
+  assert.equal(body.desk, "read-only");
+  assert.doesNotMatch(JSON.stringify(body), /sEd|"seed"|"secret"|"private_key"/);
+  filed.mpt_issuance_id = "EF".repeat(32);
+  const badPages = happyPages();
+  badPages.git[GIT.metrics] = { text: JSON.stringify(filed) };
+  const bad = await status.collectStatus(baseOpts(router(badPages)));
+  assert.equal(bad.mpt_issuance_id, null);
+  assert.match(bad.error, /mpt_issuance_id is not 48 hex/);
 });

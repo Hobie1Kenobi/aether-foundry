@@ -207,6 +207,7 @@ Status follows [`lab/director-state.json`](./lab/director-state.json) and the pa
 | 5 | [lp-badge](./machines/lp-badge/) | trialled | NFT that *claims* AMM LP membership. The ledger does not bind that NFT to the LP. |
 | 5b | [lp-badge-bound](./machines/lp-badge-bound/) | trialled | Separate credential door. DepositAuth refuses payment without `aether-lp-ok`. |
 | F1 | [native-price-oracle](./machines/native-price-oracle/) | dry-run | `OracleSet` on W5. Tickets call `ledger_entry` and price from that object. |
+| F2 | [labor-mpt](./machines/labor-mpt/) | dry-run | `AETH-LABOR` MPT on W5. Transferable and capped. AETH IOU stays the AMM pair. |
 | — | [batch-heartbeat](./machines/batch-heartbeat/) | spec only | Atomic Batch of accept + deposit + DID. Amendment still off. No Batch transaction. |
 | — | [x402-desk](./machines/x402-desk/) | live | HTTP 402 merchant. Buyer pays W3. Desk verifies. |
 | — | [x402-outbound](./machines/x402-outbound/) | live | W3 pays a foreign Testnet shop. That shop is not Foundry revenue. |
@@ -361,6 +362,8 @@ Anything that signs refuses `CI`, `GITHUB_ACTIONS`, and mainnet hosts. Seeds loa
 | `npm run frontier:probe` | Read-only Testnet amendment map |
 | `npm run frontier:oracle-set` | Dry-run W5 `OracleSet` for AETH/XRP. `--live` is the Foundry box |
 | `npm run frontier:oracle-ticket` | Price a work-ticket from `ledger_entry`, not a local float |
+| `npm run frontier:mpt-labor-create` | Dry-run W5 `MPTokenIssuanceCreate` for AETH-LABOR. `--live` is the Foundry box |
+| `npm run frontier:mpt-labor-authorize` | Dry-run `MPTokenAuthorize` for one holder. Needs an issuance id |
 | `npm run report:nav` | NAV digest from live reads |
 | `npm run buy:walk-in` | Stranger accept of the live W2 offer |
 | `npm run watch:walk-in` | Read-only sold-out detector |
@@ -412,6 +415,7 @@ Honest leftovers. No dates attached.
 
 - **Atomic Batch is off.** On rippled 3.4.1, `BatchV1_1` and `fixBatchV1_2` were `enabled: false`. `TicketBatch: true` is a different amendment. [`machines/batch-heartbeat/`](./machines/batch-heartbeat/) stays a spec until a probe says otherwise. No faux-batch.
 - **Machine #4's quote NFT is still honor-system.** The ledger object that replaces that attestation is [`machines/native-price-oracle/`](./machines/native-price-oracle/). The keeper is dry-run until the box submits `OracleSet`. A stranger reproduces the ticket from `ledger_entry`, not from the URI text.
+- **Labor is an MPT definition, not yet an escrow.** [`machines/labor-mpt/`](./machines/labor-mpt/) dry-runs `MPTokenIssuanceCreate` and `MPTokenAuthorize`. `mpt_issuance_id` on `/api/status` stays null until a box `tesSUCCESS`. TokenEscrow finish and cancel are the next pack.
 - **LP Badge v0 was not upgraded in place.** The NFT on W1 still claims a bond the ledger does not enforce. The bond that *is* enforced is the separate door in [`machines/lp-badge-bound/`](./machines/lp-badge-bound/).
 - **x402 has no facilitator.** The buyer submits. The desk reads. The same validated Payment can be replayed until an operator records the hit. The server cannot durably mark an invoice spent.
 - **W8 is deferred.** XRPL EVM Testnet has a row in the address book and no account.
