@@ -180,11 +180,12 @@ function readAmendments(feature) {
   });
 }
 
-function readServer(info) {
+function readServer(info, expectedId) {
+  const expected = expectedId == null ? anchors.XRPL_NETWORK_ID : expectedId;
   const inner = info && info.info;
   if (!inner || typeof inner !== "object") fail("server_info omitted info", "RPC");
   if (inner.network_id == null || inner.network_id === "") fail("server_info omitted network_id", "RPC");
-  const networkId = anchors.assertNetworkId(inner.network_id, anchors.XRPL_NETWORK_ID);
+  const networkId = anchors.assertNetworkId(inner.network_id, expected);
   if (typeof inner.build_version !== "string" || !inner.build_version.trim()) {
     fail("server_info omitted build_version", "RPC");
   }

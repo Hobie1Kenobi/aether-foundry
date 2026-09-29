@@ -4,7 +4,7 @@
   "source": "director:snapshot",
   "timezone": "America/Chicago",
   "updated_at": "2026-09-28T20:09:38-05:00",
-  "last_session_id": "2026-09-28-f4-credential-domain-shop",
+  "last_session_id": "2026-09-28-day7-band-bc",
   "networks": {
     "xrpl_testnet": {
       "label": "XRPL Testnet",
@@ -342,9 +342,9 @@
     }
   },
   "next_actions": [
-    "Desk /api/status is seedless JSON. After this deploy, curl https://aether-foundry-desk.vercel.app/api/status. The desk does not sign.",
-    "Heartbeat dry-run is npm run heartbeat:dry (W5 to W3, 1 drop, SourceTag 202609280). Live only on the Foundry box with FOUNDRY_DAEMON_LIVE=yes and W5_REGULAR_SEED. No heartbeat in Actions.",
-    "Daily flywheel is not started. No Batch while watched.batch.atomic_enabled is false. No remint while Walk-In is open."
+    "Testnet re-probe 2026-09-28T20:17:30-05:00 (rippled 3.4.1, id 1): BatchV1_1, fixBatchV1_2, and PermissionDelegationV1_1 are still disabled. batch-heartbeat and delegation stay spec-only. Do not submit Batch.",
+    "Devnet map lab/frontier/amendments-devnet.json is id 2, same build, Band C enabled. D0-D3 in corp/wallets.md are blank. Fund only from the Devnet faucet on the Foundry box. No Vault, Loan, Sponsor, or ConfidentialTransfer transaction until then.",
+    "F8/F9/F10 notes are lab/frontier/port-forward.md. Do not mix Devnet into Testnet NAV. Heartbeat live stays on the box. Walk-In remint only after sold_out."
   ],
   "blockers": []
 }
