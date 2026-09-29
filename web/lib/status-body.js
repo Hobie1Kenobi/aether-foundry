@@ -5,6 +5,8 @@
  * text the caller already fetched. A failed parse is null plus error.
  */
 
+const facilitator = require("./x402-facilitator");
+
 const LAWS = ["altnets-only", "desk-read-only", "seeds-never-in-git"];
 const BANNED_HOSTS = ["ripple.com", "xrplcluster.com", "xrpl.ws", "xrpl.link", "xahau.network"];
 const HASH_RE = /^[0-9A-F]{64}$/;
@@ -42,8 +44,11 @@ function baseStatus(error) {
     batch_atomic_enabled: null,
     w7_hook_matches_pack: null,
     x402_hits: null,
+    x402_outbound_hits: null,
+    x402_foreign_hits: null,
     grants_paid: null,
     inbound_counterparties: null,
+    facilitator: facilitator.publicFacilitator({}),
     last_heartbeat: emptyHeartbeat(),
     oracle_id: null,
     oracle: emptyOracle(),
@@ -144,6 +149,8 @@ function parseMetrics(text) {
   if (!mpt.ok) return mpt;
   const domain = readMetricsDomain(doc);
   if (!domain.ok) return domain;
+  const outbound = readMetricsOutbound(doc);
+  if (!outbound.ok) return outbound;
   return {
     ok: true,
     counts,
@@ -156,7 +163,18 @@ function parseMetrics(text) {
     oracle: oracle.oracle,
     mpt_issuance_id: mpt.mpt_issuance_id,
     domain_id: domain.domain_id,
+    x402_outbound_hits: outbound.x402_outbound_hits,
   };
+}
+
+function readMetricsOutbound(doc) {
+  if (!Object.prototype.hasOwnProperty.call(doc, "x402_outbound_hits") || doc.x402_outbound_hits == null) {
+    return { ok: true, x402_outbound_hits: null };
+  }
+  if (!Number.isInteger(doc.x402_outbound_hits) || doc.x402_outbound_hits < 0) {
+    return { ok: false, error: "metrics.json x402_outbound_hits is not a count" };
+  }
+  return { ok: true, x402_outbound_hits: doc.x402_outbound_hits };
 }
 
 function readMetricsDomain(doc) {
@@ -495,18 +513,19 @@ function resolveCounts(metricsText, metricsStatus, pnlText, pnlStatus, errors) {
         oracle: parsed.oracle || emptyOracle(),
         mpt_issuance_id: parsed.mpt_issuance_id || null,
         domain_id: parsed.domain_id || null,
+        x402_outbound_hits: parsed.x402_outbound_hits,
         metricsOk: true,
       };
     }
     errors.push(parsed.error);
-    return { counts: null, heartbeat: null, oracle_id: null, oracle: emptyOracle(), mpt_issuance_id: null, domain_id: null, metricsOk: false };
+    return { counts: null, heartbeat: null, oracle_id: null, oracle: emptyOracle(), mpt_issuance_id: null, domain_id: null, x402_outbound_hits: null, metricsOk: false };
   }
   if (metricsStatus != null && metricsStatus !== 404) errors.push(`metrics.json HTTP ${metricsStatus}`);
   if (pnlStatus === 200 && pnlText) {
     const parsed = parsePnlCounts(pnlText);
     if (parsed.errors.length) {
       errors.push(parsed.errors.join("; "));
-      return { counts: null, heartbeat: null, oracle_id: null, oracle: emptyOracle(), mpt_issuance_id: null, domain_id: null, metricsOk: false };
+      return { counts: null, heartbeat: null, oracle_id: null, oracle: emptyOracle(), mpt_issuance_id: null, domain_id: null, x402_outbound_hits: null, metricsOk: false };
     }
     return {
       counts: {
@@ -519,11 +538,12 @@ function resolveCounts(metricsText, metricsStatus, pnlText, pnlStatus, errors) {
       oracle: emptyOracle(),
       mpt_issuance_id: null,
       domain_id: null,
+      x402_outbound_hits: parsed.counts.x402_outbound_hits,
       metricsOk: false,
     };
   }
   errors.push(pnlStatus == null ? "pnl.md was not fetched" : `pnl.md HTTP ${pnlStatus}`);
-  return { counts: null, heartbeat: null, oracle_id: null, oracle: emptyOracle(), mpt_issuance_id: null, domain_id: null, metricsOk: false };
+  return { counts: null, heartbeat: null, oracle_id: null, oracle: emptyOracle(), mpt_issuance_id: null, domain_id: null, x402_outbound_hits: null, metricsOk: false };
 }
 
 function resolveHeartbeat(metricsBeat, ledgerText, ledgerStatus, errors) {
@@ -718,6 +738,10 @@ async function collectStatus(opts) {
     ledgerRes && ledgerRes.status,
     errors
   );
+  const deskFacilitator = facilitator.publicFacilitator(options.env || {});
+  if (deskFacilitator.mode === "refused") {
+    errors.push(deskFacilitator.error || "facilitator env refused");
+  }
   const body = {
     network: xrpl.network,
     desk: "read-only",
@@ -727,7 +751,13 @@ async function collectStatus(opts) {
     batch_atomic_enabled: xrpl.batch,
     w7_hook_matches_pack: hook,
     x402_hits: counts.counts ? counts.counts.x402_hits : null,
+    x402_outbound_hits: counts.x402_outbound_hits == null ? null : counts.x402_outbound_hits,
+    x402_foreign_hits:
+      ledgerRes && ledgerRes.status === 200
+        ? facilitator.countForeignX402Hits(ledgerRes.text, options.labeled)
+        : null,
     grants_paid: counts.counts ? counts.counts.grants_paid : null,
+    facilitator: deskFacilitator,
     inbound_counterparties: counts.counts ? counts.counts.inbound_counterparties : null,
     last_heartbeat: heartbeat,
     oracle_id: xrpl.oracle_id || (counts.oracle_id || null),

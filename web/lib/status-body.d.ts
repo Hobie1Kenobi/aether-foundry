@@ -13,8 +13,22 @@ export type StatusBody = {
   batch_atomic_enabled: boolean | null;
   w7_hook_matches_pack: boolean | null;
   x402_hits: number | null;
+  x402_outbound_hits: number | null;
+  x402_foreign_hits: number | null;
   grants_paid: number | null;
   inbound_counterparties: number | null;
+  facilitator: {
+    mode: "self-verify" | "dual" | "refused";
+    host: string | null;
+    url: string | null;
+    network: "xrpl:1";
+    networkId: 1;
+    advertised: string;
+    settles: false;
+    verifyOnly: true;
+    code?: string;
+    error?: string;
+  };
   last_heartbeat: { hash: string | null; ledger_index: number | null; ts: string | null };
   oracle_id: string | null;
   oracle: {
@@ -71,4 +85,6 @@ export function collectStatus(opts: {
     director?: string;
     ledger?: string;
   };
+  env?: Record<string, string | undefined>;
+  labeled?: string[];
 }): Promise<StatusBody>;

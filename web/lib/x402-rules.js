@@ -103,7 +103,8 @@ function buildPaymentRequired({ sku, resourceUrl, invoiceId, error }) {
   };
 }
 
-function howToPay(sku, invoiceId) {
+function howToPay(sku, invoiceId, env) {
+  const facilitator = require("./x402-facilitator").publicFacilitator(env);
   return {
     network: NETWORK,
     refusedNetwork: MAINNET,
@@ -123,9 +124,11 @@ function howToPay(sku, invoiceId) {
     invoiceIdSha256: sha256Hex(invoiceId),
     rpc: "https://s.altnet.rippletest.net:51234",
     retryHeader: "PAYMENT-SIGNATURE",
-    facilitator: null,
+    facilitator,
     tradeoff:
-      "v0 verifies a validated Payment on the public Testnet RPC. The desk does not sign and does not submit signedTxBlob. Submit the Payment yourself, then retry. Vercel does not persist x402_hits; record the x402_hit from the 200 with npm run x402:hit.",
+      facilitator.mode === "dual"
+        ? "Dual mode. Self-verify still reads a validated Payment. A T54 receipt is checked against the testnet facilitator host and the same ledger read. The desk does not sign and does not call settle. Vercel does not persist x402_hits; record the x402_hit from the 200 with npm run x402:hit."
+        : "Self-verify reads a validated Payment on the public Testnet RPC. XRPL_FACILITATOR_URL is unset, so facilitator receipts are not sent to a host. The desk does not sign and does not submit signedTxBlob. Vercel does not persist x402_hits; record the x402_hit from the 200 with npm run x402:hit.",
   };
 }
 

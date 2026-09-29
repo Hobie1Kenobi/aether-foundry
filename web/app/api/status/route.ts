@@ -37,6 +37,8 @@ export async function GET() {
     packHookHash: XAHAU_W7.hookHash,
     walkInDrops: "10000000",
     git,
+    env: process.env,
+    labeled: Object.values(WALLETS).map((row) => row.address),
   });
   if (gitError) body.error = body.error ? `${gitError}; ${body.error}` : gitError;
   return Response.json(body, {

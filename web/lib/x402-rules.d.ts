@@ -46,7 +46,11 @@ export function buildPaymentRequired(args: {
   extensions: Record<string, never>;
 };
 
-export function howToPay(sku: Sku, invoiceId: string): Record<string, unknown>;
+export function howToPay(
+  sku: Sku,
+  invoiceId: string,
+  env?: Record<string, string | undefined>
+): Record<string, unknown>;
 
 export type ProofFailure = {
   ok: false;
