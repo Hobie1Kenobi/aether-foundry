@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-09-28T18:45:58-05:00",
+  "updated_at": "2026-09-28T19:06:16-05:00",
   "x402_hits": 0,
   "x402_outbound_hits": 1,
   "grants_paid": 2,
@@ -21,5 +21,5 @@
     "quote_xrp_per_aeth": "0.01022008",
     "ts": "2026-09-28T23:45:58.839Z"
   },
-  "mpt_issuance_id": null
+  "mpt_issuance_id": "0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED"
 }

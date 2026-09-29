@@ -373,4 +373,5 @@ module.exports = {
   readSeed,
   archive,
   signAndSubmit,
+  loadState,
 };
