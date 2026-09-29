@@ -23,6 +23,7 @@ const SEQUENCE = 21134010;
 const OFFER = 21134011;
 const TX_HASH = "AB".repeat(32);
 const ISSUANCE = labor.issuanceId(SEQUENCE, anchors.WALLETS.W5.address);
+const F2_ISSUANCE = "0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED";
 
 function jsonResponse(result) {
   return {
@@ -278,7 +279,7 @@ test("rebate pays the XRP drift, capped at 1 XRP, and refuses a Unix expiration"
   assert.equal(dust.code, "DUST");
 });
 
-test("dry-run create uses AETH when metrics has no issuance id and does not read a seed", async () => {
+test("dry-run create locks the issued AETH-LABOR id and does not read a seed", async () => {
   const mock = mockLedger();
   let reads = 0;
   let captured = "";
@@ -306,12 +307,14 @@ test("dry-run create uses AETH when metrics has no issuance id and does not read
   assert.equal(body.intent, "token_escrow_labor_create");
   assert.equal(body.amendment.name, "TokenEscrow");
   assert.equal(body.amendment.enabled, true);
-  assert.equal(body.asset.kind, "aeth");
-  assert.equal(body.mpt_issuance_id, null);
+  assert.equal(body.asset.kind, "mpt");
+  assert.equal(body.mpt_issuance_id, F2_ISSUANCE);
   assert.equal(body.quote.quote_xrp_per_aeth, "0.01022008");
   assert.equal(body.quote.code, "LEDGER");
   assert.equal(body.predicted_sequence, SEQUENCE);
-  assert.equal(body.tx.Amount.currency, anchors.AETH_HEX);
+  assert.equal(body.tx.Amount.mpt_issuance_id, F2_ISSUANCE);
+  assert.equal(body.tx.Amount.value, "1");
+  assert.equal(Object.hasOwn(body.tx.Amount, "currency"), false);
   assert.equal(body.tx.Account, anchors.WALLETS.W2.address);
   assert.notEqual(body.tx.Account, anchors.WALLETS.W0.address);
   assert.ok(body.tx.FinishAfter < escrow.UNIX_LINE);
@@ -320,7 +323,8 @@ test("dry-run create uses AETH when metrics has no issuance id and does not read
   assert.equal(body.deliverable.mint.TransactionType, "NFTokenMint");
   assert.equal(body.deliverable.mint.Account, anchors.WALLETS.W2.address);
   const uri = Buffer.from(body.deliverable.mint.URI, "hex").toString("utf8");
-  assert.match(uri, /asset=AETH/);
+  assert.match(uri, new RegExp(F2_ISSUANCE));
+  assert.match(uri, /AETH-LABOR/);
   assert.equal(uri.includes("Credential"), false);
   assert.equal(captured.includes("CredentialCreate"), false);
   assert.equal(captured.includes("PermissionedDomain"), false);
@@ -328,7 +332,34 @@ test("dry-run create uses AETH when metrics has no issuance id and does not read
   assert.equal(mock.calls.some((call) => call.method === "feature"), true);
 });
 
-test("dry-run create locks the F2 issuance id from lab metrics", async () => {
+test("dry-run create uses AETH when metrics has no issuance id", async () => {
+  const root = tempRoot();
+  const doc = JSON.parse(fs.readFileSync(path.join(root, "lab", "metrics.json"), "utf8"));
+  doc.mpt_issuance_id = null;
+  fs.writeFileSync(path.join(root, "lab", "metrics.json"), `${JSON.stringify(doc, null, 2)}\n`);
+  const mock = mockLedger();
+  let captured = "";
+  const code = await create.run(["--dry-run", "--xrpl-http", anchors.XRPL_HTTP], {
+    env: {},
+    now: NOW,
+    root,
+    fetchImpl: mock.fetchImpl,
+    stdout(text) {
+      captured = text;
+    },
+  });
+  assert.equal(code, 0);
+  const body = JSON.parse(captured);
+  assert.equal(body.asset.kind, "aeth");
+  assert.equal(body.mpt_issuance_id, null);
+  assert.equal(body.tx.Amount.currency, anchors.AETH_HEX);
+  assert.equal(body.tx.Amount.issuer, anchors.WALLETS.W0.address);
+  assert.equal(body.tx.Amount.value, "1");
+  const uri = Buffer.from(body.deliverable.mint.URI, "hex").toString("utf8");
+  assert.match(uri, /asset=AETH/);
+});
+
+test("dry-run create locks an issuance id from lab metrics", async () => {
   const root = tempRoot();
   const doc = JSON.parse(fs.readFileSync(path.join(root, "lab", "metrics.json"), "utf8"));
   doc.mpt_issuance_id = ISSUANCE.toLowerCase();
@@ -647,7 +678,8 @@ test("live create refuses CI and archives only a submitted hash", async () => {
     },
     submit(tx) {
       assert.equal(tx.TransactionType, "EscrowCreate");
-      assert.equal(tx.Amount.currency, anchors.AETH_HEX);
+      assert.equal(tx.Amount.mpt_issuance_id, F2_ISSUANCE);
+      assert.equal(tx.Amount.value, "1");
       assert.ok(tx.FinishAfter < escrow.UNIX_LINE);
       return {
         hash: TX_HASH,
@@ -675,10 +707,12 @@ test("live create refuses CI and archives only a submitted hash", async () => {
   assert.equal(body.deliverable.submitted, false);
   assert.equal(archived.length, 1);
   assert.equal(archived[0].hash, TX_HASH);
-  assert.equal(archived[0].mpt_issuance_id, null);
+  assert.equal(archived[0].mpt_issuance_id, F2_ISSUANCE);
+  assert.equal(archived[0].asset, "mpt");
+  assert.equal(body.mpt_issuance_id, F2_ISSUANCE);
   assert.equal(captured.includes("present-not-used"), false);
   const filed = JSON.parse(fs.readFileSync(path.join(root, "lab", "metrics.json"), "utf8"));
-  assert.equal(filed.mpt_issuance_id, null);
+  assert.equal(filed.mpt_issuance_id, F2_ISSUANCE);
 });
 
 test("a 64-hex id and a metrics mismatch are refused", async () => {

@@ -8,8 +8,9 @@
 
 | Field | Value |
 |-------|--------|
-| Asset | AETH until `mpt_issuance_id` is 48 hex, then `AETH-LABOR` |
-| `mpt_issuance_id` | null in `lab/metrics.json` |
+| Asset | `AETH-LABOR` |
+| `mpt_issuance_id` | `0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED` (F2, already in `lab/metrics.json`) |
+| F2 create hash | `1DDA337DD81833BEE768DED7E54889A4F92D5DC5958F75760417801909C02BCB` (issuance, not this escrow) |
 | Trial A create hash | null |
 | Trial A `offer_sequence` | null |
 | Trial A escrow index | null |
@@ -31,8 +32,8 @@ Times on any live row are Ripple Epoch. A `FinishAfter` above `1000000000` is a 
   "network_id": 1,
   "account": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
   "destination": "ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN",
-  "asset": "",
-  "mpt_issuance_id": null,
+  "asset": "mpt",
+  "mpt_issuance_id": "0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED",
   "hash": "",
   "offer_sequence": 0,
   "escrow_index": "",

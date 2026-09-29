@@ -2,7 +2,7 @@
 
 ## What is locked
 
-One labor unit. When `mpt_issuance_id` is in `lab/metrics.json`, that unit is `AETH-LABOR` (`AssetScale` 0). Until then the unit is 1 AETH issued by W0. The AMM pair is unchanged. This escrow does not set `tfMPTCanTrade` and does not deposit into the pool.
+One labor unit of issued `AETH-LABOR` (`0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED`, `AssetScale` 0). If `lab/metrics.json` has no id, the unit is 1 AETH issued by W0. The AMM pair is unchanged. This escrow does not set `tfMPTCanTrade` and does not deposit into the pool.
 
 The XRP value of 1 AETH is the W5 oracle quote (about `0.01` XRP on the Day-3 object). The lock itself is not that XRP. F1's ticket still escrows drops. F3 escrows the token.
 

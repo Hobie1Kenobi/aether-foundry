@@ -41,23 +41,24 @@ This refuses `CI` and `GITHUB_ACTIONS`. It signs with `W5_REGULAR_SEED` and chec
 
 On `tesSUCCESS` the script reads `mpt_issuance_id` from the transaction metadata (48 hex). It appends `lab/ledger-log.jsonl` and sets `lab/metrics.json` `mpt_issuance_id` from that value. If the metadata omits the id, the hash is still archived and the metrics field stays null. Do not paste the dry-run prediction into the file.
 
-## 4. Authorize W2
+## 4. Authorize a holder
 
-```bash
-npm run frontier:mpt-labor-authorize -- --issuance-id <48 hex from the create>
-```
+`tfMPTRequireAuth` requires holder opt-in before issuer authorize. Issuer authorize first returns `tecOBJECT_NOT_FOUND` (`2EF521755BCF81A4320BE57EF05B3AE73E2AA3C4B77788CD20F6739DA4260BA9`).
 
-Expect `MPTokenAuthorize` with `Account` W5, `Holder` W2, and `MPTokenIssuanceID` the 48-hex id. Then, on the box:
+W2 already finished that order for issuance `0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED`: opt-in `B46088B6AF5E5F7457718F9733D47E9D12A23B195EF1180A80664F20C8368452`, then issuer authorize `79BFF663AB029843FCE293C3049E516D28A5AE7FA756F5E44EB57A801EEBA8FF`. The holder `MPToken` Flags are `2`. F3 assumes that holder and does not repeat these two transactions.
 
-```bash
-FOUNDRY_DAEMON_LIVE=yes npm run frontier:mpt-labor-authorize -- --live --issuance-id <48 hex>
-```
-
-Holder opt-in (creates the zero-balance `MPToken` on W2):
+A new holder still uses this order. Opt-in (creates the zero-balance `MPToken`):
 
 ```bash
 npm run frontier:mpt-labor-authorize -- --opt-in --issuance-id <48 hex>
 FOUNDRY_DAEMON_LIVE=yes npm run frontier:mpt-labor-authorize -- --live --opt-in --issuance-id <48 hex>
+```
+
+Then issuer authorize (`Account` W5, `Holder` the opted-in account):
+
+```bash
+npm run frontier:mpt-labor-authorize -- --issuance-id <48 hex>
+FOUNDRY_DAEMON_LIVE=yes npm run frontier:mpt-labor-authorize -- --live --issuance-id <48 hex>
 ```
 
 `--opt-in` for an address outside W1–W6 prints the unsigned transaction and refuses `--live`. That account signs for itself.

@@ -86,7 +86,7 @@ Booted 2026-09-27 via faucet + on-chain boot. Explorer: https://testnet.xrpl.org
 | Oracle Mid-Ticket holder | BUYER `rEbUaXDXZnzR8wJjGqULKn1YLXNd5CARth` |
 | Oracle quote file | `lab/oracle/2026-09-27-1144.json` |
 | F1 OracleSet | W5 document `1`, pair AETH/XRP, scale 8. No `oracle_id` until the box submits. Pack `machines/native-price-oracle/`. |
-| F2 Labor MPT | Issuer W5. Symbol `AETH-LABOR`, ticker `LABOR`, cap `1000000`. `mpt_issuance_id` null until `MPTokenIssuanceCreate` `tesSUCCESS`. Pack `machines/labor-mpt/`. |
+| F2 Labor MPT | Issuer W5. Symbol `AETH-LABOR`, ticker `LABOR`, cap `1000000`. `mpt_issuance_id` `0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED`. W2 authorized (Flags `2`). Pack `machines/labor-mpt/`. |
 
 | LP Badge v0 NFTokenID | `000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1B3732AC80141DD5C` |
 | LP Badge bound issuer | `rPXJrQEJN2K9grJJBqQHQ2V5nazcZQo5Cn` (XRPL Testnet, not W2) |

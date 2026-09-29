@@ -4,7 +4,8 @@
 **Network:** XRPL Testnet, network id **1** only.  
 **Payer:** W2 `rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw`  
 **Destination:** W4 `ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN`  
-**Lock:** 1 `AETH-LABOR` when `lab/metrics.json` `mpt_issuance_id` is 48 hex. Otherwise 1 AETH issued by W0.  
+**Lock:** 1 `AETH-LABOR`, issuance `0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED` (F2 create `1DDA337DD81833BEE768DED7E54889A4F92D5DC5958F75760417801909C02BCB`). 1 AETH issued by W0 only if that metrics id is absent.  
+**Holder:** W2 already opted in, then W5 authorized (`MPToken` Flags `2`).  
 **Time lock:** Ripple Epoch only.
 
 Labor no longer waits on a native XRP `EscrowCreate`. The lock is a TokenEscrow. The deliverable is an NFT. If the oracle quote rises between create and finish, W6 offers a Check for the drift.
@@ -35,9 +36,7 @@ All three default to dry-run. `--live` is Foundry-box only (`FOUNDRY_DAEMON_LIVE
 
 ## Which asset
 
-`mpt_issuance_id` is read from `--issuance-id` or from `lab/metrics.json`. A 48-hex id selects `Amount.{mpt_issuance_id, value:"1"}`. Null selects the AETH IOU (`currency` the 40-hex `AETH`, `issuer` W0, `value` `"1"`). A 64-hex ledger index is refused. The dry-run does not invent an id, and it does not write one.
-
-The AETH path is the lock while F2 has not yet archived a `tesSUCCESS` issuance. Re-run create after that id lands. The same command then locks `AETH-LABOR`.
+`mpt_issuance_id` is read from `--issuance-id` or from `lab/metrics.json`. The committed field is `0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED`, so a dry-run locks that MPT: `Amount` is `{ "mpt_issuance_id", "value": "1" }`. A null field selects the AETH IOU (`currency` the 40-hex `AETH`, `issuer` W0, `value` `"1"`). A 64-hex ledger index is refused. The dry-run does not invent an id, and it does not write one.
 
 ## Non-goals
 

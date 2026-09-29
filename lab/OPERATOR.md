@@ -34,8 +34,8 @@ Agent-run ops for the XRPL **Testnet** corporation. Read this before any session
 | 3 | `walk-in-window` | v2 storefront open; stranger buy is `npm run buy:walk-in`; remint is local |
 | 4 | `oracle-mid-ticket` | Trialled. Attestation was honor-system. F1 replaces it. |
 | F1 | `native-price-oracle` | Dry-run `OracleSet` on W5. No object hash until `tesSUCCESS`. |
-| F2 | `labor-mpt` | Dry-run `MPTokenIssuanceCreate` on W5. `mpt_issuance_id` stays null until `tesSUCCESS`. |
-| F3 | `token-escrow-labor` | Dry-run TokenEscrow of that MPT, or 1 AETH while the id is null. Finish and cancel hashes stay null until `tesSUCCESS`. |
+| F2 | `labor-mpt` | Issued. `mpt_issuance_id` `0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED`. W2 authorized (Flags `2`). Commands stay dry-run. |
+| F3 | `token-escrow-labor` | Dry-run TokenEscrow of that MPT. Finish and cancel hashes stay null until `tesSUCCESS`. |
 | 5 | `lp-badge` | v0 NFT still honor-system. v1 door `lp-badge-bound` trialled: PASS `D21E08CC…FED2`, revoked `tecBAD_CREDENTIALS` `919C1C77…EE48` |
 | 6 | `batch-heartbeat` | **Spec only** — gated on Batch amendment |
 | 7 | `xahau-split-treasury` | Live on Xahau Testnet — SetHook + 1 XAH split |

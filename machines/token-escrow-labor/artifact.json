@@ -1,6 +1,6 @@
 {
   "name": "Aether Foundry — TokenEscrow labor",
-  "description": "F3 TokenEscrow of 1 AETH-LABOR, or 1 AETH while mpt_issuance_id is null. NFT deliverable unsigned. Check rebate when the oracle quote rises.",
+  "description": "F3 TokenEscrow of 1 AETH-LABOR (0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED), or 1 AETH if that id is absent. NFT deliverable unsigned. Check rebate when the oracle quote rises.",
   "machine": "token-escrow-labor",
   "version": "0.1.0",
   "network": "XRPL Testnet",
@@ -19,9 +19,9 @@
   "key_env_create": "W2_REGULAR_SEED",
   "key_env_finish": "W4_REGULAR_SEED",
   "key_env_rebate": "W6_REGULAR_SEED",
-  "mpt_issuance_id": null,
+  "mpt_issuance_id": "0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED",
   "last_create_hash": null,
   "last_finish_hash": null,
   "last_cancel_hash": null,
-  "note": "Hashes stay null until tesSUCCESS. mpt_issuance_id is read from lab/metrics.json and is not invented here."
+  "note": "Escrow hashes stay null until tesSUCCESS. mpt_issuance_id is the F2 issuance already in lab/metrics.json. F2 create hash 1DDA337DD81833BEE768DED7E54889A4F92D5DC5958F75760417801909C02BCB. Holder W2 MPToken Flags 2."
 }

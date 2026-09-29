@@ -208,7 +208,7 @@ Status follows [`lab/director-state.json`](./lab/director-state.json) and the pa
 | 5b | [lp-badge-bound](./machines/lp-badge-bound/) | trialled | Separate credential door. DepositAuth refuses payment without `aether-lp-ok`. |
 | F1 | [native-price-oracle](./machines/native-price-oracle/) | dry-run | `OracleSet` on W5. Tickets call `ledger_entry` and price from that object. |
 | F2 | [labor-mpt](./machines/labor-mpt/) | dry-run | `AETH-LABOR` MPT on W5. Transferable and capped. AETH IOU stays the AMM pair. |
-| F3 | [token-escrow-labor](./machines/token-escrow-labor/) | dry-run | TokenEscrow of that MPT, or 1 AETH while `mpt_issuance_id` is null. Finish and cancel. Ripple Epoch only. |
+| F3 | [token-escrow-labor](./machines/token-escrow-labor/) | dry-run | TokenEscrow of AETH-LABOR `0141DD60…19504ED`. Finish and cancel. Ripple Epoch only. |
 | — | [batch-heartbeat](./machines/batch-heartbeat/) | spec only | Atomic Batch of accept + deposit + DID. Amendment still off. No Batch transaction. |
 | — | [x402-desk](./machines/x402-desk/) | live | HTTP 402 merchant. Buyer pays W3. Desk verifies. |
 | — | [x402-outbound](./machines/x402-outbound/) | live | W3 pays a foreign Testnet shop. That shop is not Foundry revenue. |
@@ -419,7 +419,7 @@ Honest leftovers. No dates attached.
 
 - **Atomic Batch is off.** On rippled 3.4.1, `BatchV1_1` and `fixBatchV1_2` were `enabled: false`. `TicketBatch: true` is a different amendment. [`machines/batch-heartbeat/`](./machines/batch-heartbeat/) stays a spec until a probe says otherwise. No faux-batch.
 - **Machine #4's quote NFT is still honor-system.** The ledger object that replaces that attestation is [`machines/native-price-oracle/`](./machines/native-price-oracle/). The keeper is dry-run until the box submits `OracleSet`. A stranger reproduces the ticket from `ledger_entry`, not from the URI text.
-- **Labor MPT may still be unissued.** [`machines/labor-mpt/`](./machines/labor-mpt/) dry-runs the issuance. `mpt_issuance_id` on `/api/status` stays null until a box `tesSUCCESS`. [`machines/token-escrow-labor/`](./machines/token-escrow-labor/) locks that MPT when the id is present, and locks 1 AETH until then.
+- **Labor MPT is issued.** `mpt_issuance_id` `0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED` is in `lab/metrics.json` (create `1DDA337DD81833BEE768DED7E54889A4F92D5DC5958F75760417801909C02BCB`). W2 opted in, then W5 authorized (`MPToken` Flags `2`). [`machines/token-escrow-labor/`](./machines/token-escrow-labor/) locks 1 of that MPT. 1 AETH is the lock only when the metrics id is absent.
 - **LP Badge v0 was not upgraded in place.** The NFT on W1 still claims a bond the ledger does not enforce. The bond that *is* enforced is the separate door in [`machines/lp-badge-bound/`](./machines/lp-badge-bound/).
 - **x402 has no facilitator.** The buyer submits. The desk reads. The same validated Payment can be replayed until an operator records the hit. The server cannot durably mark an invoice spent.
 - **W8 is deferred.** XRPL EVM Testnet has a row in the address book and no account.

@@ -162,7 +162,7 @@ test("status JSON is seedless and uses proven ledger data", async () => {
   assert.equal(body.last_heartbeat.hash, "2B298A910CB3966EF6E60AD3C3ABD167D43ED382F34E2D5963292304C0203C01");
   assert.equal(body.oracle_id, "7CD1AB908C3A8D2E3C426E0D3083F4DD9A8A3A753AA60EB73682AA11A06DFA4E");
   assert.equal(body.oracle.quote_xrp_per_aeth, "0.01022008");
-  assert.equal(body.mpt_issuance_id, null);
+  assert.equal(body.mpt_issuance_id, "0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED");
   assert.equal(body.error, undefined);
   assert.deepEqual(body.laws, ["altnets-only", "desk-read-only", "seeds-never-in-git"]);
   const pnl = metrics.parsePnlCounts(fs.readFileSync(path.join(ROOT, "market", "pnl.md"), "utf8"));
@@ -376,13 +376,19 @@ test("status publishes the ledger oracle and falls back to lab metrics", async (
   }));
   assert.equal(won.oracle_id, oracleIndex);
   assert.equal(won.oracle.quote_xrp_per_aeth, "0.01007528");
-  assert.equal(won.mpt_issuance_id, null);
+  assert.equal(won.mpt_issuance_id, "0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED");
   assert.doesNotMatch(JSON.stringify(priced), /sEd|"seed"|"secret"|"private_key"/);
 });
 
 test("status publishes mpt_issuance_id only from lab metrics", async () => {
   const pages = happyPages();
-  const blank = await status.collectStatus(baseOpts(router(pages)));
+  const published = await status.collectStatus(baseOpts(router(pages)));
+  assert.equal(published.mpt_issuance_id, "0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED");
+  const emptyPages = happyPages();
+  const emptyDoc = JSON.parse(emptyPages.git[GIT.metrics].text);
+  emptyDoc.mpt_issuance_id = null;
+  emptyPages.git[GIT.metrics] = { text: JSON.stringify(emptyDoc) };
+  const blank = await status.collectStatus(baseOpts(router(emptyPages)));
   assert.equal(blank.mpt_issuance_id, null);
   const filed = JSON.parse(fs.readFileSync(path.join(ROOT, "lab", "metrics.json"), "utf8"));
   const issuance = `00000001${"AB".repeat(20)}`;

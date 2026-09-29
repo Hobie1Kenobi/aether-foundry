@@ -2,7 +2,8 @@
 
 /**
  * F3 labor TokenEscrow. Locks 1 AETH-LABOR when lab/metrics.json has
- * mpt_issuance_id, otherwise 1 AETH IOU issued by W0.
+ * mpt_issuance_id (F2 issued 0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED),
+ * otherwise 1 AETH IOU issued by W0.
  * FinishAfter and CancelAfter are Ripple Epoch. Unix-looking values are refused.
  * This module does not sign on import. Credentials, domains, and Batch are out.
  */

@@ -8,7 +8,7 @@ Five ledger objects. Create submits only the escrow. The NFT is printed unsigned
 |-------|----|
 | Account | W2 `rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw` |
 | Destination | W4 `ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN` |
-| `Amount` | MPT `{ mpt_issuance_id, value: "1" }` or AETH `{ currency, issuer: W0, value: "1" }` |
+| `Amount` | MPT `{ mpt_issuance_id: "0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED", value: "1" }`. AETH `{ currency, issuer: W0, value: "1" }` only if metrics has no id |
 | `FinishAfter` | Ripple Epoch, `rippleNow + 120` |
 | `CancelAfter` | Ripple Epoch, `rippleNow + 3600`. Required for a token escrow |
 | `SourceTag` | `202609294` |
@@ -20,7 +20,7 @@ MPT path preconditions, not submitted here:
 
 - `MPTokensV1` enabled. If it is off, this pack does not switch the lock to AETH.
 - Issuance flags from F2: `tfMPTCanEscrow` and `tfMPTCanTransfer`.
-- `tfMPTRequireAuth`: W5 has authorized W2 and W4, and both have opted in.
+- `tfMPTRequireAuth`: holder opt-in, then issuer authorize. W2 already did that (Flags `2`). W4 still needs the same order before finish delivers.
 - W2 holds at least 1 labor unit.
 
 AETH path precondition, already on the ledger from 2026-09-27: W0 `asfAllowTrustLineLocking` (`B0F214DB216FF071515C2F125DB8A429273ED769CDBFB7071891741E3079E1F6`). This pack does not submit `AccountSet`.

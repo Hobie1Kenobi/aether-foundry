@@ -21,8 +21,8 @@ npm run frontier:token-escrow-create
 
 Expect JSON with `"mode": "dry-run"`, `"signed": false`, `"key_loaded": false`, `"network_id": 1`.
 
-- `mpt_issuance_id` null: `asset.kind` is `aeth`. `Amount.currency` is `4145544800000000000000000000000000000000`, `issuer` is W0, `value` is `"1"`.
-- `mpt_issuance_id` 48 hex in `lab/metrics.json`: `asset.kind` is `mpt`. `Amount` is `{ "mpt_issuance_id", "value": "1" }`.
+- `lab/metrics.json` currently holds `0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED`. Expect `asset.kind` `mpt` and `Amount` `{ "mpt_issuance_id", "value": "1" }`.
+- If that field is null: `asset.kind` is `aeth`. `Amount.currency` is `4145544800000000000000000000000000000000`, `issuer` is W0, `value` is `"1"`.
 
 `predicted_sequence` is W2's current sequence when `account_info` answered. It is not the archived `OfferSequence`. `FinishAfter` and `CancelAfter` are below `1000000000`. `deliverable.submitted` is false. `key_env` is the name `W2_REGULAR_SEED`. The process must not print a seed.
 
@@ -36,16 +36,17 @@ npm run frontier:token-escrow-create -- --issuance-id <48 hex>
 
 The flag must match `lab/metrics.json` when that field is already set.
 
-## 3. MPT preconditions (only when the id exists)
+## 3. Holder W2 is already authorized
 
-F2 already defined the flags. Before a live MPT escrow:
+F2 issuance `0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED` is live. Issuer W5. W2 opted in (`B46088B6AF5E5F7457718F9733D47E9D12A23B195EF1180A80664F20C8368452`), then W5 authorized (`79BFF663AB029843FCE293C3049E516D28A5AE7FA756F5E44EB57A801EEBA8FF`). W2's `MPToken` Flags are `2`. Do not opt W2 in again and do not authorize W2 again.
 
-1. `npm run frontier:mpt-labor-authorize -- --issuance-id <48 hex>` for holder W2.
-2. The same command with `--holder r...` for W4 `ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN`.
-3. Opt-in. W2: `npm run frontier:mpt-labor-authorize -- --opt-in --issuance-id <48 hex>`, then the same command with `--live` on the box. W4: dry-run `--opt-in --holder ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN` prints the unsigned `MPTokenAuthorize`. The F2 live command only loads daemon seed names (`W2`, `W3`, `W5`, `W6`). `W4_REGULAR_SEED` is not one of them, so W4 signs that unsigned transaction on the box.
-4. A Payment of at least 1 `AETH-LABOR` from W5 to W2. That Payment is not this pack.
+`tfMPTRequireAuth` order for any later holder, including W4 before a finish can deliver: holder opt-in first, then issuer authorize. The reverse returns `tecOBJECT_NOT_FOUND`.
 
-The AETH path needs W2's trust line and a balance of at least 1 AETH. W0 already set `asfAllowTrustLineLocking` (`B0F214DB216FF071515C2F125DB8A429273ED769CDBFB7071891741E3079E1F6`). Do not send `AccountSet` from W0.
+W4 `ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN` still needs that order. Dry-run `--opt-in --holder ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN` prints the unsigned `MPTokenAuthorize`. The F2 live command only loads daemon seed names (`W2`, `W3`, `W5`, `W6`). `W4_REGULAR_SEED` is not one of them, so W4 signs that unsigned transaction on the box, and only then does W5 authorize W4.
+
+W2 must hold at least 1 `AETH-LABOR` before create. A Payment from W5 is not this pack.
+
+The AETH fallback needs W2's trust line and a balance of at least 1 AETH. W0 already set `asfAllowTrustLineLocking` (`B0F214DB216FF071515C2F125DB8A429273ED769CDBFB7071891741E3079E1F6`). Do not send `AccountSet` from W0.
 
 ## 4. Publish one create (Foundry box)
 
