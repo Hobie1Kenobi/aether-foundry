@@ -47,4 +47,4 @@ npm run frontier:mpt-labor-create
 npm run frontier:mpt-labor-authorize -- --issuance-id <48 hex>
 ```
 
-TokenEscrow finish and cancel are F3. Credentials are F4. Neither has a hash here.
+TokenEscrow finish and cancel are [`machines/token-escrow-labor/`](../token-escrow-labor/). Credentials are F4. Neither has a hash here.

@@ -38,7 +38,7 @@ Both default to dry-run. `--live` is Foundry-box only (`FOUNDRY_DAEMON_LIVE=yes`
 
 ## Non-goals
 
-- No TokenEscrow finish or cancel (F3).
+- No TokenEscrow finish or cancel. That is [`machines/token-escrow-labor/`](../token-escrow-labor/).
 - No Credentials or PermissionedDomain (F4).
 - No `ImmutableFlags` (`DynamicMPT` is disabled).
 - No confidential balance (`ConfidentialTransfer` is disabled).

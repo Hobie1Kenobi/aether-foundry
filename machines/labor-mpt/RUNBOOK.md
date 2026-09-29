@@ -80,4 +80,4 @@ Decode `MPTokenMetadata` from hex to JSON. `n` is `AETH-LABOR`. `MaximumAmount` 
 
 ## 6. Not this pack
 
-Do not submit TokenEscrow, EscrowFinish, or EscrowCancel. Do not submit CredentialCreate. The NFT receipt shape is in PRIMITIVES. It is not a command.
+Do not submit TokenEscrow, EscrowFinish, or EscrowCancel from this pack. Those commands are `npm run frontier:token-escrow-create`, `frontier:token-escrow-finish`, and `frontier:token-escrow-cancel`. Do not submit CredentialCreate. The NFT receipt shape is in PRIMITIVES. It is not a command.

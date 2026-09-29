@@ -192,6 +192,12 @@
       "results": "machines/labor-mpt/RESULTS.md",
       "last_result_hash": null,
       "note": "MPTokensV1 enabled; mpt_issuance_id stays null until MPTokenIssuanceCreate tesSUCCESS"
+    },
+    "token-escrow-labor": {
+      "status": "spec-only",
+      "results": "machines/token-escrow-labor/RESULTS.md",
+      "last_result_hash": null,
+      "note": "TokenEscrow enabled; finish and cancel hashes stay null until tesSUCCESS"
     }
   },
   "watched": {
