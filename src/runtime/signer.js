@@ -307,7 +307,15 @@ function finishSuccess(body, prepared, submitted, fields, seed, env, options) {
     publicArchive(fields.root, row, [seed, env.FOUNDRY_SIGNER_TOKEN]);
     if (options.metrics !== false) {
       try {
-        metrics.refresh(fields.root, { now: options.now });
+        if (row.action === "heartbeat") {
+          metrics.recordHeartbeat(fields.root, {
+            hash: row.hash,
+            ledger_index: row.ledger_index,
+            ts: row.ts,
+            now: options.now,
+          }, options.io);
+        }
+        metrics.refresh(fields.root, { now: options.now, io: options.io });
       } catch (error) {
         if (error && error.code === "SEED") throw error;
       }

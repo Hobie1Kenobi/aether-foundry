@@ -13,7 +13,7 @@ const policy = require("./policy");
 
 const ROOT = anchors.repoRoot();
 const HASH = "AB".repeat(32);
-const LIVE_HEARTBEAT = "2B298A910CB3966EF6E60AD3C3ABD167D43ED382F34E2D5963292304C0203C01";
+const LIVE_HEARTBEAT = "CE97193B6EA982225DD7EDDF09C8A36C5EA7DE35E20F8344B04BC972093BC451";
 
 function freshState(now) {
   return {
@@ -277,4 +277,143 @@ test("live execute archives heartbeat and does not invent a hash when submit fai
   const saved = JSON.parse(fs.readFileSync(path.join(dir, "lab", "metrics.json"), "utf8"));
   assert.equal(saved.last_heartbeat.hash, HASH);
   assert.equal(saved.last_heartbeat.ledger_index, 21103001);
+});
+
+const ORACLE_ID = "7CD1AB908C3A8D2E3C426E0D3083F4DD9A8A3A753AA60EB73682AA11A06DFA4E";
+const ORACLE_TX = "B11B0B87A7C40AFA98540D2F40FF234384466729F90E259E60162714DC4DDE85";
+const MPT_ID = "0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED";
+const DOMAIN_ID = "6AF56BC1CEC72198156F650C6B425AA52905218CC889BF910BA495470352DCD4";
+const NEXT_HEARTBEAT = "CE".repeat(32);
+
+function frontierDoc(heartbeatHash) {
+  return {
+    updated_at: "2026-09-29T09:34:05-05:00",
+    x402_hits: 0,
+    x402_outbound_hits: 1,
+    grants_paid: 2,
+    inbound_counterparties: 2,
+    last_grant_hash: "C75E0AC13941DADBE8B52FE8A7DFF9F8855F150C84613A4FB95B09F1BE3AEAA3",
+    last_outbound_hash: "D621848B4C66A940CA0DA51507D61A95D7546B4BB46E7925FC1D6FB414090C4C",
+    last_heartbeat_hash: heartbeatHash,
+    last_heartbeat: {
+      hash: heartbeatHash,
+      ledger_index: 21145575,
+      ts: "2026-09-29T14:34:05.297Z",
+    },
+    oracle_id: ORACLE_ID,
+    last_oracle: {
+      hash: ORACLE_TX,
+      oracle_id: ORACLE_ID,
+      ledger_index: 21129718,
+      last_update_time: 1790639158,
+      quote_xrp_per_aeth: "0.01022008",
+      ts: "2026-09-28T23:45:58.839Z",
+    },
+    mpt_issuance_id: MPT_ID,
+    domain_id: DOMAIN_ID,
+  };
+}
+
+function seedFrontier(dir) {
+  fs.mkdirSync(path.join(dir, "lab"), { recursive: true });
+  fs.mkdirSync(path.join(dir, "market"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "market", "pnl.md"), fs.readFileSync(path.join(ROOT, "market", "pnl.md")));
+  fs.writeFileSync(
+    path.join(dir, "lab", "metrics.json"),
+    `${JSON.stringify(frontierDoc(LIVE_HEARTBEAT), null, 2)}\n`
+  );
+}
+
+function assertFrontierKept(doc) {
+  assert.equal(doc.oracle_id, ORACLE_ID);
+  assert.equal(doc.last_oracle.hash, ORACLE_TX);
+  assert.equal(doc.last_oracle.oracle_id, ORACLE_ID);
+  assert.equal(doc.last_oracle.quote_xrp_per_aeth, "0.01022008");
+  assert.equal(doc.mpt_issuance_id, MPT_ID);
+  assert.equal(doc.domain_id, DOMAIN_ID);
+}
+
+test("a partial heartbeat rewrite keeps frontier ids from the previous file", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "heartbeat-partial-"));
+  seedFrontier(dir);
+  const partial = frontierDoc(NEXT_HEARTBEAT);
+  delete partial.oracle_id;
+  delete partial.last_oracle;
+  delete partial.mpt_issuance_id;
+  delete partial.domain_id;
+  partial.updated_at = "2026-09-29T15:52:23-05:00";
+  partial.last_heartbeat = {
+    hash: NEXT_HEARTBEAT,
+    ledger_index: 21152365,
+    ts: "2026-09-29T20:52:23.002Z",
+  };
+  const written = metrics.writeMetrics(dir, partial);
+  assertFrontierKept(written);
+  assert.equal(written.last_heartbeat.hash, NEXT_HEARTBEAT);
+  const disk = JSON.parse(fs.readFileSync(path.join(dir, "lab", "metrics.json"), "utf8"));
+  assertFrontierKept(disk);
+  for (const key of metrics.FRONTIER_KEYS) {
+    assert.equal(Object.prototype.hasOwnProperty.call(disk, key), true);
+  }
+  const nulled = frontierDoc(NEXT_HEARTBEAT);
+  nulled.oracle_id = null;
+  nulled.last_oracle = null;
+  nulled.mpt_issuance_id = null;
+  nulled.domain_id = null;
+  const kept = metrics.writeMetrics(dir, nulled);
+  assertFrontierKept(kept);
+  const clearing = frontierDoc(NEXT_HEARTBEAT);
+  clearing.oracle_id = null;
+  clearing.last_oracle = null;
+  clearing.mpt_issuance_id = null;
+  clearing.domain_id = null;
+  const cleared = metrics.writeMetrics(dir, clearing, null, { clear: ["domain_id"] });
+  assert.equal(cleared.domain_id, null);
+  assert.equal(cleared.mpt_issuance_id, MPT_ID);
+  assert.equal(cleared.oracle_id, ORACLE_ID);
+  assert.equal(cleared.last_oracle.hash, ORACLE_TX);
+  const text = fs.readFileSync(path.join(dir, "lab", "metrics.json"), "utf8");
+  assert.equal(Object.prototype.hasOwnProperty.call(JSON.parse(text), "domain_id"), true);
+});
+
+test("recordHeartbeat and refresh keep frontier ids", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "heartbeat-keep-"));
+  seedFrontier(dir);
+  const now = new Date("2026-09-29T20:52:23.002Z");
+  const beaten = metrics.recordHeartbeat(dir, {
+    hash: NEXT_HEARTBEAT,
+    ledger_index: 21152365,
+    ts: "2026-09-29T20:52:23.002Z",
+    now,
+  });
+  assertFrontierKept(beaten);
+  assert.equal(beaten.last_heartbeat.hash, NEXT_HEARTBEAT);
+  assert.equal(beaten.last_heartbeat.ledger_index, 21152365);
+  fs.appendFileSync(
+    path.join(dir, "lab", "ledger-log.jsonl"),
+    `${JSON.stringify({
+      ts: "2026-09-29T20:52:23.002Z",
+      source: "agent-signer",
+      action: "heartbeat",
+      hash: NEXT_HEARTBEAT,
+      ledger_index: 21152365,
+      result: "tesSUCCESS",
+    })}\n`
+  );
+  const refreshed = metrics.refresh(dir, { now });
+  assertFrontierKept(refreshed);
+  assert.equal(refreshed.last_heartbeat.hash, NEXT_HEARTBEAT);
+  const replaced = metrics.recordOracle(dir, {
+    hash: "CD".repeat(32),
+    oracle_id: "EF".repeat(32),
+    quote_xrp_per_aeth: "0.02000000",
+    ledger_index: 21153000,
+    last_update_time: 1790700000,
+    ts: "2026-09-29T21:00:00.000Z",
+    now,
+  });
+  assert.equal(replaced.oracle_id, "EF".repeat(32));
+  assert.equal(replaced.last_oracle.hash, "CD".repeat(32));
+  assert.equal(replaced.mpt_issuance_id, MPT_ID);
+  assert.equal(replaced.domain_id, DOMAIN_ID);
 });
