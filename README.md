@@ -327,7 +327,7 @@ Before a new transaction type, refresh the amendment map:
 npm run frontier:probe
 ```
 
-That writes [`lab/frontier/amendments.json`](./lab/frontier/amendments.json) from `server_info` and `feature` on XRPL Testnet (network id 1). A failed RPC does not replace the file. Disabled rows stay disabled: no sequential Batch, TokenEscrow, or vault stand-in. Ritual: [`lab/frontier/README.md`](./lab/frontier/README.md).
+That writes [`lab/frontier/amendments.json`](./lab/frontier/amendments.json) from `server_info` and `feature` on XRPL Testnet (network id 1). A failed RPC does not replace the file. Disabled rows stay disabled: no sequential Batch, TokenEscrow, or vault stand-in. `npm run frontier:probe-devnet` writes [`lab/frontier/amendments-devnet.json`](./lab/frontier/amendments-devnet.json) for network id 2 and refuses mainnet hosts and any other id. Ritual: [`lab/frontier/README.md`](./lab/frontier/README.md).
 
 `npm run health` is a different script. It can faucet and pay. Morning health uses the wake check.
 
@@ -363,6 +363,7 @@ Anything that signs refuses `CI`, `GITHUB_ACTIONS`, and mainnet hosts. Seeds loa
 | `npm run director:snapshot` | Read-only wake-file refresh |
 | `npm run director:wake` | Print the continuation card |
 | `npm run frontier:probe` | Read-only Testnet amendment map |
+| `npm run frontier:probe-devnet` | Read-only Devnet amendment map (network id 2) |
 | `npm run frontier:oracle-set` | Dry-run W5 `OracleSet` for AETH/XRP. `--live` is the Foundry box |
 | `npm run frontier:oracle-ticket` | Price a work-ticket from `ledger_entry`, not a local float |
 | `npm run frontier:mpt-labor-create` | Dry-run W5 `MPTokenIssuanceCreate` for AETH-LABOR. `--live` is the Foundry box |

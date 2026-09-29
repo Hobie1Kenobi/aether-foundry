@@ -18,6 +18,19 @@
 
 Seeds live in founder local `.env` only (`/workspace/aether-foundry-secrets/.env`, mode 600 — outside git tree).
 
+## XRPL Devnet placeholders (Day 7)
+
+Opened because `lab/frontier/amendments-devnet.json` (network id **2**, rippled 3.4.1) reports Band C enabled, and `lab/frontier/amendments.json` (network id **1**) reports the same names disabled. These rows are not Testnet anchors. Do not add them to desk `WALLETS`, director NAV, or Testnet P&L. No address was funded or invented.
+
+| ID | Role | Address | Network | Funded |
+|----|------|---------|---------|--------|
+| D0 | DEVNET treasury (F9 vault owner, F8 sponsor source) | _blank_ | XRPL Devnet | no |
+| D1 | DEVNET depositor / loan counterparty (F9) | _blank_ | XRPL Devnet | no |
+| D2 | DEVNET sponsoree (F8; not a Testnet labeled wallet) | _blank_ | XRPL Devnet | no |
+| D3 | DEVNET confidential counterparty (F10) | _blank_ | XRPL Devnet | no |
+
+Faucet, when the Foundry box actually needs XRP: the web picker is https://xrpl.org/resources/dev-tools/xrp-faucets (choose Devnet). The Devnet POST host `https://faucet.devnet.rippletest.net/accounts` answered HTTP this session and was not called. Do not paste an address into this file until that response returns one. Spec-only sequences: `lab/frontier/port-forward.md`.
+
 ## Week-2 board (XRPL Testnet, public addresses only)
 
 Hunch H1. SignerQuorum **3**. Weights: Director 2, Treasurer 2, Atelier 1, Market 1. Master keys stay enabled. No Xahau twin.

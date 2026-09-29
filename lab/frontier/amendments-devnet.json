@@ -1,7 +1,8 @@
 {
-  "probed_at": "2026-09-28T20:17:30-05:00",
-  "rpc": "https://s.altnet.rippletest.net:51234",
-  "network_id": 1,
+  "probed_at": "2026-09-28T20:17:31-05:00",
+  "rpc": "https://s.devnet.rippletest.net:51234",
+  "network": "XRPL Devnet",
+  "network_id": 2,
   "build_version": "3.4.1",
   "amendments": [
     {
@@ -83,14 +84,14 @@
     },
     {
       "name": "BatchV1_1",
-      "enabled": false,
+      "enabled": true,
       "supported": true,
       "hash": "9F287AED3CDB50A7BD1ACEC24296A30C9B5230CCD136219317AC790E3B884377",
       "vetoed": null
     },
     {
       "name": "fixBatchV1_2",
-      "enabled": false,
+      "enabled": true,
       "supported": true,
       "hash": "14A2B45E48A4A124D1BBA657AC7B0DC3D5EA8C256C89E8F0D8142D32960A7944",
       "vetoed": null
@@ -104,56 +105,56 @@
     },
     {
       "name": "PermissionDelegationV1_1",
-      "enabled": false,
+      "enabled": true,
       "supported": true,
       "hash": "0F48FF561C709540328F31F1C97FD512ACC8B4E42138A161CB0E21ECA292540B",
       "vetoed": null
     },
     {
       "name": "SingleAssetVault",
-      "enabled": false,
+      "enabled": true,
       "supported": true,
       "hash": "81BD2619B6B3C8625AC5D0BC01DE17F06C3F0AB95C7C87C93715B87A4FD240D8",
       "vetoed": null
     },
     {
       "name": "LendingProtocol",
-      "enabled": false,
+      "enabled": true,
       "supported": true,
       "hash": "565B90CA1AB2B9D42208ED10884188C64F9E19083DECB9634AAF06EB03299509",
       "vetoed": null
     },
     {
       "name": "LendingProtocolV1_1",
-      "enabled": false,
+      "enabled": true,
       "supported": true,
       "hash": "A360E2BFD775A5B0DCE1C36C16DF31B72735A57584FD163655D2F9564F8E7AC8",
       "vetoed": null
     },
     {
       "name": "Sponsor",
-      "enabled": false,
+      "enabled": true,
       "supported": true,
       "hash": "BE1F90581635DBCEBFC4678C4B54FEDDC1A17B50FD02CFE765A4132A342126AC",
       "vetoed": null
     },
     {
       "name": "ConfidentialTransfer",
-      "enabled": false,
+      "enabled": true,
       "supported": true,
       "hash": "2110E4A19966E2EF517C0A8C56A5F35099D7665B0BB89D7B126B30D50B86AAD5",
       "vetoed": null
     },
     {
       "name": "DynamicMPT",
-      "enabled": false,
+      "enabled": true,
       "supported": true,
       "hash": "58E92F338758479C06084E1B6BA366BAD8F75E5329A7F0EEAFFFDA51E5106B7F",
       "vetoed": null
     },
     {
       "name": "XChainBridge",
-      "enabled": false,
+      "enabled": true,
       "supported": true,
       "hash": "C98D98EE9616ACD36E81FDEB8D41D349BF5F1B41DD64A0ABC1FE9AA5EA267E9C",
       "vetoed": null
