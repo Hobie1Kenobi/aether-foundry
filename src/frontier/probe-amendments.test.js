@@ -259,7 +259,7 @@ describe("frontier amendment probe", () => {
 describe("committed amendments.json", () => {
   it("matches the 2026-09-28 Testnet probe", () => {
     const doc = JSON.parse(fs.readFileSync(COMMITTED, "utf8"));
-    assert.equal(doc.probed_at, "2026-09-28T18:23:00-05:00");
+    assert.equal(doc.probed_at, "2026-09-28T18:44:30-05:00");
     assert.equal(doc.rpc, "https://s.altnet.rippletest.net:51234");
     assert.equal(doc.network_id, 1);
     assert.equal(doc.build_version, "3.4.1");

@@ -165,6 +165,13 @@ const MACHINES = [
     results: "machines/native-price-oracle/RESULTS.md",
     note: "PriceOracle enabled; no Oracle object hash until OracleSet tesSUCCESS",
   },
+  {
+    slug: "labor-mpt",
+    status: "spec-only",
+    last_result_hash: null,
+    results: "machines/labor-mpt/RESULTS.md",
+    note: "MPTokensV1 enabled; mpt_issuance_id stays null until MPTokenIssuanceCreate tesSUCCESS",
+  },
 ];
 
 // Stranger buy is executable (`npm run buy:walk-in`) while the offer is open.

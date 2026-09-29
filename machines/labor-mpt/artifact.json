@@ -1,0 +1,21 @@
+{
+  "name": "Aether Foundry — Labor MPT",
+  "description": "F2 MPTokenIssuanceCreate for AETH-LABOR on W5. Transferable, capped, auth required. The AETH IOU stays the AMM pair.",
+  "machine": "labor-mpt",
+  "version": "0.1.0",
+  "network": "XRPL Testnet",
+  "network_id": 1,
+  "issuer_account": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+  "holder_account": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+  "symbol": "AETH-LABOR",
+  "ticker": "LABOR",
+  "asset_scale": 0,
+  "maximum_amount": "1000000",
+  "flags": 108,
+  "intent_create": "mpt_labor_create",
+  "intent_authorize": "mpt_labor_authorize",
+  "key_env": "W5_REGULAR_SEED",
+  "mpt_issuance_id": null,
+  "last_create_hash": null,
+  "note": "mpt_issuance_id and last_create_hash stay null until a tesSUCCESS MPTokenIssuanceCreate. Do not invent them."
+}
