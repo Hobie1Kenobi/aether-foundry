@@ -52,4 +52,4 @@ Also in `lab/ledger-log.jsonl`: opt-in `B46088B6…368452` (ledger `21130095`) a
 
 ## Not this pack
 
-TokenEscrow finish and cancel are F3. Credentials are F4. Neither has a hash here.
+TokenEscrow finish and cancel are [`machines/token-escrow-labor/`](../token-escrow-labor/). Credentials are F4. Neither has a hash here.

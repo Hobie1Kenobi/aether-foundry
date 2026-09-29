@@ -172,6 +172,13 @@ const MACHINES = [
     results: "machines/labor-mpt/RESULTS.md",
     note: "MPTokensV1 enabled; mpt_issuance_id stays null until MPTokenIssuanceCreate tesSUCCESS",
   },
+  {
+    slug: "token-escrow-labor",
+    status: "spec-only",
+    last_result_hash: null,
+    results: "machines/token-escrow-labor/RESULTS.md",
+    note: "TokenEscrow enabled; finish and cancel hashes stay null until tesSUCCESS",
+  },
 ];
 
 // Stranger buy is executable (`npm run buy:walk-in`) while the offer is open.

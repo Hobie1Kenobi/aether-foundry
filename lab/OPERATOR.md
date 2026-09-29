@@ -34,7 +34,8 @@ Agent-run ops for the XRPL **Testnet** corporation. Read this before any session
 | 3 | `walk-in-window` | v2 storefront open; stranger buy is `npm run buy:walk-in`; remint is local |
 | 4 | `oracle-mid-ticket` | Trialled. Attestation was honor-system. F1 replaces it. |
 | F1 | `native-price-oracle` | Dry-run `OracleSet` on W5. No object hash until `tesSUCCESS`. |
-| F2 | `labor-mpt` | Dry-run `MPTokenIssuanceCreate` on W5. `mpt_issuance_id` stays null until `tesSUCCESS`. |
+| F2 | `labor-mpt` | Issued. `mpt_issuance_id` `0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED`. W2 authorized (Flags `2`). Commands stay dry-run. |
+| F3 | `token-escrow-labor` | Dry-run TokenEscrow of that MPT. Finish and cancel hashes stay null until `tesSUCCESS`. |
 | 5 | `lp-badge` | v0 NFT still honor-system. v1 door `lp-badge-bound` trialled: PASS `D21E08CC…FED2`, revoked `tecBAD_CREDENTIALS` `919C1C77…EE48` |
 | 6 | `batch-heartbeat` | **Spec only** — gated on Batch amendment |
 | 7 | `xahau-split-treasury` | Live on Xahau Testnet — SetHook + 1 XAH split |
@@ -58,7 +59,9 @@ Seeds `LPB_ISSUER_SEED`, `LPB_HOLDER_SEED`, `LPB_DOOR_SEED`, `LPB_STRANGER_SEED`
 
 Follow-ups, not this cut: a same-execution LP read would be a Xahau hook on a pool that actually lives on Xahau. F1 native oracle: `npm run frontier:oracle-set` (dry-run) and `npm run frontier:oracle-ticket`. `--live` stays on the Foundry box with `W5_REGULAR_SEED`. The agent allowlist does not include `OracleSet`. Intent name if you add one later: `oracle_set`.
 
-F2 labor MPT: `npm run frontier:mpt-labor-create` and `npm run frontier:mpt-labor-authorize` (dry-run). `--live` stays on the Foundry box with `W5_REGULAR_SEED` (opt-in uses `W2_REGULAR_SEED`). The agent allowlist does not include `MPTokenIssuanceCreate` or `MPTokenAuthorize`. Do not submit TokenEscrow from this pack.
+F2 labor MPT: `npm run frontier:mpt-labor-create` and `npm run frontier:mpt-labor-authorize` (dry-run). `--live` stays on the Foundry box with `W5_REGULAR_SEED` (opt-in uses `W2_REGULAR_SEED`). The agent allowlist does not include `MPTokenIssuanceCreate` or `MPTokenAuthorize`. Do not submit TokenEscrow from the F2 pack.
+
+F3 TokenEscrow: `npm run frontier:token-escrow-create`, `npm run frontier:token-escrow-finish`, and `npm run frontier:token-escrow-cancel` (dry-run). `--live` stays on the Foundry box: create and cancel use `W2_REGULAR_SEED`, finish uses `W4_REGULAR_SEED`, `--rebate` uses `W6_REGULAR_SEED`. The daemon still refuses `EscrowFinish` and `EscrowCancel`. This pack refuses them when `TokenEscrow` is disabled and refuses the Unix-epoch BUYER escrow. Do not add Batch, Credentials, or a crypto-condition here.
 
 ## Batch gate rule
 

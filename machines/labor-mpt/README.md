@@ -1,6 +1,6 @@
 # F2 — Labor MPT (`MPTokenIssuanceCreate`)
 
-**Status:** dry-run issuance. `mpt_issuance_id` stays null until the Foundry box submits.  
+**Status:** issued on Testnet (`0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED`). Commands here stay dry-run.  
 **Network:** XRPL Testnet, network id **1** only.  
 **Issuer:** W5 `rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ`  
 **First holder:** W2 `rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw`  
@@ -17,8 +17,8 @@ sequenceDiagram
 
   Box->>L: feature MPTokensV1 must be enabled
   Box->>L: MPTokenIssuanceCreate AETH-LABOR (dry-run unless --live)
-  Box->>L: MPTokenAuthorize Holder W2
   W2->>L: MPTokenAuthorize opt-in
+  Box->>L: MPTokenAuthorize Holder W2
   Note over L: TokenEscrow of the MPT is F3
   Note over W2: NFT receipt is documented, not submitted
 ```
@@ -34,11 +34,11 @@ Both default to dry-run. `--live` is Foundry-box only (`FOUNDRY_DAEMON_LIVE=yes`
 
 ## What the id is
 
-`mpt_issuance_id` is the 192-bit `MPTokenIssuanceID`: eight hex characters of the create transaction's sequence, then the issuer's 20-byte account id. It is not the 64-hex ledger index. The desk field stays null until `lab/metrics.json` has one from `tesSUCCESS`. A dry-run may print `predicted_mpt_issuance_id` from the current account sequence. That prediction is not archived.
+`mpt_issuance_id` is the 192-bit `MPTokenIssuanceID`: eight hex characters of the create transaction's sequence, then the issuer's 20-byte account id. It is not the 64-hex ledger index. The archived id is `0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED`. A dry-run may print `predicted_mpt_issuance_id` from the current account sequence. That prediction is not archived.
 
 ## Non-goals
 
-- No TokenEscrow finish or cancel (F3).
+- No TokenEscrow finish or cancel. That is [`machines/token-escrow-labor/`](../token-escrow-labor/).
 - No Credentials or PermissionedDomain (F4).
 - No `ImmutableFlags` (`DynamicMPT` is disabled).
 - No confidential balance (`ConfidentialTransfer` is disabled).

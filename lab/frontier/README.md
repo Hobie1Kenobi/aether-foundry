@@ -24,4 +24,6 @@ Until a later probe says otherwise, do not submit Batch, and do not stand in for
 
 F1 keeper: `npm run frontier:oracle-set` reads this map's live twin via `feature` and refuses `OracleSet` unless `PriceOracle` is enabled on network id 1. Default is dry-run. The ticket command is `npm run frontier:oracle-ticket`. Pack: `machines/native-price-oracle/`.
 
-F2 labor MPT: `npm run frontier:mpt-labor-create` and `npm run frontier:mpt-labor-authorize` call `feature` and refuse unless `MPTokensV1` is enabled on network id 1. Default is dry-run. Pack: `machines/labor-mpt/`. TokenEscrow is not this pack.
+F2 labor MPT: `npm run frontier:mpt-labor-create` and `npm run frontier:mpt-labor-authorize` call `feature` and refuse unless `MPTokensV1` is enabled on network id 1. Default is dry-run. Pack: `machines/labor-mpt/`. That pack does not submit TokenEscrow.
+
+F3 labor TokenEscrow: `npm run frontier:token-escrow-create`, `npm run frontier:token-escrow-finish`, and `npm run frontier:token-escrow-cancel` call `feature` and refuse unless `TokenEscrow` is enabled on network id 1. Default is dry-run. The lock is 1 `AETH-LABOR` (`0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED` in `lab/metrics.json`). 1 AETH is used only when that field is absent. Pack: `machines/token-escrow-labor/`. A disabled row is not a Payment or an XRP escrow.
