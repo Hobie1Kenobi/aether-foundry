@@ -27,7 +27,10 @@ export async function loadDeskStatus(): Promise<StatusBody> {
     packHookHash: XAHAU_W7.hookHash,
     walkInDrops: "10000000",
     git,
-    env: process.env,
+    env: {
+      XRPL_FACILITATOR_URL: process.env.XRPL_FACILITATOR_URL,
+      XRPL_NETWORK: process.env.XRPL_NETWORK,
+    },
     labeled: Object.values(WALLETS).map((wallet) => wallet.address),
   });
   if (gitError) body.error = body.error ? `${gitError}; ${body.error}` : gitError;

@@ -169,6 +169,12 @@ test("status JSON is seedless and uses proven ledger data", async () => {
   assert.equal(body.facilitator.network, "xrpl:1");
   assert.equal(body.facilitator.networkId, 1);
   assert.equal(body.facilitator.settles, false);
+  assert.equal(body.facilitator.remoteVerify, false);
+  assert.equal(body.devnet.network, "XRPL Devnet");
+  assert.equal(body.devnet.networkId, 2);
+  assert.equal(body.devnet.accounts.D0, null);
+  assert.equal(body.devnet.f9.vault_id, null);
+  assert.equal(body.devnet.f10.issuance_id, null);
   assert.equal(body.x402_foreign_hits, 0);
   assert.equal(body.error, undefined);
   assert.deepEqual(body.laws, ["altnets-only", "desk-read-only", "seeds-never-in-git"]);
@@ -294,6 +300,7 @@ test("status lab files are pinned to the main commit sha", async () => {
   assert.equal(body.last_heartbeat.hash, live);
   assert.equal(body.last_heartbeat.hash, "2B298A910CB3966EF6E60AD3C3ABD167D43ED382F34E2D5963292304C0203C01");
   assert.equal(body.director_updated_at, JSON.parse(director).updated_at);
+  assert.equal(body.devnet.accounts.D0, null);
   await assert.rejects(
     () => status.mainGitFiles(async () => textResponse("nope", 403), { cacheMs: 0, now: 2 }),
     /git ref HTTP 403/
@@ -302,14 +309,18 @@ test("status lab files are pinned to the main commit sha", async () => {
 
 test("desk route and toml link status without a signer", () => {
   const route = fs.readFileSync(path.join(ROOT, "web", "app", "api", "status", "route.ts"), "utf8");
-  assert.match(route, /collectStatus/);
-  assert.match(route, /mainGitFiles/);
-  assert.match(route, /ORACLE/);
-  assert.match(route, /oracleDocumentId/);
-  assert.doesNotMatch(route, /OracleSet/);
-  assert.doesNotMatch(route, /raw\.githubusercontent\.com\/Hobie1Kenobi\/aether-foundry\/main/);
-  assert.doesNotMatch(route, /Wallet|fromSeed|sign\(/);
-  assert.doesNotMatch(route, /_SEED/);
+  const loader = fs.readFileSync(path.join(ROOT, "web", "lib", "load-desk-status.ts"), "utf8");
+  assert.match(route, /loadDeskStatus/);
+  assert.match(loader, /collectStatus/);
+  assert.match(loader, /mainGitFiles/);
+  assert.match(loader, /ORACLE/);
+  assert.match(loader, /oracleDocumentId/);
+  assert.match(loader, /XRPL_FACILITATOR_URL/);
+  assert.doesNotMatch(loader, /process\.env,/);
+  assert.doesNotMatch(route + loader, /OracleSet/);
+  assert.doesNotMatch(route + loader, /raw\.githubusercontent\.com\/Hobie1Kenobi\/aether-foundry\/main/);
+  assert.doesNotMatch(route + loader, /Wallet|fromSeed|sign\(/);
+  assert.doesNotMatch(route + loader, /_SEED/);
   const home = fs.readFileSync(path.join(ROOT, "web", "components", "DeskCards.tsx"), "utf8");
   assert.match(home, /href="\/api\/status"/);
   for (const file of ["public/xrp-ledger.toml", "web/public/.well-known/xrp-ledger.toml"]) {
@@ -445,6 +456,8 @@ test("status facilitator is the testnet host or a refusal, and foreign hits stay
   assert.equal(dual.facilitator.host, "xrpl-facilitator-testnet.t54.ai");
   assert.equal(dual.facilitator.networkId, 1);
   assert.equal(dual.facilitator.settles, false);
+  assert.equal(dual.facilitator.remoteVerify, true);
+  assert.equal(dual.facilitator.verifyOnly, true);
   assert.equal(dual.network, "xrpl:1");
 
   const mainnet = await status.collectStatus(Object.assign(baseOpts(router(happyPages())), {
@@ -475,4 +488,53 @@ test("status facilitator is the testnet host or a refusal, and foreign hits stay
   const hits = await status.collectStatus(baseOpts(router(logged)));
   assert.equal(hits.x402_foreign_hits, 1);
   assert.equal(hits.facilitator.mode, "self-verify");
+});
+
+test("devnet frontier snapshot stays off the testnet counters", async () => {
+  const wallets = fs.readFileSync(path.join(ROOT, "corp/wallets.md"), "utf8");
+  const ledger = fs.readFileSync(path.join(ROOT, "lab/frontier/devnet-ledger.jsonl"), "utf8");
+  const git = Object.assign({}, GIT, {
+    wallets: "https://example.test/wallets.md",
+    devnetLedger: "https://example.test/devnet-ledger.jsonl",
+  });
+  const pages = happyPages();
+  pages.git[git.wallets] = { text: wallets };
+  pages.git[git.devnetLedger] = { text: ledger + "\n" + JSON.stringify({
+    network: "xrpl:1",
+    network_id: 1,
+    action: "devnet_sponsor",
+    step: "create",
+    hash: "D".repeat(64),
+    sponsee: anchors.WALLETS.W0.address,
+  }) };
+  const plain = await status.collectStatus(baseOpts(router(happyPages())));
+  const body = await status.collectStatus(baseOpts(router(pages), git));
+  assert.equal(body.network, "xrpl:1");
+  assert.equal(body.ledger_index, plain.ledger_index);
+  assert.equal(body.x402_hits, plain.x402_hits);
+  assert.equal(body.grants_paid, plain.grants_paid);
+  assert.equal(body.mpt_issuance_id, plain.mpt_issuance_id);
+  assert.equal(body.domain_id, plain.domain_id);
+  assert.equal(body.oracle_id, plain.oracle_id);
+  assert.equal(body.devnet.network, "XRPL Devnet");
+  assert.equal(body.devnet.networkId, 2);
+  assert.equal(body.devnet.accounts.D0, "rEizYPsEi1GMqiV5igtYVGzxsvwEENTFS1");
+  assert.equal(body.devnet.accounts.D2, "rGK3QfP57LzBzS8KcYHmpBa8NvUHxoxAgV");
+  assert.equal(body.devnet.f8.create_hash, "002F5E3D285FADCEED03D8CFA602C73363539BFCB1190D30E56BA4F4E3BB8BE4");
+  assert.equal(body.devnet.f9.vault_id, "B5B7DD0567486B7D93CDE961B86B4B4107FE674E7F4EAE7CFF09BA13D8189992");
+  assert.equal(body.devnet.f10.issuance_id, "0056E2EDA3062D0A34565850A19B583AE92C7D07C8BECAF6");
+  assert.notEqual(body.devnet.f10.issuance_id, body.mpt_issuance_id);
+  assert.equal(JSON.stringify(body.devnet).includes("D".repeat(64)), false);
+  assert.equal(body.error, undefined);
+  assert.doesNotMatch(JSON.stringify(body), /sEd|_SEED|ELGAMAL/);
+
+  const missing = Object.assign({}, GIT, {
+    wallets: "https://example.test/missing-wallets",
+    devnetLedger: "https://example.test/missing-ledger",
+  });
+  const empty = await status.collectStatus(baseOpts(router(happyPages()), missing));
+  assert.equal(empty.devnet.accounts.D0, null);
+  assert.equal(empty.devnet.f8.create_hash, null);
+  assert.equal(empty.mpt_issuance_id, plain.mpt_issuance_id);
+  assert.equal(empty.error, undefined);
 });

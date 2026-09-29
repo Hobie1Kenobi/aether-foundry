@@ -314,6 +314,18 @@ export const EXPLORER_MPT = (issuanceId: string) =>
 export const EXPLORER_SEARCH = (id: string) =>
   `https://testnet.xrpl.org/search/${id}`;
 
+export const DEVNET_EXPLORER_TX = (hash: string) =>
+  `https://devnet.xrpl.org/transactions/${hash}`;
+
+export const DEVNET_EXPLORER_ACCOUNT = (address: string) =>
+  `https://devnet.xrpl.org/accounts/${address}`;
+
+export const DEVNET_EXPLORER_MPT = (issuanceId: string) =>
+  `https://devnet.xrpl.org/mpt/${issuanceId}`;
+
+export const DEVNET_EXPLORER_SEARCH = (id: string) =>
+  `https://devnet.xrpl.org/search/${id}`;
+
 export const AETH_IOU = {
   currency: AETH_HEX,
   issuer: WALLETS.W0.address,

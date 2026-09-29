@@ -64,8 +64,18 @@ function parseFacilitatorUrl(raw) {
   return { ok: true, host: TESTNET_HOST, origin: TESTNET_ORIGIN };
 }
 
+function facilitatorEnv(source) {
+  const env = source || {};
+  const url = env.XRPL_FACILITATOR_URL;
+  const network = env.XRPL_NETWORK;
+  return {
+    XRPL_FACILITATOR_URL: url == null ? undefined : String(url),
+    XRPL_NETWORK: network == null ? undefined : String(network),
+  };
+}
+
 function resolveFacilitator(env) {
-  const source = env || {};
+  const source = facilitatorEnv(env);
   const network = source.XRPL_NETWORK;
   if (network != null && String(network).trim() !== "") {
     const name = String(network).trim();
@@ -107,6 +117,7 @@ function publicFacilitator(env) {
     advertised: TESTNET_ORIGIN,
     settles: false,
     verifyOnly: true,
+    remoteVerify: false,
   };
   if (!resolved.ok) {
     return Object.assign({}, base, {
@@ -121,6 +132,7 @@ function publicFacilitator(env) {
     mode: resolved.mode,
     host: resolved.host,
     url: resolved.url,
+    remoteVerify: resolved.mode === "dual",
   });
 }
 
@@ -341,6 +353,7 @@ module.exports = {
   VERIFY_PATH,
   LABELED,
   parseFacilitatorUrl,
+  facilitatorEnv,
   resolveFacilitator,
   publicFacilitator,
   extractReceipt,

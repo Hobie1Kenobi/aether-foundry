@@ -6,6 +6,7 @@
  */
 
 const facilitator = require("./x402-facilitator");
+const devnetFrontier = require("./devnet-frontier");
 
 const LAWS = ["altnets-only", "desk-read-only", "seeds-never-in-git"];
 const BANNED_HOSTS = ["ripple.com", "xrplcluster.com", "xrpl.ws", "xrpl.link", "xahau.network"];
@@ -54,6 +55,7 @@ function baseStatus(error) {
     oracle: emptyOracle(),
     mpt_issuance_id: null,
     domain_id: null,
+    devnet: devnetFrontier.emptySnapshot(),
     director_updated_at: null,
     laws: LAWS.slice(),
   };
@@ -429,6 +431,8 @@ const GIT_PATHS = {
   pnl: "market/pnl.md",
   director: "lab/director-state.json",
   ledger: "lab/ledger-log.jsonl",
+  wallets: "corp/wallets.md",
+  devnetLedger: "lab/frontier/devnet-ledger.jsonl",
 };
 let mainShaCache = { sha: "", at: 0 };
 
@@ -441,6 +445,8 @@ function gitUrlsAtSha(sha) {
     pnl: `${base}/${GIT_PATHS.pnl}`,
     director: `${base}/${GIT_PATHS.director}`,
     ledger: `${base}/${GIT_PATHS.ledger}`,
+    wallets: `${base}/${GIT_PATHS.wallets}`,
+    devnetLedger: `${base}/${GIT_PATHS.devnetLedger}`,
   };
 }
 
@@ -712,11 +718,13 @@ async function collectStatus(opts) {
     return baseStatus("status fetch is missing");
   }
   const git = options.git || {};
-  const [metricsRes, pnlRes, directorRes, ledgerRes, xrpl, hook] = await Promise.all([
+  const [metricsRes, pnlRes, directorRes, ledgerRes, walletsRes, devnetRes, xrpl, hook] = await Promise.all([
     git.metrics ? getText(options.fetch, git.metrics).catch((error) => ({ ok: false, status: 0, text: "", error })) : Promise.resolve(null),
     git.pnl ? getText(options.fetch, git.pnl).catch((error) => ({ ok: false, status: 0, text: "", error })) : Promise.resolve(null),
     git.director ? getText(options.fetch, git.director).catch((error) => ({ ok: false, status: 0, text: "", error })) : Promise.resolve(null),
     git.ledger ? getText(options.fetch, git.ledger).catch((error) => ({ ok: false, status: 0, text: "", error })) : Promise.resolve(null),
+    git.wallets ? getText(options.fetch, git.wallets).catch(() => ({ ok: false, status: 0, text: "" })) : Promise.resolve(null),
+    git.devnetLedger ? getText(options.fetch, git.devnetLedger).catch(() => ({ ok: false, status: 0, text: "" })) : Promise.resolve(null),
     loadXrpl(options, errors),
     loadHook(options, errors),
   ]);
@@ -738,7 +746,12 @@ async function collectStatus(opts) {
     ledgerRes && ledgerRes.status,
     errors
   );
-  const deskFacilitator = facilitator.publicFacilitator(options.env || {});
+  const deskDevnet = devnetFrontier.publicSnapshot({
+    walletsText: walletsRes && walletsRes.status === 200 ? walletsRes.text : "",
+    ledgerText: devnetRes && devnetRes.status === 200 ? devnetRes.text : "",
+    labeled: options.labeled,
+  });
+  const deskFacilitator = facilitator.publicFacilitator(facilitator.facilitatorEnv(options.env || {}));
   if (deskFacilitator.mode === "refused") {
     errors.push(deskFacilitator.error || "facilitator env refused");
   }
@@ -764,6 +777,7 @@ async function collectStatus(opts) {
     oracle: xrpl.oracle_id ? xrpl.oracle : (counts.oracle_id ? counts.oracle : xrpl.oracle),
     mpt_issuance_id: counts.mpt_issuance_id || null,
     domain_id: counts.domain_id || null,
+    devnet: deskDevnet,
     director_updated_at: director,
     laws: LAWS.slice(),
   };

@@ -82,7 +82,7 @@ function paymentRequiredResponse(
     code: opts?.code || "payment_required",
     x402Version: 2,
     paymentRequired,
-    howToPay: howToPay(sku, invoiceId, process.env),
+    howToPay: howToPay(sku, invoiceId, facilitatorDeskEnv()),
   };
   if (opts?.txHash) body.txHash = opts.txHash;
   if (opts?.facilitatorVerified) body.facilitatorVerified = true;
@@ -118,6 +118,13 @@ function hitEvent(sku: Sku, proof: {
   };
 }
 
+function facilitatorDeskEnv(): Record<string, string | undefined> {
+  return {
+    XRPL_FACILITATOR_URL: process.env.XRPL_FACILITATOR_URL,
+    XRPL_NETWORK: process.env.XRPL_NETWORK,
+  };
+}
+
 function assertTestnetDesk(req: Request): Response | null {
   if (/\bmainnet\b/i.test(NETWORK_LABEL)) {
     return jsonResponse(400, {
@@ -135,7 +142,7 @@ function assertTestnetDesk(req: Request): Response | null {
   return null;
 }
 
-export function x402Catalog(env: Record<string, string | undefined> = process.env) {
+export function x402Catalog(env: Record<string, string | undefined> = facilitatorDeskEnv()) {
   const facilitator = publicFacilitator(env);
   return {
     merchant: "aether-foundry-desk",
@@ -180,7 +187,7 @@ export async function handlePaidSku(
     sku,
     lookupTx: fetchValidatedTransaction,
     hashSignedTx,
-    env: process.env,
+    env: facilitatorDeskEnv(),
     fetchImpl: fetch,
   });
   if (!proof.ok) {

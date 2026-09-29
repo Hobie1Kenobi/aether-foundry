@@ -2,6 +2,10 @@ import type { ReactNode } from "react";
 import { CopyId } from "@/components/CopyId";
 import type { StatusBody } from "@/lib/status-body";
 import {
+  DEVNET_EXPLORER_ACCOUNT,
+  DEVNET_EXPLORER_MPT,
+  DEVNET_EXPLORER_SEARCH,
+  DEVNET_EXPLORER_TX,
   EXPLORER_ACCOUNT,
   EXPLORER_MPT,
   EXPLORER_SEARCH,
@@ -259,6 +263,8 @@ function FacilitatorCard({ status }: { status: StatusBody | null }) {
               <dd className="mono">{facilitator.url}</dd>
             </>
           ) : null}
+          <dt>remote verify</dt>
+          <dd>{facilitator.remoteVerify ? "true" : "false"}</dd>
           <dt>settles</dt>
           <dd>{facilitator.settles ? "true" : "false"}</dd>
           <dt>outbound</dt>
@@ -269,13 +275,14 @@ function FacilitatorCard({ status }: { status: StatusBody | null }) {
       )}
       {mode === "self-verify" ? (
         <p className="muted">
-          Desk verifies a validated Payment itself. The advertised T54 URL is not a
-          settle path.
+          XRPL_FACILITATOR_URL is unset. The desk reads a validated Payment itself
+          and does not call T54. Settles stays false.
         </p>
       ) : null}
       {mode === "dual" ? (
         <p className="muted">
-          Self-verify plus a T54 testnet receipt. The desk does not settle.
+          T54 testnet POST /verify is on for xrpl:1. Settles stays false. The desk
+          does not submit the Payment.
         </p>
       ) : null}
       {mode === "refused" && facilitator?.error ? (
@@ -285,25 +292,201 @@ function FacilitatorCard({ status }: { status: StatusBody | null }) {
   );
 }
 
+function DevnetAccount({ address }: { address: string | null }) {
+  if (!address) return <Absent />;
+  return (
+    <LedgerId id={address} href={DEVNET_EXPLORER_ACCOUNT(address)} />
+  );
+}
+
+function DevnetHash({ hash }: { hash: string | null }) {
+  if (!hash) return <Absent />;
+  return <LedgerId id={hash} href={DEVNET_EXPLORER_TX(hash)} />;
+}
+
+function SponsorCard({ status }: { status: StatusBody | null }) {
+  const row = status?.devnet?.f8;
+  const live = Boolean(row?.create_hash || row?.object_hash);
+  return (
+    <article className="card">
+      <div className="card-heading">
+        <h3>F8 Sponsor</h3>
+        <Chip tone={live ? "live" : "muted"}>{live ? "on ledger" : "absent"}</Chip>
+      </div>
+      <dl className="kv">
+        <dt>network</dt>
+        <dd>XRPL Devnet</dd>
+        <dt>sponsor</dt>
+        <dd>
+          <DevnetAccount address={row?.sponsor ?? null} />
+        </dd>
+        <dt>sponsoree</dt>
+        <dd>
+          <DevnetAccount address={row?.sponsoree ?? null} />
+        </dd>
+        <dt>create</dt>
+        <dd>
+          <DevnetHash hash={row?.create_hash ?? null} />
+        </dd>
+        <dt>object</dt>
+        <dd>
+          <DevnetHash hash={row?.object_hash ?? null} />
+        </dd>
+        {row?.prior_sponsee ? (
+          <>
+            <dt>prior sponsoree</dt>
+            <dd>
+              <DevnetAccount address={row.prior_sponsee} />
+            </dd>
+          </>
+        ) : null}
+      </dl>
+      <p className="muted">Create-account Sponsor on network id 2. Not a Testnet balance.</p>
+    </article>
+  );
+}
+
+function VaultCard({ status }: { status: StatusBody | null }) {
+  const row = status?.devnet?.f9;
+  const live = Boolean(row?.vault_id || row?.loan_id);
+  return (
+    <article className="card">
+      <div className="card-heading">
+        <h3>F9 Vault / loan</h3>
+        <Chip tone={live ? "live" : "muted"}>{live ? "on ledger" : "absent"}</Chip>
+      </div>
+      <dl className="kv">
+        <dt>network</dt>
+        <dd>XRPL Devnet</dd>
+        <dt>owner</dt>
+        <dd>
+          <DevnetAccount address={row?.owner ?? null} />
+        </dd>
+        <dt>depositor</dt>
+        <dd>
+          <DevnetAccount address={row?.depositor ?? null} />
+        </dd>
+        <dt>vault</dt>
+        <dd>
+          <LedgerId
+            id={row?.vault_id ?? null}
+            href={row?.vault_id ? DEVNET_EXPLORER_SEARCH(row.vault_id) : undefined}
+          />
+        </dd>
+        <dt>broker</dt>
+        <dd>
+          <LedgerId
+            id={row?.broker_id ?? null}
+            href={row?.broker_id ? DEVNET_EXPLORER_SEARCH(row.broker_id) : undefined}
+          />
+        </dd>
+        <dt>loan</dt>
+        <dd>
+          <LedgerId
+            id={row?.loan_id ?? null}
+            href={row?.loan_id ? DEVNET_EXPLORER_SEARCH(row.loan_id) : undefined}
+          />
+        </dd>
+        <dt>accounting</dt>
+        <dd>{row?.accounting ? <span className="mono">{row.accounting}</span> : <Absent />}</dd>
+        <dt>repay</dt>
+        <dd>
+          <DevnetHash hash={row?.repay_hash ?? null} />
+        </dd>
+      </dl>
+      <p className="muted">Single-asset vault and one repaid loan. Cash-basis when the archive says so.</p>
+    </article>
+  );
+}
+
+function ConfidentialCard({ status }: { status: StatusBody | null }) {
+  const row = status?.devnet?.f10;
+  const live = Boolean(row?.issuance_id || row?.payment_hash || row?.clawback_hash);
+  return (
+    <article className="card">
+      <div className="card-heading">
+        <h3>F10 Confidential MPT</h3>
+        <Chip tone={live ? "live" : "muted"}>{live ? "on ledger" : "absent"}</Chip>
+      </div>
+      <dl className="kv">
+        <dt>network</dt>
+        <dd>XRPL Devnet</dd>
+        <dt>issuer</dt>
+        <dd>
+          <DevnetAccount address={row?.issuer ?? null} />
+        </dd>
+        <dt>counterparty</dt>
+        <dd>
+          <DevnetAccount address={row?.counterparty ?? null} />
+        </dd>
+        <dt>sender</dt>
+        <dd>
+          <DevnetAccount address={row?.sender ?? null} />
+        </dd>
+        <dt>symbol</dt>
+        <dd>{row?.symbol ? <span className="mono">{row.symbol}</span> : <Absent />}</dd>
+        <dt>issuance</dt>
+        <dd>
+          <LedgerId
+            id={row?.issuance_id ?? null}
+            href={row?.issuance_id ? DEVNET_EXPLORER_MPT(row.issuance_id) : undefined}
+          />
+        </dd>
+        <dt>payment</dt>
+        <dd>
+          <DevnetHash hash={row?.payment_hash ?? null} />
+        </dd>
+        <dt>clawback</dt>
+        <dd>
+          <DevnetHash hash={row?.clawback_hash ?? null} />
+        </dd>
+      </dl>
+      <p className="muted">
+        {row?.public_ledger
+          ? row.public_ledger
+          : "Confidential payment amount stays off this card until the public archive records it."}
+      </p>
+    </article>
+  );
+}
+
 export function FrontierCards({ status }: { status: StatusBody | null }) {
   return (
-    <section aria-labelledby="frontier-title">
-      <div className="section-heading">
-        <div>
-          <p className="kicker">LIMIT PUSH // FRONTIER</p>
-          <h2 id="frontier-title" className="section-title">
-            Frontier
-          </h2>
+    <>
+      <section aria-labelledby="frontier-title">
+        <div className="section-heading">
+          <div>
+            <p className="kicker">LIMIT PUSH // FRONTIER</p>
+            <h2 id="frontier-title" className="section-title">
+              Frontier
+            </h2>
+          </div>
+          <span className="section-meta">same read as /api/status</span>
         </div>
-        <span className="section-meta">same read as /api/status</span>
-      </div>
-      <FrontierChips status={status} />
-      <div className="grid frontier-grid">
-        <OracleCard status={status} />
-        <LaborCard status={status} />
-        <DomainCard status={status} />
-        <FacilitatorCard status={status} />
-      </div>
-    </section>
+        <FrontierChips status={status} />
+        <div className="grid frontier-grid">
+          <OracleCard status={status} />
+          <LaborCard status={status} />
+          <DomainCard status={status} />
+          <FacilitatorCard status={status} />
+        </div>
+      </section>
+      <section aria-labelledby="devnet-frontier">
+        <div className="section-heading">
+          <div>
+            <p className="kicker">LIMIT PUSH // DEVNET</p>
+            <h2 id="devnet-frontier" className="section-title">
+              Devnet
+            </h2>
+          </div>
+          <span className="section-meta">XRPL Devnet · not in Testnet NAV</span>
+        </div>
+        <div className="grid frontier-grid">
+          <SponsorCard status={status} />
+          <VaultCard status={status} />
+          <ConfidentialCard status={status} />
+        </div>
+      </section>
+    </>
   );
 }
