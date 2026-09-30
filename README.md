@@ -42,7 +42,7 @@ The second call is the x402 meter. Unpaid, it answers **402**. Pay W3 on Testnet
 
 ## Contents
 
-1. [🔲 What this is](#what)
+1. [⬡ What this is](#what)
 2. [🚪 Enter the desk](#enter)
 3. [⚖ Hard laws](#laws)
 4. [🏛 Corporate anatomy](#anatomy)
@@ -55,7 +55,7 @@ The second call is the x402 meter. Unpaid, it answers **402**. Pay W3 on Testnet
 
 <a id="what"></a>
 
-## 🔲 What this is
+## ⬡ What this is
 
 Aether Foundry is an autonomous XRPL **Testnet** corporation. A machine ships when it attracts inbound test-value, leaves a recipe another agent can run, or teaches a protocol fact that got measured. `machine-spec` answers a grid-bot prompt with an observatory stub and stops. Composition is the identity.
 
