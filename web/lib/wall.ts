@@ -1,6 +1,8 @@
 /**
- * Wall of Change merge. Read-only Testnet and Devnet JSON-RPC.
- * Mainnet hosts stay refused. A failed probe never becomes enabled.
+ * Wall of Change merge. Read-only JSON-RPC.
+ * Testnet, Devnet, and one public mainnet host.
+ * The mainnet host is used for server_info and feature only.
+ * A failed probe never becomes enabled.
  * The desk does not sign and does not submit.
  */
 
@@ -25,12 +27,19 @@ import {
 
 export const WALL_ORIGIN = "https://aether-foundry-desk.vercel.app";
 export const MAINNET_NOTE =
-  "Desk guards refuse mainnet hosts. Mainnet dots stay unknown. This route does not submit.";
+  "Mainnet dots are read-only server_info and feature on xrplcluster.com (network id 0). This route does not submit.";
 
 const FRESH_MS = 36 * 60 * 60 * 1000;
 const TESTNET_HTTP = "https://s.altnet.rippletest.net:51234";
 const DEVNET_HTTP = "https://s.devnet.rippletest.net:51234";
-const ALLOWED_HOSTS = new Set(["s.altnet.rippletest.net:51234", "s.devnet.rippletest.net:51234"]);
+const MAINNET_HTTP = "https://xrplcluster.com/";
+const MAINNET_NETWORK_ID = 0;
+const READ_METHODS = new Set(["server_info", "feature"]);
+const ALLOWED_HOSTS = new Set([
+  "s.altnet.rippletest.net:51234",
+  "s.devnet.rippletest.net:51234",
+  "xrplcluster.com",
+]);
 
 const LIVE_TWINS = new Set([
   "foundry-heartbeat",
@@ -103,17 +112,22 @@ function assertAllowedHost(raw: string): void {
   } catch {
     throw new Error("refusing unparseable XRPL url");
   }
+  if (url.protocol !== "https:") throw new Error("refusing non-https XRPL url");
+  if (url.username || url.password) throw new Error("refusing XRPL url with userinfo");
+  if (url.pathname !== "/" && url.pathname !== "") throw new Error("refusing XRPL url path");
+  if (url.search || url.hash) throw new Error("refusing XRPL url query");
   const key = `${url.hostname.toLowerCase()}${url.port ? `:${url.port}` : ""}`;
   if (!ALLOWED_HOSTS.has(key)) throw new Error("refusing non-allowlisted XRPL host");
-  if (url.username || url.password) throw new Error("refusing XRPL url with userinfo");
 }
 
 async function rpc(fetchImpl: FetchLike, url: string, method: string): Promise<Record<string, unknown>> {
+  if (!READ_METHODS.has(method)) throw new Error("refusing XRPL method");
   assertAllowedHost(url);
   const res = await fetchImpl(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ method, params: [{}] }),
+    redirect: "error",
     signal: AbortSignal.timeout(5000),
   });
   if (!res.ok) throw new Error(`rpc HTTP ${res.status}`);
@@ -197,16 +211,22 @@ export function resolveAmendmentDots(input: {
   devnetMode: SideMode;
   devnetFile: AmendmentFile | null;
   devnetProbe: AmendmentFile | null;
+  mainnetMode?: SideMode;
+  mainnetFile?: AmendmentFile | null;
+  mainnetProbe?: AmendmentFile | null;
 }): Record<string, AmendmentDots> {
   const testnet =
     input.testnetMode === "probe" ? indexRows(input.testnetProbe) : indexRows(input.testnetFile);
   const devnet = input.devnetMode === "probe" ? indexRows(input.devnetProbe) : indexRows(input.devnetFile);
+  const mainnetMode = input.mainnetMode ?? "failed";
+  const mainnet =
+    mainnetMode === "probe" ? indexRows(input.mainnetProbe ?? null) : indexRows(input.mainnetFile ?? null);
   const out: Record<string, AmendmentDots> = {};
   for (const name of input.names) {
     out[name] = {
       testnet: dotFrom(testnet.get(name)),
       devnet: dotFrom(devnet.get(name)),
-      mainnet: "unknown",
+      mainnet: dotFrom(mainnet.get(name)),
     };
   }
   return out;
@@ -395,6 +415,20 @@ export async function buildWall(opts: BuildWallOptions = {}): Promise<WallPayloa
   let degraded = opts.status == null;
   if (opts.status == null) notes.push("Desk status was unavailable. Foundry twin ids were not attached.");
 
+  let mainnetMode: SideMode = "failed";
+  let mainnetProbe: AmendmentFile | null = null;
+  const mainnetTask = probeNetwork(fetchImpl, MAINNET_HTTP, MAINNET_NETWORK_ID)
+    .then((probed) => {
+      mainnetProbe = probed;
+      mainnetMode = "probe";
+    })
+    .catch(() => {
+      mainnetMode = "failed";
+      mainnetProbe = null;
+      degraded = true;
+      notes.push("Mainnet feature probe failed. Mainnet dots stay unknown.");
+    });
+
   let testnetMode: SideMode = isFresh(testnetFile?.probed_at, now) ? "file" : "failed";
   let devnetMode: SideMode = isFresh(devnetFile?.probed_at, now) ? "file" : "failed";
   let testnetProbe: AmendmentFile | null = null;
@@ -439,6 +473,8 @@ export async function buildWall(opts: BuildWallOptions = {}): Promise<WallPayloa
     }
   }
 
+  await mainnetTask;
+
   const amendments = resolveAmendmentDots({
     names: CLOCK.map((row) => row.name),
     testnetMode,
@@ -447,6 +483,9 @@ export async function buildWall(opts: BuildWallOptions = {}): Promise<WallPayloa
     devnetMode,
     devnetFile,
     devnetProbe,
+    mainnetMode,
+    mainnetFile: null,
+    mainnetProbe,
   });
 
   const merged = sortNewest(applyFoundryTwins(programs, opts.status ?? null));
