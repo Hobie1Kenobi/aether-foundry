@@ -1,0 +1,19 @@
+{
+  "recorded_at": "2026-09-30T02:23:00Z",
+  "note": "Baseline from lab/frontier amendment files on 2026-09-30. Mainnet stays unknown because desk guards refuse mainnet hosts. The left bar pulses only when a dot differs from this file.",
+  "amendments": {
+    "BatchV1_1": { "testnet": "off", "devnet": "on", "mainnet": "unknown" },
+    "TokenEscrow": { "testnet": "on", "devnet": "on", "mainnet": "unknown" },
+    "Credentials": { "testnet": "on", "devnet": "on", "mainnet": "unknown" },
+    "PermissionedDomains": { "testnet": "on", "devnet": "on", "mainnet": "unknown" },
+    "PermissionedDEX": { "testnet": "on", "devnet": "on", "mainnet": "unknown" },
+    "MPTokensV1": { "testnet": "on", "devnet": "on", "mainnet": "unknown" },
+    "PriceOracle": { "testnet": "on", "devnet": "on", "mainnet": "unknown" },
+    "DynamicNFT": { "testnet": "on", "devnet": "on", "mainnet": "unknown" },
+    "SingleAssetVault": { "testnet": "off", "devnet": "on", "mainnet": "unknown" },
+    "LendingProtocol": { "testnet": "off", "devnet": "on", "mainnet": "unknown" },
+    "Sponsor": { "testnet": "off", "devnet": "on", "mainnet": "unknown" },
+    "ConfidentialTransfer": { "testnet": "off", "devnet": "on", "mainnet": "unknown" },
+    "DID": { "testnet": "on", "devnet": "on", "mainnet": "unknown" }
+  }
+}
