@@ -1,0 +1,112 @@
+{
+  "coindesk-clearpool-2026-08-21": {
+    "title": "CoinDesk — Ripple backs an RLUSD credit fund",
+    "url": "https://www.coindesk.com/markets/2026/08/21/ripple-backs-an-rlusd-credit-fund-amid-xrp-s-best-week-in-months",
+    "retrieved_at": "2026-09-30"
+  },
+  "clearpool-governance-xrpl": {
+    "title": "Clearpool governance — XRPL expansion",
+    "url": "https://clearpool.finance/governance",
+    "retrieved_at": "2026-09-30"
+  },
+  "ripple-institutional-defi-2025-09-22": {
+    "title": "Ripple — The Next Phase of Institutional DeFi on XRPL",
+    "url": "https://ripple.com/insights/the-next-phase-of-institutional-de-fi-on-xrpl/",
+    "retrieved_at": "2026-09-30"
+  },
+  "xrpl-commons-permdex-2026-01": {
+    "title": "XRPL Commons — Permissioned Domains and DEXs: What We Learned",
+    "url": "https://xrpl-commons.org/newsroom/permissioned-domains-and-dexes-on-xrpl-what-we-learned",
+    "retrieved_at": "2026-09-30"
+  },
+  "cryptoslate-batch-2026-09": {
+    "title": "CryptoSlate — repaired BatchV1_1 pre-mainnet flaw",
+    "url": "https://cryptoslate.com/xrpl-fixes-critical-pre-mainnet-flaw-but-client-apps-remain-at-risk/",
+    "retrieved_at": "2026-09-30"
+  },
+  "cryptonews-batch-2026-09-20": {
+    "title": "crypto.news — asset managers prepare for XRPL Batch",
+    "url": "https://crypto.news/ripple-says-asset-managers-prepare-for-xrpl-batch/",
+    "retrieved_at": "2026-09-30"
+  },
+  "ripple-press-mastercard-2025-11-05": {
+    "title": "Ripple press — Mastercard, WebBank, and Gemini RLUSD pilot",
+    "url": "https://ripple.com/ripple-press/ripple-teams-up-with-mastercard-webbank-and-gemini/",
+    "retrieved_at": "2026-09-30"
+  },
+  "coindesk-mastercard-2025-11-05": {
+    "title": "CoinDesk — RLUSD to settle Gemini credit card flows",
+    "url": "https://www.coindesk.com/markets/2025/11/05/embargoed-till-12pm-et-ripple-s-rlusd-to-power-mastercard-credit-card-settlements-on-xrp-ledger",
+    "retrieved_at": "2026-09-30"
+  },
+  "coindesk-bloom-2026-03-25": {
+    "title": "CoinDesk — MAS BLOOM RLUSD trade-finance sandbox",
+    "url": "https://www.coindesk.com/business/2026/03/25/ripple-taps-singapore-s-central-bank-sandbox-to-test-stablecoin-powered-trade-finance-with-rlusd",
+    "retrieved_at": "2026-09-30"
+  },
+  "ripple-press-bloom-2026-03-25": {
+    "title": "Ripple press — MAS BLOOM and Unloq",
+    "url": "https://ripple.com/ripple-press/ripple-joins-monetary-authority-of-singapore-s-bloom-initiative-and-partners-with-unloq-to-advance-programmable-settlement-infrastructure-in-trade-finance/",
+    "retrieved_at": "2026-09-30"
+  },
+  "sgforge-eurcv-xrpl-2026-02-18": {
+    "title": "SG-FORGE — EUR CoinVertible on the XRP Ledger",
+    "url": "https://www.sgforge.com/sgf-coinvertible-on-the-xrp-ledger/",
+    "retrieved_at": "2026-09-30"
+  },
+  "sgforge-eurcv-whitepaper": {
+    "title": "SG-FORGE — EURCV white paper, XRPL issuer",
+    "url": "https://www.sgforge.com/wp-content/uploads/2025/10/EURCV-White-Paper_iXBRL_202510.html",
+    "retrieved_at": "2026-09-30"
+  },
+  "sbi-group-prepaid-2026-04-07": {
+    "title": "SBI Group — prepaid instrument issuer registration",
+    "url": "https://www.sbigroup.co.jp/news/pr/pdf/2026/0407_a.pdf",
+    "retrieved_at": "2026-09-30"
+  },
+  "coingape-sbi-prepaid-2026-04-07": {
+    "title": "CoinGape — SBI Ripple Asia token issuance platform",
+    "url": "https://coingape.com/sbi-ripple-asia-completes-token-issuance-platform-on-xrpl/",
+    "retrieved_at": "2026-09-30"
+  },
+  "ripple-press-odl-sbi": {
+    "title": "Ripple press — ODL with SBI Remit, Tranglo named",
+    "url": "https://ripple.com/ripple-press/ripple-launches-on-demand-liquidity-with-sbi-remit-to-accelerate-and-grow-cross-border-payments-from-japan/",
+    "retrieved_at": "2026-09-30"
+  },
+  "sbi-remit-odl-2021-07-28": {
+    "title": "SBI Remit — ODL service to the Philippines",
+    "url": "https://www.remit.co.jp/en/kaigaisoukin/information/release20210728/",
+    "retrieved_at": "2026-09-30"
+  },
+  "xrpl-docs-x402": {
+    "title": "xrpl.org — Agentic payments with x402",
+    "url": "https://xrpl.org/docs/agents/agentic-payments-x402",
+    "retrieved_at": "2026-09-30"
+  },
+  "desk-status": {
+    "title": "Aether Foundry desk status",
+    "url": "https://aether-foundry-desk.vercel.app/api/status",
+    "retrieved_at": "2026-09-30"
+  },
+  "machine-oracle": {
+    "title": "Machine — native price oracle",
+    "url": "https://github.com/Hobie1Kenobi/aether-foundry/blob/main/machines/native-price-oracle/README.md",
+    "retrieved_at": "2026-09-30"
+  },
+  "machine-labor-mpt": {
+    "title": "Machine — labor MPT",
+    "url": "https://github.com/Hobie1Kenobi/aether-foundry/blob/main/machines/labor-mpt/README.md",
+    "retrieved_at": "2026-09-30"
+  },
+  "machine-credential-domain": {
+    "title": "Machine — credential domain shop",
+    "url": "https://github.com/Hobie1Kenobi/aether-foundry/blob/main/machines/credential-domain-shop/README.md",
+    "retrieved_at": "2026-09-30"
+  },
+  "machine-heartbeat": {
+    "title": "Machine — foundry runtime heartbeat",
+    "url": "https://github.com/Hobie1Kenobi/aether-foundry/blob/main/machines/foundry-runtime/README.md",
+    "retrieved_at": "2026-09-30"
+  }
+}
