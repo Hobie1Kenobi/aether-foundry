@@ -29,3 +29,9 @@ Foundry twin rows (`foundry-heartbeat`, `foundry-oracle`, `foundry-labor-mpt`, `
 Testnet prefers `lab/frontier/amendments.json` when `probed_at` is under 36 hours. Otherwise the route calls `server_info` and `feature` on `https://s.altnet.rippletest.net:51234` (network id 1). Devnet uses `lab/frontier/amendments-devnet.json` or `https://s.devnet.rippletest.net:51234` (network id 2). Mainnet has no cached file. Each read calls `server_info` and `feature` on `https://xrplcluster.com/` and keeps the dots only when `network_id` is 0. `enabled: true` is on. `enabled: false` with a majority close time is voting. `enabled: false` with no majority is off. A missing name stays unknown.
 
 `last-seen.json` records the mainnet column read at 2026-09-30T03:36:35Z. The route does not rewrite that file. Batch is whatever the live read says. This folder does not mark Batch enabled.
+
+## Press headlines
+
+`GET /api/wall` also returns a `headlines` array from the public Cointelegraph Ripple tag RSS: `https://cointelegraph.com/rss/tag/ripple`. The route fetches that feed on the server, with a five-second timeout. A failed fetch leaves `headlines` empty. The amendment ticker still renders. Curated `programs.json` is not rewritten.
+
+Each headline keeps the feed title and the article URL. Stage is `press`. `onchain.kind` is `none`. The label is `Press headline. Not on-chain.` These rows are not ledger reads and they are not foundry claims. `/api/wall/rss.xml` includes the same items as press, linked at the article. The desk does not sign.

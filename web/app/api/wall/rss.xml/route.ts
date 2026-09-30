@@ -17,7 +17,9 @@ export async function GET() {
   try {
     const status = await loadDeskStatus().catch(() => null);
     const payload = await buildWall({ status, fetch });
-    return new Response(renderRss(payload.programs, payload.generated_at), { headers: HEADERS });
+    return new Response(renderRss(payload.programs, payload.generated_at, payload.headlines), {
+      headers: HEADERS,
+    });
   } catch {
     const down = downWall();
     return new Response(renderRss(down.programs, down.generated_at), {

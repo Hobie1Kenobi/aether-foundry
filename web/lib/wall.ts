@@ -13,13 +13,16 @@ import sourcesJson from "../../lab/wall/sources.json" with { type: "json" };
 import lastSeenJson from "../../lab/wall/last-seen.json" with { type: "json" };
 import testnetJson from "../../lab/frontier/amendments.json" with { type: "json" };
 import devnetJson from "../../lab/frontier/amendments-devnet.json" with { type: "json" };
+import { fetchRippleHeadlines, sanitizeHeadlines } from "./ripple-headlines";
 import {
   CLOCK,
+  PRESS_HEADLINE_LABEL,
   assertNoSecrets,
   validateProgram,
   validateSources,
   type AmendmentDots,
   type Dot,
+  type PressHeadline,
   type Program,
   type Source,
   type WallPayload,
@@ -79,6 +82,8 @@ export type BuildWallOptions = {
   testnetFile?: unknown;
   devnetFile?: unknown;
   lastSeen?: unknown;
+  /** When set, skip the public RSS fetch and use this list (still sanitized). */
+  headlines?: PressHeadline[];
 };
 
 function readLab(rel: string, fallback: unknown): unknown {
@@ -330,28 +335,75 @@ function xmlEscape(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-export function renderRss(programs: Program[], generatedAt: string): string {
-  const items = sortNewest(programs.filter((program) => program.stage !== "rumor"));
-  const body = items
-    .map((program) => {
-      const title = xmlEscape(`${program.actor} — ${program.claim}`);
-      const link = `${WALL_ORIGIN}/wall#${program.id}`;
-      const description = xmlEscape(
-        `${program.claim} Stage ${program.stage}. Rail ${program.networks.join(", ")}.`
-      );
-      const pub = new Date(program.ts);
-      const pubDate = Number.isNaN(pub.getTime()) ? new Date(0).toUTCString() : pub.toUTCString();
-      return [
-        "    <item>",
-        `      <title>${title}</title>`,
-        `      <link>${link}</link>`,
-        `      <guid isPermaLink="false">${xmlEscape(program.id)}</guid>`,
-        `      <pubDate>${pubDate}</pubDate>`,
-        `      <description>${description}</description>`,
-        "    </item>",
-      ].join("\n");
-    })
+function rssItem(parts: {
+  title: string;
+  link: string;
+  guid: string;
+  permalink: boolean;
+  pubDate: string;
+  description: string;
+  category?: string;
+}): string {
+  const category = parts.category ? `\n      <category>${xmlEscape(parts.category)}</category>` : "";
+  return [
+    "    <item>",
+    `      <title>${xmlEscape(parts.title)}</title>`,
+    `      <link>${xmlEscape(parts.link)}</link>`,
+    `      <guid isPermaLink="${parts.permalink ? "true" : "false"}">${xmlEscape(parts.guid)}</guid>`,
+    `      <pubDate>${parts.pubDate}</pubDate>`,
+    `      <description>${xmlEscape(parts.description)}</description>${category}`,
+    "    </item>",
+  ].join("\n");
+}
+
+function pubDateOrEpoch(iso: string): string {
+  const pub = new Date(iso);
+  return Number.isNaN(pub.getTime()) ? new Date(0).toUTCString() : pub.toUTCString();
+}
+
+function headlineRssItems(headlines: PressHeadline[]): string {
+  return headlines
+    .filter(
+      (row) =>
+        row.stage === "press" &&
+        row.onchain.kind === "none" &&
+        row.label === PRESS_HEADLINE_LABEL &&
+        row.url.startsWith("https://cointelegraph.com/news/")
+    )
+    .map((row) =>
+      rssItem({
+        title: `Press · ${row.actor} — ${row.title}`,
+        link: row.url,
+        guid: row.url,
+        permalink: true,
+        pubDate: pubDateOrEpoch(row.ts),
+        description: `${row.label} ${row.title}`,
+        category: "press",
+      })
+    )
     .join("\n");
+}
+
+export function renderRss(
+  programs: Program[],
+  generatedAt: string,
+  headlines: PressHeadline[] = []
+): string {
+  const items = sortNewest(programs.filter((program) => program.stage !== "rumor"));
+  const programBody = items
+    .map((program) =>
+      rssItem({
+        title: `${program.actor} — ${program.claim}`,
+        link: `${WALL_ORIGIN}/wall#${program.id}`,
+        guid: program.id,
+        permalink: false,
+        pubDate: pubDateOrEpoch(program.ts),
+        description: `${program.claim} Stage ${program.stage}. Rail ${program.networks.join(", ")}.`,
+      })
+    )
+    .join("\n");
+  const headlineBody = headlineRssItems(headlines);
+  const body = [headlineBody, programBody].filter(Boolean).join("\n");
   const built = new Date(generatedAt);
   const lastBuildDate = Number.isNaN(built.getTime()) ? new Date(0).toUTCString() : built.toUTCString();
   return [
@@ -360,7 +412,7 @@ export function renderRss(programs: Program[], generatedAt: string): string {
     "  <channel>",
     "    <title>Aether Foundry — Wall of Change</title>",
     `    <link>${WALL_ORIGIN}/wall</link>`,
-    "    <description>Curated wire of XRPL institutional primitives and named programs. Not a bank leaderboard.</description>",
+    "    <description>Curated wire of XRPL institutional primitives and named programs. Cointelegraph items are press headlines, not on-chain claims. Not a bank leaderboard.</description>",
     `    <lastBuildDate>${lastBuildDate}</lastBuildDate>`,
     body,
     "  </channel>",
@@ -380,6 +432,7 @@ export function downWall(now = Date.now()): WallPayload {
     server_build: null,
     amendments,
     programs: [],
+    headlines: [],
     wire_status: "down",
     amendment_changed: false,
     mainnet_note: MAINNET_NOTE,
@@ -428,6 +481,11 @@ export async function buildWall(opts: BuildWallOptions = {}): Promise<WallPayloa
       degraded = true;
       notes.push("Mainnet feature probe failed. Mainnet dots stay unknown.");
     });
+
+  const headlineTask =
+    opts.headlines === undefined
+      ? fetchRippleHeadlines(fetchImpl)
+      : Promise.resolve({ headlines: opts.headlines, ok: true });
 
   let testnetMode: SideMode = isFresh(testnetFile?.probed_at, now) ? "file" : "failed";
   let devnetMode: SideMode = isFresh(devnetFile?.probed_at, now) ? "file" : "failed";
@@ -489,7 +547,12 @@ export async function buildWall(opts: BuildWallOptions = {}): Promise<WallPayloa
   });
 
   const merged = sortNewest(applyFoundryTwins(programs, opts.status ?? null));
-  assertNoSecrets({ amendments, programs: merged, sources, notes });
+  const headlineResult = await headlineTask;
+  const headlines = sanitizeHeadlines(headlineResult.ok ? headlineResult.headlines : []);
+  if (!headlineResult.ok) {
+    notes.push("Cointelegraph Ripple press feed was unavailable. Headlines stay empty.");
+  }
+  assertNoSecrets({ amendments, programs: merged, sources, notes, headlines });
 
   return {
     generated_at: new Date(now).toISOString(),
@@ -497,6 +560,7 @@ export async function buildWall(opts: BuildWallOptions = {}): Promise<WallPayloa
     server_build: build,
     amendments,
     programs: merged,
+    headlines,
     wire_status: degraded ? "degraded" : "ok",
     amendment_changed: changedSince(amendments, lastSeen),
     mainnet_note: MAINNET_NOTE,

@@ -653,7 +653,7 @@ ul.clean li {
   gap: 1.4rem;
   width: max-content;
   padding: 0.45rem 0;
-  animation: wall-marquee 28s linear infinite;
+  animation: wall-marquee 80s linear infinite;
 }
 
 .wall-ticker:hover .wall-ticker-track,
@@ -662,6 +662,8 @@ ul.clean li {
 }
 
 .ticker-btn,
+.ticker-link,
+.ticker-mark,
 .filter-btn,
 .wall-search {
   border: 0;
@@ -671,10 +673,35 @@ ul.clean li {
   letter-spacing: 0.04em;
 }
 
-.ticker-btn {
+.ticker-btn,
+.ticker-link,
+.ticker-mark {
   padding: 0;
   white-space: nowrap;
+}
+
+.ticker-btn {
   cursor: pointer;
+}
+
+.ticker-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.ticker-press {
+  margin-right: 0.45rem;
+  color: var(--amber);
+}
+
+.ticker-mark {
+  color: var(--muted);
+}
+
+.press-headline {
+  margin-left: 0.15rem;
+  padding-left: 0.65rem;
+  border-left: 2px solid var(--amber);
 }
 
 .ticker-btn[aria-pressed="true"],
