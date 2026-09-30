@@ -21,6 +21,8 @@ After deploy, verify toml and the public status route. Root Directory stays `web
 ```bash
 curl -sS https://HOST_PLACEHOLDER/.well-known/xrp-ledger.toml | head
 curl -sS https://aether-foundry-desk.vercel.app/api/status
+curl -sS https://aether-foundry-desk.vercel.app/api/wall
+curl -sS https://aether-foundry-desk.vercel.app/api/wall/rss.xml | head
 ```
 
 ## Domain host

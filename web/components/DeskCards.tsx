@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { FrontierCards } from "@/components/FrontierCards";
+import { WallOfChange } from "@/components/wall-of-change";
+import { buildWall } from "@/lib/wall";
 import { MerchantSection } from "@/components/MerchantSection";
 import { GrantsFlywheelCard } from "@/components/GrantsFlywheelCard";
 import { LpBadgeBoundCard } from "@/components/LpBadgeBoundCard";
@@ -255,6 +257,7 @@ export async function DeskCards() {
   );
   const totalXrp =
     onlineAccounts.length === 0 ? null : (totalDrops / 1_000_000).toFixed(6);
+  const wall = await buildWall({ status, fetch }).catch(() => null);
 
   return (
     <>
@@ -285,6 +288,7 @@ export async function DeskCards() {
         <nav className="hero-links" aria-label="Desk resources">
           <a href="/.well-known/xrp-ledger.toml">XRPL.toml ↗</a>
           <a href="/api/status">Status JSON</a>
+          <a href="/wall">Wall</a>
           <a href="#frontier-title">Frontier</a>
           <a href="#devnet-frontier">Devnet</a>
           <a href="#storefront-title">Walk-In storefront</a>
@@ -330,6 +334,8 @@ export async function DeskCards() {
           </span>
         </div>
       </section>
+
+      <WallOfChange payload={wall} variant="hero" />
 
       <FrontierCards status={status} />
 

@@ -565,6 +565,383 @@ ul.clean li {
   }
 }
 
+.anchor-target {
+  display: block;
+  height: 0;
+  scroll-margin-top: 5.5rem;
+}
+
+#f1,
+#f2,
+#f3,
+#f4,
+#f6,
+#f8,
+#f9,
+#f10,
+#x402-frontier,
+#frontier-title,
+#accounts-title,
+#storefront-title,
+.telegram {
+  scroll-margin-top: 5.5rem;
+}
+
+.wall {
+  position: relative;
+  margin: 0 0 1.5rem;
+  border: 1px solid var(--border);
+  background: #090b0c;
+  overflow: hidden;
+}
+
+.wall-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: var(--amber-soft);
+}
+
+.wall-bar.changed {
+  background: var(--amber);
+  animation: wall-pulse 1.8s ease-in-out infinite;
+}
+
+.wall-inner {
+  padding: 1rem 1rem 0.9rem 1.15rem;
+  background-image: radial-gradient(rgba(237, 240, 233, 0.06) 1px, transparent 1px);
+  background-size: 8px 8px;
+}
+
+.wall-mast,
+.wall-mast-side {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.wall-mast-side {
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.wall-title {
+  margin: 0.2rem 0 0;
+  font-size: clamp(1.6rem, 3vw, 2.4rem);
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+
+.wall-ledger {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  text-align: right;
+}
+
+.wall-ticker {
+  overflow: hidden;
+  margin-top: 0.9rem;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.wall-ticker-track {
+  display: flex;
+  gap: 1.4rem;
+  width: max-content;
+  padding: 0.45rem 0;
+  animation: wall-marquee 28s linear infinite;
+}
+
+.wall-ticker:hover .wall-ticker-track,
+.wall-ticker:focus-within .wall-ticker-track {
+  animation-play-state: paused;
+}
+
+.ticker-btn,
+.filter-btn,
+.wall-search {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: 0.72rem var(--mono);
+  letter-spacing: 0.04em;
+}
+
+.ticker-btn {
+  padding: 0;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ticker-btn[aria-pressed="true"],
+.filter-btn[aria-pressed="true"] {
+  color: var(--amber);
+}
+
+.wall-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.7rem 0;
+}
+
+.filter-btn {
+  padding: 0;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.wall-search {
+  min-width: 12rem;
+  margin-left: auto;
+  padding: 0.28rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  color: var(--text);
+}
+
+.wall-notes {
+  margin: 0 0 0.6rem;
+  color: var(--amber);
+}
+
+.wall-body {
+  display: grid;
+  grid-template-columns: minmax(14rem, 34%) 1fr;
+  gap: 1rem;
+}
+
+.clock-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.45rem;
+  align-items: center;
+  padding: 0.32rem 0;
+  font: 0.72rem var(--mono);
+}
+
+.clock-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clock-dots {
+  display: inline-flex;
+  gap: 0.28rem;
+}
+
+.dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--muted);
+}
+
+.dot.on {
+  background: var(--ok);
+  box-shadow: none;
+}
+
+.dot.voting {
+  background: var(--amber);
+  box-shadow: none;
+}
+
+.dot.off,
+.dot.unknown {
+  background: transparent;
+}
+
+.twin-mark {
+  color: var(--amber);
+  font: 600 0.68rem var(--mono);
+  letter-spacing: 0.08em;
+}
+
+.wire-scroll {
+  min-height: 28rem;
+  max-height: 70vh;
+  overflow: auto;
+  padding-left: 0.85rem;
+  border-left: 1px solid var(--border);
+}
+
+.wall-page .wire-scroll {
+  min-height: 40rem;
+  max-height: none;
+}
+
+.wire-day {
+  margin: 0.8rem 0 0.2rem;
+  color: var(--muted);
+  font: 0.68rem var(--mono);
+  letter-spacing: 0.12em;
+}
+
+.telegram {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border);
+  animation: wall-fade 180ms ease;
+}
+
+.wire-when,
+.wire-hash {
+  margin: 0;
+  color: var(--muted);
+}
+
+.wire-actor {
+  margin: 0.15rem 0;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.wire-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.35rem 0;
+}
+
+.wall-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.22rem 0.45rem;
+  color: var(--text);
+  font: 600 0.68rem/1 var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.stage-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.stage-dot.press,
+.stage-dot.sandbox,
+.stage-dot.mainnet-pilot {
+  background: var(--amber);
+}
+
+.stage-dot.testnet,
+.stage-dot.mainnet-live,
+.stage-dot.devnet {
+  background: var(--ok);
+}
+
+.stage-dot.rumor {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--muted);
+}
+
+.wire-claim {
+  margin: 0.25rem 0;
+}
+
+.wire-links {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  font: 0.72rem var(--mono);
+}
+
+.wall-foot {
+  margin-top: 0.9rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font: 0.72rem var(--mono);
+}
+
+.wall-foot p {
+  margin: 0.15rem 0;
+}
+
+@keyframes wall-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes wall-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes wall-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 760px) {
+  .wall-mast,
+  .wall-mast-side {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .wall-ledger {
+    text-align: left;
+  }
+
+  .wall-body {
+    grid-template-columns: 1fr;
+  }
+
+  .wire-scroll {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .wall-search {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wall-ticker-track,
+  .wall-bar.changed,
+  .telegram {
+    animation: none !important;
+  }
+
+  .wall-ticker-track {
+    flex-wrap: wrap;
+    width: auto;
+  }
+
+  .ticker-copy {
+    display: none;
+  }
+}
+
 footer {
   border-top: 1px solid var(--border);
   padding-top: 1rem;

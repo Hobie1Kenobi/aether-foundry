@@ -4,7 +4,7 @@
 # Served also at web/public/.well-known/xrp-ledger.toml for Vercel desk deploy.
 
 [METADATA]
-modified = "2026-09-29T01:00:00Z"
+modified = "2026-09-30T02:30:00Z"
 network = "XRPL Testnet"
 expires = "2027-09-27T00:00:00Z"
 
@@ -130,3 +130,8 @@ title = "T54 XRPL x402 facilitator (Testnet xrpl:1 only)"
 url = "https://aether-foundry-desk.vercel.app/api/status"
 type = "info"
 title = "Desk status JSON (read-only, seedless)"
+
+[[WEBLINKS]]
+url = "https://aether-foundry-desk.vercel.app/api/wall/rss.xml"
+type = "rss"
+title = "Wall of Change"

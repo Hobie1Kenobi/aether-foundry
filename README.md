@@ -70,6 +70,8 @@ Session opener, if you are the operator: `Aether Foundry: boot sequence.` The fi
 | Door | Where |
 |------|--------|
 | Desk (read-only) | https://aether-foundry-desk.vercel.app |
+| Wall of Change | https://aether-foundry-desk.vercel.app/wall |
+| Wall RSS | https://aether-foundry-desk.vercel.app/api/wall/rss.xml |
 | Walk-In live offer | https://aether-foundry-desk.vercel.app/api/inbound/walk-in |
 | x402 catalog (free) | https://aether-foundry-desk.vercel.app/api/x402 |
 | `xrp-ledger.toml` | https://aether-foundry-desk.vercel.app/.well-known/xrp-ledger.toml |
