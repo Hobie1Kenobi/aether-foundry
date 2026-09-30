@@ -4,9 +4,11 @@ import { useMemo, useState } from "react";
 import {
   CLOCK,
   TWIN_HREF,
+  WALL_TICKER_LOOP_S,
   filterPrograms,
   type AmendmentDots,
   type Dot,
+  type PressHeadline,
   type Program,
   type WallFilter,
   type WallPayload,
@@ -44,6 +46,28 @@ function wireStamp(iso: string): { day: string; time: string } | null {
 function tickerLine(name: string, dots: AmendmentDots | undefined): string {
   const row = dots || { testnet: "unknown" as Dot, devnet: "unknown" as Dot, mainnet: "unknown" as Dot };
   return `${name}  testnet ${dotWord(row.testnet)}  devnet ${dotWord(row.devnet)}  mainnet ${dotWord(row.mainnet)}`;
+}
+
+type TickerItem =
+  | { key: string; kind: "headline"; title: string; href: string }
+  | { key: string; kind: "mark" }
+  | { key: string; kind: "amendment"; name: string; text: string };
+
+function tickerItems(headlines: PressHeadline[], amendments: Record<string, AmendmentDots> | undefined): TickerItem[] {
+  const stories: TickerItem[] = headlines.map((row) => ({
+    key: `h-${row.id}`,
+    kind: "headline",
+    title: row.title,
+    href: row.url,
+  }));
+  const clock: TickerItem[] = CLOCK.map((row) => ({
+    key: `a-${row.name}`,
+    kind: "amendment",
+    name: row.name,
+    text: tickerLine(row.name, amendments?.[row.name]),
+  }));
+  if (stories.length === 0) return clock;
+  return [...stories, { key: "clock-mark", kind: "mark" }, ...clock];
 }
 
 function Telegram({
@@ -118,6 +142,101 @@ function Telegram({
   );
 }
 
+function TickerBit({
+  item,
+  amendment,
+  onAmendment,
+  copy = false,
+}: {
+  item: TickerItem;
+  amendment: string;
+  onAmendment: (name: string) => void;
+  copy?: boolean;
+}) {
+  if (item.kind === "mark") {
+    return (
+      <span className={copy ? "ticker-mark ticker-copy" : "ticker-mark"} aria-hidden={copy || undefined}>
+        AMENDMENT CLOCK
+      </span>
+    );
+  }
+  if (item.kind === "headline") {
+    return (
+      <a
+        className={copy ? "ticker-link ticker-copy" : "ticker-link"}
+        href={item.href}
+        target="_blank"
+        rel="noreferrer"
+        tabIndex={copy ? -1 : undefined}
+        aria-hidden={copy || undefined}
+      >
+        <span className="ticker-press">PRESS ·</span> {item.title}
+      </a>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className={copy ? "ticker-btn ticker-copy" : "ticker-btn"}
+      aria-pressed={copy ? undefined : amendment === item.name}
+      tabIndex={copy ? -1 : undefined}
+      aria-hidden={copy || undefined}
+      onClick={() => onAmendment(item.name)}
+    >
+      {item.text}
+    </button>
+  );
+}
+
+function PressWire({ headlines }: { headlines: PressHeadline[] }) {
+  let lastDay = "";
+  return (
+    <div className="press-wire">
+      <p className="kicker">PRESS HEADLINES · NOT ON-CHAIN</p>
+      {headlines.map((row) => {
+        const stamp = wireStamp(row.ts);
+        const day = stamp?.day ?? "";
+        const showDay = Boolean(day) && day !== lastDay;
+        if (day) lastDay = day;
+        return (
+          <div key={row.id}>
+            {showDay ? <p className="wire-day">— {day} —</p> : null}
+            <article className="telegram press-headline" id={row.id}>
+              <p className="wire-when mono">
+                {stamp ? (
+                  <>
+                    {stamp.day}
+                    <span> · </span>
+                    {stamp.time}
+                  </>
+                ) : (
+                  "— · —"
+                )}
+              </p>
+              <h3 className="wire-actor">{row.actor}</h3>
+              <p className="wire-chips">
+                <span className="wall-chip">
+                  <span className="stage-dot press" aria-hidden="true" />
+                  {row.stage}
+                </span>
+                <span className="wall-chip">not on-chain</span>
+              </p>
+              <p className="wire-claim">{row.title}</p>
+              <p className="wire-links">
+                <a href={row.url} target="_blank" rel="noreferrer">
+                  {row.source_title}
+                </a>
+                <span> · </span>
+                <span>{row.label}</span>
+              </p>
+            </article>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function WallOfChange({
   payload,
   variant,
@@ -134,10 +253,15 @@ export function WallOfChange({
     return filterPrograms(payload.programs, filter, query, amendment);
   }, [payload, filter, query, amendment]);
 
-  const ticker = CLOCK.map((row) => ({
-    name: row.name,
-    text: tickerLine(row.name, payload?.amendments[row.name]),
-  }));
+  const headlines = payload?.headlines ?? [];
+  const ticker = tickerItems(headlines, payload?.amendments);
+  const headlineRows = useMemo(() => {
+    if (filter !== "all" && filter !== "press") return [];
+    if (amendment) return [];
+    const needle = query.trim().toLowerCase();
+    if (!needle) return headlines;
+    return headlines.filter((row) => `${row.actor} ${row.title}`.toLowerCase().includes(needle));
+  }, [headlines, filter, query, amendment]);
 
   let lastDay = "";
 
@@ -175,30 +299,31 @@ export function WallOfChange({
           <p className="muted">The wire could not be read. Rows stay empty. The desk does not sign.</p>
         ) : (
           <>
-            <div className="wall-ticker" aria-label="Amendment ticker">
-              <div className="wall-ticker-track">
+            <div
+              className="wall-ticker"
+              aria-label={
+                headlines.length
+                  ? "Live Ripple press headlines and amendment ticker"
+                  : "Amendment ticker"
+              }
+            >
+              <div className="wall-ticker-track" style={{ animationDuration: `${WALL_TICKER_LOOP_S}s` }}>
                 {ticker.map((item) => (
-                  <button
-                    key={item.name}
-                    type="button"
-                    className="ticker-btn"
-                    aria-pressed={amendment === item.name}
-                    onClick={() => setAmendment((current) => (current === item.name ? "" : item.name))}
-                  >
-                    {item.text}
-                  </button>
+                  <TickerBit
+                    key={item.key}
+                    item={item}
+                    amendment={amendment}
+                    onAmendment={(name) => setAmendment((current) => (current === name ? "" : name))}
+                  />
                 ))}
                 {ticker.map((item) => (
-                  <button
-                    key={`${item.name}-copy`}
-                    type="button"
-                    className="ticker-btn ticker-copy"
-                    tabIndex={-1}
-                    aria-hidden="true"
-                    onClick={() => setAmendment((current) => (current === item.name ? "" : item.name))}
-                  >
-                    {item.text}
-                  </button>
+                  <TickerBit
+                    key={`${item.key}-copy`}
+                    item={item}
+                    amendment={amendment}
+                    onAmendment={(name) => setAmendment((current) => (current === name ? "" : name))}
+                    copy
+                  />
                 ))}
               </div>
             </div>
@@ -265,7 +390,10 @@ export function WallOfChange({
               </div>
               <div className="wire-scroll" aria-label="RSS wire">
                 <p className="kicker">RSS</p>
-                {rows.length === 0 ? <p className="muted">No telegrams for this filter.</p> : null}
+                {headlineRows.length ? <PressWire headlines={headlineRows} /> : null}
+                {rows.length === 0 && headlineRows.length === 0 ? (
+                  <p className="muted">No telegrams for this filter.</p>
+                ) : null}
                 {rows.map((program) => {
                   const stamp = wireStamp(program.ts);
                   const day = stamp?.day ?? "";
@@ -285,6 +413,7 @@ export function WallOfChange({
 
         <footer className="wall-foot">
           <p>This wall is curated. RippleNet messaging ≠ XRPL settlement.</p>
+          <p>Press headlines are Cointelegraph titles. They are not on-chain reads.</p>
           <p>No row is live without a source. The desk does not sign.</p>
           <p>
             <a href="/api/wall/rss.xml">RSS</a>

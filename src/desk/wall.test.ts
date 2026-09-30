@@ -4,7 +4,15 @@ import test from "node:test";
 import programsJson from "../../lab/wall/programs.json" with { type: "json" };
 import sourcesJson from "../../lab/wall/sources.json" with { type: "json" };
 import {
+  HEADLINE_CAP,
+  HEADLINE_TIMEOUT_MS,
+  RIPPLE_HEADLINE_FEED,
+  fetchRippleHeadlines,
+  parseRippleHeadlines,
+} from "../../web/lib/ripple-headlines.ts";
+import {
   CLOCK,
+  WALL_TICKER_LOOP_S,
   filterPrograms,
   validateProgram,
   validateSources,
@@ -332,4 +340,155 @@ test("signer allowlist still refuses the wall mainnet host", () => {
   };
   assert.ok(allowlist.refused_hosts.includes("xrplcluster.com"));
   assert.ok(allowlist.refused_network_ids.includes(0));
+});
+
+function itemXml(title: string, path: string, when: string, host = "https://cointelegraph.com"): string {
+  const url = `${host}${path}`;
+  return [
+    "<item>",
+    `  <title>${title}</title>`,
+    `  <pubDate>${when}</pubDate>`,
+    `  <guid isPermaLink="true">${url}</guid>`,
+    `  <link><![CDATA[${url}?utm_source=rss_feed&utm_medium=rss_tag_ripple]]></link>`,
+    "</item>",
+  ].join("\n");
+}
+
+function feedXml(items: string[]): string {
+  return `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel>${items.join("")}</channel></rss>`;
+}
+
+test("ripple rss parse keeps newest cointelegraph headlines and drops noise", () => {
+  const items = [
+    itemXml("Ripple seed round is not kept", "/news/ripple-seed-round", "Wed, 30 Sep 2026 18:00:00 +0000"),
+    itemXml("A secret ledger headline", "/news/secret-ledger", "Wed, 30 Sep 2026 17:00:00 +0000"),
+    itemXml("sEdABCDEF shown in a headline", "/news/sed-wallet", "Wed, 30 Sep 2026 16:00:00 +0000"),
+    itemXml("Ripple custody desk expands", "/news/ripple-custody-desk", "Wed, 30 Sep 2026 15:00:00 +0000"),
+    itemXml(
+      "Older custody title",
+      "/news/ripple-custody-desk",
+      "Tue, 01 Sep 2026 15:00:00 +0000"
+    ),
+    itemXml("Ripple &amp; XRP payments rail", "/news/ripple-xrp-payments-rail", "Wed, 30 Sep 2026 14:00:00 +0000"),
+    itemXml("Ripple &amp; XRP payments rail", "/news/ripple-xrp-payments-rail-reprint", "Wed, 30 Sep 2026 13:30:00 +0000"),
+    itemXml("Off host story", "/news/off-host", "Wed, 30 Sep 2026 13:00:00 +0000", "https://example.com"),
+  ];
+  for (let i = 0; i < 12; i += 1) {
+    const when = new Date(Date.UTC(2026, 7, 20 - i, 12, 0, 0)).toUTCString();
+    items.push(itemXml(`Ripple bulletin ${i}`, `/news/ripple-bulletin-${i}`, when));
+  }
+  const headlines = parseRippleHeadlines(feedXml(items));
+  assert.equal(HEADLINE_CAP, 10);
+  assert.equal(headlines.length, HEADLINE_CAP);
+  assert.equal(headlines[0].title, "Ripple custody desk expands");
+  assert.equal(headlines[0].url, "https://cointelegraph.com/news/ripple-custody-desk");
+  assert.equal(headlines[0].stage, "press");
+  assert.equal(headlines[0].onchain.kind, "none");
+  assert.equal(headlines[0].actor, "Cointelegraph");
+  assert.equal(headlines[0].label, "Press headline. Not on-chain.");
+  assert.equal(headlines[1].title, "Ripple & XRP payments rail");
+  assert.ok(headlines.every((row) => row.url.startsWith("https://cointelegraph.com/news/")));
+  assert.equal(new Set(headlines.map((row) => row.url)).size, headlines.length);
+  const blob = JSON.stringify(headlines);
+  assert.doesNotMatch(blob, /seed|secret|sEd/);
+  assert.doesNotMatch(blob, /example\.com|utm_source|Older custody|Same payments/);
+  assert.ok(Date.parse(headlines[0].ts) > Date.parse(headlines[1].ts));
+});
+
+test("headline fetch times out and fails soft", async () => {
+  assert.equal(HEADLINE_TIMEOUT_MS, 5000);
+  assert.equal(RIPPLE_HEADLINE_FEED, "https://cointelegraph.com/rss/tag/ripple");
+  let sawSignal = false;
+  const failed = await fetchRippleHeadlines(async (input, init) => {
+    assert.equal(input, RIPPLE_HEADLINE_FEED);
+    sawSignal = Boolean(init?.signal);
+    throw new Error("network down");
+  });
+  assert.equal(sawSignal, true);
+  assert.equal(failed.ok, false);
+  assert.deepEqual(failed.headlines, []);
+
+  const badStatus = await fetchRippleHeadlines(async () => new Response("nope", { status: 503 }));
+  assert.equal(badStatus.ok, false);
+  assert.deepEqual(badStatus.headlines, []);
+});
+
+test("wall stays up when the press feed fails and merges headlines without touching programs", async () => {
+  const down = await buildWall({
+    now: Date.parse("2026-09-30T02:00:00.000Z"),
+    status: null,
+    fetch: async () => {
+      throw new Error("rpc down");
+    },
+  });
+  assert.notEqual(down.wire_status, "down");
+  assert.deepEqual(down.headlines, []);
+  assert.ok(down.programs.length >= 12);
+  assert.match(down.probe_notes.join(" "), /Cointelegraph Ripple press feed was unavailable/);
+  assert.doesNotMatch(JSON.stringify(down), /seed|secret|sEd/);
+
+  const xml = feedXml([
+    itemXml("Ripple custody desk expands", "/news/ripple-custody-desk", "Wed, 30 Sep 2026 15:00:00 +0000"),
+    itemXml("Ripple seed round is not kept", "/news/ripple-seed-round", "Wed, 30 Sep 2026 18:00:00 +0000"),
+  ]);
+  const payload = await buildWall({
+    now: Date.parse("2026-09-30T02:00:00.000Z"),
+    status: null,
+    fetch: async (input) => {
+      if (String(input) === RIPPLE_HEADLINE_FEED) return new Response(xml, { status: 200 });
+      throw new Error("rpc down");
+    },
+  });
+  assert.notEqual(payload.wire_status, "down");
+  assert.equal(payload.programs.length, (programsJson as unknown[]).length);
+  assert.equal(payload.headlines.length, 1);
+  assert.equal(payload.headlines[0].title, "Ripple custody desk expands");
+  assert.equal(payload.headlines[0].onchain.kind, "none");
+  assert.ok(payload.programs.every((row) => !row.id.startsWith("ct-")));
+  const rss = renderRss(payload.programs, payload.generated_at, payload.headlines);
+  assert.match(rss, /<category>press<\/category>/);
+  assert.match(rss, /Press headline\. Not on-chain\./);
+  assert.match(rss, /https:\/\/cointelegraph\.com\/news\/ripple-custody-desk/);
+  assert.doesNotMatch(rss, /ripple-seed-round|seed round/);
+  const rumors = payload.programs.filter((row) => row.stage === "rumor").length;
+  assert.equal((rss.match(/<item>/g) || []).length, payload.programs.length - rumors + payload.headlines.length);
+  assert.doesNotMatch(JSON.stringify(payload), /seed|secret|sEd/);
+
+  const poisoned = await buildWall({
+    now: Date.parse("2026-09-30T02:00:00.000Z"),
+    status: null,
+    headlines: [
+      {
+        id: "ct-ripple-seed-round",
+        ts: "2026-09-30T18:00:00.000Z",
+        actor: "Cointelegraph",
+        title: "Ripple seed round is not kept",
+        stage: "press",
+        onchain: { kind: "none" },
+        url: "https://cointelegraph.com/news/ripple-seed-round",
+        source_title: "Cointelegraph",
+        label: "Press headline. Not on-chain.",
+      },
+    ],
+    fetch: async () => {
+      throw new Error("rpc down");
+    },
+  });
+  assert.notEqual(poisoned.wire_status, "down");
+  assert.deepEqual(poisoned.headlines, []);
+  assert.doesNotMatch(JSON.stringify(poisoned), /seed|secret|sEd/);
+});
+
+test("wall marquee loop is slow and still pauses", () => {
+  assert.ok(WALL_TICKER_LOOP_S >= 70 && WALL_TICKER_LOOP_S <= 90);
+  const css = readFileSync(new URL("../../web/app/globals.css", import.meta.url), "utf8");
+  const tsx = readFileSync(new URL("../../web/components/wall-of-change.tsx", import.meta.url), "utf8");
+  assert.match(css, new RegExp(`animation:\\s*wall-marquee\\s+${WALL_TICKER_LOOP_S}s\\s+linear\\s+infinite`));
+  assert.match(css, /\.wall-ticker:hover \.wall-ticker-track/);
+  assert.match(css, /\.wall-ticker:focus-within \.wall-ticker-track/);
+  assert.match(css, /animation-play-state:\s*paused/);
+  assert.match(css, /@media \(prefers-reduced-motion:\s*reduce\)/);
+  assert.match(css, /\.ticker-copy \{\s*display:\s*none;/);
+  assert.match(tsx, /animationDuration: `\$\{WALL_TICKER_LOOP_S\}s`/);
+  assert.match(tsx, /PRESS/);
 });

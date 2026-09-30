@@ -62,12 +62,31 @@ export interface AmendmentDots {
   mainnet: Dot;
 }
 
+/** Cointelegraph Ripple tag item. A headline, not a curated program or a ledger read. */
+export interface PressHeadline {
+  id: string;
+  ts: string;
+  actor: string;
+  title: string;
+  stage: "press";
+  onchain: { kind: "none" };
+  url: string;
+  source_title: string;
+  label: string;
+}
+
+export const PRESS_HEADLINE_ACTOR = "Cointelegraph";
+export const PRESS_HEADLINE_LABEL = "Press headline. Not on-chain.";
+/** Full marquee loop. The previous 28s pass was too fast to read. */
+export const WALL_TICKER_LOOP_S = 80;
+
 export interface WallPayload {
   generated_at: string;
   ledger_index: number | null;
   server_build: string | null;
   amendments: Record<string, AmendmentDots>;
   programs: Program[];
+  headlines: PressHeadline[];
   wire_status: "ok" | "degraded" | "down";
   amendment_changed: boolean;
   mainnet_note: string;
