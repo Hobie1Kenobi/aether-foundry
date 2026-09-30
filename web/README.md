@@ -25,6 +25,8 @@ curl -sS https://aether-foundry-desk.vercel.app/api/wall
 curl -sS https://aether-foundry-desk.vercel.app/api/wall/rss.xml | head
 ```
 
+`/api/wall` is the one route that calls a public mainnet JSON-RPC, and only for `server_info` and `feature` on `https://xrplcluster.com/`. It does not submit. The env vars above still cannot steer the rest of the desk onto a mainnet host.
+
 ## Domain host
 
 `*.v0.build` preview hosts are **not** the Domain host. A private v0 preview (for example `https://aether-foundry-desk.v0.build`) is a visual reference only.

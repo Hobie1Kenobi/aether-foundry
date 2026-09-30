@@ -108,5 +108,45 @@
     "title": "Machine — foundry runtime heartbeat",
     "url": "https://github.com/Hobie1Kenobi/aether-foundry/blob/main/machines/foundry-runtime/README.md",
     "retrieved_at": "2026-09-30"
+  },
+  "ripple-rlusd-token-addresses": {
+    "title": "Ripple docs — RLUSD token addresses",
+    "url": "https://docs.ripple.com/products/stablecoin/overview/token-addresses",
+    "retrieved_at": "2026-09-30"
+  },
+  "ripple-press-rlusd-launch-2024-12-16": {
+    "title": "Ripple press — RLUSD available 17 December 2024",
+    "url": "https://ripple.com/ripple-press/raising-the-standard-for-stablecoins-ripple-usd-launches-globally/",
+    "retrieved_at": "2026-09-30"
+  },
+  "circle-usdc-xrpl-2025-06-12": {
+    "title": "Circle — USDC on the XRPL, issuer published",
+    "url": "https://www.circle.com/blog/now-available-usdc-on-the-xrpl",
+    "retrieved_at": "2026-09-30"
+  },
+  "ripple-press-usdc-xrpl-2025-06-12": {
+    "title": "Ripple press — USDC on the XRP Ledger",
+    "url": "https://ripple.com/ripple-press/ripple-and-circle-launch-usdc-on-the-xrp-ledger/",
+    "retrieved_at": "2026-09-30"
+  },
+  "ripple-press-guggenheim-dcp-2025-06-10": {
+    "title": "Ripple press — Guggenheim digital commercial paper on XRPL",
+    "url": "https://ripple.com/ripple-press/guggenheim-uses-zeconomy-to-issue-digital-paper-on-xrp-ledger",
+    "retrieved_at": "2026-09-30"
+  },
+  "ripple-press-openeden-2024-08-01": {
+    "title": "Ripple press — OpenEden tokenized T-bills announced for XRPL",
+    "url": "https://ripple.com/ripple-press/openeden-introduces-tokenized-us-treasury-bills-onto-the-xrp-ledger/",
+    "retrieved_at": "2026-09-30"
+  },
+  "ripple-press-archax-abrdn-2024-11-25": {
+    "title": "Ripple press — Archax access to abrdn money market fund on XRPL",
+    "url": "https://ripple.com/ripple-press/archax-provides-access-to-abrdn-money-market-fund-on-the-xrp-ledger-in-collaboration-with-ripple/",
+    "retrieved_at": "2026-09-30"
+  },
+  "ripple-press-ctrl-alt-dld-2025-07-16": {
+    "title": "Ripple press — Ctrl Alt and Dubai Land Department title deeds",
+    "url": "https://ripple.com/ripple-press/ripple-expands-global-custody-footprint-into-middle-east-with-ctrl-alt/",
+    "retrieved_at": "2026-09-30"
   }
 }

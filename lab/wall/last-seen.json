@@ -1,19 +1,19 @@
 {
-  "recorded_at": "2026-09-30T02:23:00Z",
-  "note": "Baseline from lab/frontier amendment files on 2026-09-30. Mainnet stays unknown because desk guards refuse mainnet hosts. The left bar pulses only when a dot differs from this file.",
+  "recorded_at": "2026-09-30T03:36:35Z",
+  "note": "Testnet and Devnet columns stay the 2026-09-30 file baseline. Mainnet column was read from feature on https://xrplcluster.com/ at 2026-09-30T03:36:35Z, network id 0. enabled true is on. enabled false with a majority close time is voting. enabled false with no majority is off. The route does not rewrite this file. A later failed probe stays unknown and must not be shown as on.",
   "amendments": {
-    "BatchV1_1": { "testnet": "off", "devnet": "on", "mainnet": "unknown" },
-    "TokenEscrow": { "testnet": "on", "devnet": "on", "mainnet": "unknown" },
-    "Credentials": { "testnet": "on", "devnet": "on", "mainnet": "unknown" },
-    "PermissionedDomains": { "testnet": "on", "devnet": "on", "mainnet": "unknown" },
-    "PermissionedDEX": { "testnet": "on", "devnet": "on", "mainnet": "unknown" },
-    "MPTokensV1": { "testnet": "on", "devnet": "on", "mainnet": "unknown" },
-    "PriceOracle": { "testnet": "on", "devnet": "on", "mainnet": "unknown" },
-    "DynamicNFT": { "testnet": "on", "devnet": "on", "mainnet": "unknown" },
-    "SingleAssetVault": { "testnet": "off", "devnet": "on", "mainnet": "unknown" },
-    "LendingProtocol": { "testnet": "off", "devnet": "on", "mainnet": "unknown" },
-    "Sponsor": { "testnet": "off", "devnet": "on", "mainnet": "unknown" },
-    "ConfidentialTransfer": { "testnet": "off", "devnet": "on", "mainnet": "unknown" },
-    "DID": { "testnet": "on", "devnet": "on", "mainnet": "unknown" }
+    "BatchV1_1": { "testnet": "off", "devnet": "on", "mainnet": "voting" },
+    "TokenEscrow": { "testnet": "on", "devnet": "on", "mainnet": "on" },
+    "Credentials": { "testnet": "on", "devnet": "on", "mainnet": "on" },
+    "PermissionedDomains": { "testnet": "on", "devnet": "on", "mainnet": "on" },
+    "PermissionedDEX": { "testnet": "on", "devnet": "on", "mainnet": "on" },
+    "MPTokensV1": { "testnet": "on", "devnet": "on", "mainnet": "on" },
+    "PriceOracle": { "testnet": "on", "devnet": "on", "mainnet": "on" },
+    "DynamicNFT": { "testnet": "on", "devnet": "on", "mainnet": "on" },
+    "SingleAssetVault": { "testnet": "off", "devnet": "on", "mainnet": "off" },
+    "LendingProtocol": { "testnet": "off", "devnet": "on", "mainnet": "off" },
+    "Sponsor": { "testnet": "off", "devnet": "on", "mainnet": "off" },
+    "ConfidentialTransfer": { "testnet": "off", "devnet": "on", "mainnet": "off" },
+    "DID": { "testnet": "on", "devnet": "on", "mainnet": "on" }
   }
 }

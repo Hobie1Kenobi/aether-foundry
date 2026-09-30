@@ -11,7 +11,7 @@ const HEADERS = {
 
 /**
  * Curated programs plus a read-only amendment clock.
- * Testnet and Devnet only. Mainnet hosts stay refused.
+ * Mainnet is server_info and feature on one public host.
  * The desk does not sign and does not submit.
  */
 export async function GET() {
