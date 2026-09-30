@@ -89,7 +89,7 @@ function FrontierChips({ status }: { status: StatusBody | null }) {
   const grants = status?.grants_paid;
   const batch = status?.batch_atomic_enabled;
   return (
-    <div className="frontier-chips" aria-label="Frontier counters">
+    <div className="frontier-chips" id="f6" aria-label="Frontier counters">
       {beat?.hash ? (
         <Chip tone="live" href={EXPLORER_TX(beat.hash)} title={beat.hash}>
           heartbeat {shortId(beat.hash)}
@@ -106,7 +106,7 @@ function FrontierChips({ status }: { status: StatusBody | null }) {
       {batch == null ? (
         <Chip tone="muted">batch atomic —</Chip>
       ) : (
-        <Chip tone={batch ? "live" : "warn"}>
+        <Chip tone={batch ? "live" : "warn">
           batch atomic {batch ? "on" : "off"}
         </Chip>
       )}
@@ -121,7 +121,7 @@ function OracleCard({ status }: { status: StatusBody | null }) {
   const updated = formatUnix(oracle?.last_update_time ?? null);
   const account = oracle?.account || "";
   return (
-    <article className="card">
+    <article className="card" id="f1">
       <div className="card-heading">
         <h3>Native Oracle</h3>
         <Chip tone={id ? "live" : "muted"}>{id ? "on ledger" : "absent"}</Chip>
@@ -179,7 +179,8 @@ function OracleCard({ status }: { status: StatusBody | null }) {
 function LaborCard({ status }: { status: StatusBody | null }) {
   const id = status?.mpt_issuance_id ?? null;
   return (
-    <article className="card">
+    <article className="card" id="f2">
+      <span id="f3" className="anchor-target" />
       <div className="card-heading">
         <h3>Labor MPT</h3>
         <Chip tone={id ? "live" : "muted"}>{id ? "AETH-LABOR" : "absent"}</Chip>
@@ -204,7 +205,7 @@ function LaborCard({ status }: { status: StatusBody | null }) {
 function DomainCard({ status }: { status: StatusBody | null }) {
   const id = status?.domain_id ?? null;
   return (
-    <article className="card">
+    <article className="card" id="f4">
       <div className="card-heading">
         <h3>Credential Domain</h3>
         <Chip tone={id ? "live" : "muted"}>{id ? "on ledger" : "absent"}</Chip>
@@ -232,7 +233,7 @@ function FacilitatorCard({ status }: { status: StatusBody | null }) {
   const hits = status?.x402_outbound_hits;
   const tone = mode === "dual" ? "live" : mode === "refused" ? "error" : mode ? "warn" : "muted";
   return (
-    <article className="card">
+    <article className="card" id="x402-frontier">
       <div className="card-heading">
         <h3>x402 dual-mode</h3>
         <Chip tone={tone}>{mode ?? "absent"}</Chip>
@@ -308,7 +309,7 @@ function SponsorCard({ status }: { status: StatusBody | null }) {
   const row = status?.devnet?.f8;
   const live = Boolean(row?.create_hash || row?.object_hash);
   return (
-    <article className="card">
+    <article className="card" id="f8">
       <div className="card-heading">
         <h3>F8 Sponsor</h3>
         <Chip tone={live ? "live" : "muted"}>{live ? "on ledger" : "absent"}</Chip>
@@ -350,7 +351,7 @@ function VaultCard({ status }: { status: StatusBody | null }) {
   const row = status?.devnet?.f9;
   const live = Boolean(row?.vault_id || row?.loan_id);
   return (
-    <article className="card">
+    <article className="card" id="f9">
       <div className="card-heading">
         <h3>F9 Vault / loan</h3>
         <Chip tone={live ? "live" : "muted"}>{live ? "on ledger" : "absent"}</Chip>
@@ -403,7 +404,7 @@ function ConfidentialCard({ status }: { status: StatusBody | null }) {
   const row = status?.devnet?.f10;
   const live = Boolean(row?.issuance_id || row?.payment_hash || row?.clawback_hash);
   return (
-    <article className="card">
+    <article className="card" id="f10">
       <div className="card-heading">
         <h3>F10 Confidential MPT</h3>
         <Chip tone={live ? "live" : "muted"}>{live ? "on ledger" : "absent"}</Chip>
