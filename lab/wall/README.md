@@ -32,6 +32,14 @@ Testnet prefers `lab/frontier/amendments.json` when `probed_at` is under 36 hour
 
 ## Press headlines
 
-`GET /api/wall` also returns a `headlines` array from the public Cointelegraph Ripple tag RSS: `https://cointelegraph.com/rss/tag/ripple`. The route fetches that feed on the server, with a five-second timeout. A failed fetch leaves `headlines` empty. The amendment ticker still renders. Curated `programs.json` is not rewritten.
+`GET /api/wall` returns a `headlines` array. The desk merges two press sources and does not rewrite `programs.json`. Stage is `press`. `onchain.kind` is `none`. These rows are not ledger reads and they are not foundry claims. The desk does not sign.
 
-Each headline keeps the feed title and the article URL. Stage is `press`. `onchain.kind` is `none`. The label is `Press headline. Not on-chain.` These rows are not ledger reads and they are not foundry claims. `/api/wall/rss.xml` includes the same items as press, linked at the article. The desk does not sign.
+Cointelegraph comes from the public Ripple tag RSS: `https://cointelegraph.com/rss/tag/ripple`. The route fetches that feed on the server, with a five-second timeout. Each row keeps the feed title and the article URL. The actor is `Cointelegraph`. The label is `Press headline. Not on-chain.` A failed fetch leaves those rows out. The amendment ticker still renders.
+
+X comes from the X API v2 recent-search endpoint `https://api.x.com/2/tweets/search/recent`. The query is fixed in `web/lib/x-headlines.ts`. It is not an environment variable, so a request cannot turn the desk into an open search proxy. The query allowlists `@Ripple`, `@RippleXDev`, `@RippleX`, and `@bgarlinghouse`, plus the terms Ripple, RLUSD, and XRPL. Retweets and replies are excluded. A post from outside that account allowlist is kept only when its text mentions Ripple, RLUSD, XRPL, or XRP. The route asks for at most 10 posts, times out after five seconds, and keeps a three-minute in-memory cache on a warm server. It does not page. It does not scrape x.com HTML.
+
+Each X row uses the API text, truncated, as the title. The actor is `@handle`. The URL is `https://x.com/{handle}/status/{id}`. The label is `X post. Not on-chain.` A row is emitted only when that response included the post. The desk does not invent posts. Text that matches the wall's banned secret pattern is dropped.
+
+Auth is the server-only env var `X_BEARER_TOKEN` on the Vercel project `aether-foundry-desk`. `TWITTER_BEARER_TOKEN` is used only when the first name is unset. Do not prefix either name with `NEXT_PUBLIC_`. Do not commit a value. If the variable is missing, or the request fails, X headlines stay empty and `probe_notes` records a soft miss. Cointelegraph rows still render. Set the variable in Production (and Preview if that environment should match), then redeploy so the server process sees it.
+
+The merge de-duplicates by URL, sorts newest first, and keeps at most 15 headlines. `/api/wall/rss.xml` includes the same items as press. After the bearer is set, `GET /api/wall` should show `"label": "X post. Not on-chain."` and `/wall` should show those posts on the ticker with an `X` mark.

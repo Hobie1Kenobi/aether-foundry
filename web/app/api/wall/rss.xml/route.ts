@@ -11,6 +11,7 @@ const HEADERS = {
 
 /**
  * RSS 2.0 for the Wall of Change. Rumor rows are omitted.
+ * Press items are Cointelegraph titles and X posts. Neither is an on-chain claim.
  * The desk does not sign and does not submit.
  */
 export async function GET() {

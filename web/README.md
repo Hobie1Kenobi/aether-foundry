@@ -12,6 +12,7 @@ XRPL **Testnet** public desk. No seeds, no `Wallet.sign`, no private-key APIs.
    - `NEXT_PUBLIC_XRPL_WS` — used only to derive that HTTP URL when `NEXT_PUBLIC_XRPL_HTTP` is unset (`wss://host:51233` → `https://host:51234`)
    - `NEXT_PUBLIC_NETWORK_LABEL` — display label
    - `XRPL_FACILITATOR_URL` — **server-only**. Do not use the `NEXT_PUBLIC_` prefix. Set it in the Vercel project (Production, and Preview if that environment should match) to `https://xrpl-facilitator-testnet.t54.ai`. Optional companion: `XRPL_NETWORK=xrpl:1`. Any other facilitator host, including `https://xrpl-facilitator-mainnet.t54.ai`, makes `facilitator.mode` `refused`. Unset keeps `self-verify`.
+   - `X_BEARER_TOKEN` — **server-only**. X API v2 app bearer for Wall of Change recent search. Do not use the `NEXT_PUBLIC_` prefix and do not commit a value. `TWITTER_BEARER_TOKEN` is the alias when `X_BEARER_TOKEN` is unset. Unset leaves X headlines empty; Cointelegraph still loads. The search query is fixed in code. See `lab/wall/README.md`.
 5. Deploy. No secrets required. Mainnet hosts in those vars are ignored. After the facilitator env is saved, redeploy so the server process sees it.
 
 `/api/status` then reports `facilitator.mode` `dual`, `remoteVerify: true`, and `settles: false`. The desk may `POST /verify` on that testnet host. It does not call settle. Devnet F8–F10 cards read public git (`corp/wallets.md`, `lab/frontier/devnet-ledger.jsonl`) and stay off the Testnet NAV strip. No Devnet seed is read on Vercel.
@@ -25,7 +26,11 @@ curl -sS https://aether-foundry-desk.vercel.app/api/wall
 curl -sS https://aether-foundry-desk.vercel.app/api/wall/rss.xml | head
 ```
 
-`/api/wall` is the one route that calls a public mainnet JSON-RPC, and only for `server_info` and `feature` on `https://xrplcluster.com/`. It does not submit. The env vars above still cannot steer the rest of the desk onto a mainnet host.
+`/api/wall` is the one route that calls a public mainnet JSON-RPC, and only for `server_info` and `feature` on `https://xrplcluster.com/`. It does not submit. The env vars above still cannot steer the rest of the desk onto a mainnet host. The same route merges Cointelegraph Ripple RSS with X recent search. X rows are labeled `X post. Not on-chain.` After `X_BEARER_TOKEN` is saved, redeploy, then:
+
+```bash
+curl -sS https://aether-foundry-desk.vercel.app/api/wall | jq '.headlines[] | {actor,label,url,title}'
+```
 
 ## Domain host
 

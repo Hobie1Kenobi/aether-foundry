@@ -127,12 +127,13 @@ W3 must not be that buyer. See `machines/x402-desk/INBOUND.md`.
 ## Desk ops
 
 1. Merge machine UI + constants to `main`.
-2. Redeploy Vercel project `aether-foundry-desk` (Root Directory `web`). No seeds in Vercel. Optional public env only: `NEXT_PUBLIC_XRPL_HTTP`, `NEXT_PUBLIC_XRPL_WS`, `NEXT_PUBLIC_NETWORK_LABEL`.
+2. Redeploy Vercel project `aether-foundry-desk` (Root Directory `web`). No seeds in Vercel. Optional public env: `NEXT_PUBLIC_XRPL_HTTP`, `NEXT_PUBLIC_XRPL_WS`, `NEXT_PUBLIC_NETWORK_LABEL`. Optional server-only: `XRPL_FACILITATOR_URL`, `X_BEARER_TOKEN`.
 3. Verify:
    - `curl -sS -o /dev/null -w '%{http_code}\n' https://aether-foundry-desk.vercel.app/`
    - `curl -sS -o /dev/null -w '%{http_code}\n' https://aether-foundry-desk.vercel.app/.well-known/xrp-ledger.toml`
 4. Desk is **read-only**: no Wallet.sign, no AccountSet/OracleSet from the Next app.
 5. x402 merchant: unpaid `GET /api/x402/<sku>` is HTTP 402. Pay Testnet XRP to W3, then retry. See `machines/x402-desk/README.md`. The desk does not persist hits. `npm run x402:hit` appends `lab/ledger-log.jsonl` and sets `x402_hits` in `market/pnl.md`.
+6. Wall of Change X posts: set server-only `X_BEARER_TOKEN` on `aether-foundry-desk` (not `NEXT_PUBLIC_`, not in git). Unset leaves X headlines empty. Cointelegraph still loads. Redeploy after saving the variable, then open `/wall` and `GET /api/wall`. See `lab/wall/README.md`. The desk does not sign.
 
 ## x402 merchant
 

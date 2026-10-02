@@ -62,7 +62,7 @@ export interface AmendmentDots {
   mainnet: Dot;
 }
 
-/** Cointelegraph Ripple tag item. A headline, not a curated program or a ledger read. */
+/** Press ticker row. Cointelegraph RSS or an X post. Not a curated program or a ledger read. */
 export interface PressHeadline {
   id: string;
   ts: string;
@@ -77,6 +77,8 @@ export interface PressHeadline {
 
 export const PRESS_HEADLINE_ACTOR = "Cointelegraph";
 export const PRESS_HEADLINE_LABEL = "Press headline. Not on-chain.";
+export const X_POST_SOURCE = "X";
+export const X_POST_LABEL = "X post. Not on-chain.";
 /** Full marquee loop. The previous 28s pass was too fast to read. */
 export const WALL_TICKER_LOOP_S = 80;
 
