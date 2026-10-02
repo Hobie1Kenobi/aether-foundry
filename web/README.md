@@ -26,7 +26,7 @@ curl -sS https://aether-foundry-desk.vercel.app/api/wall
 curl -sS https://aether-foundry-desk.vercel.app/api/wall/rss.xml | head
 ```
 
-`/api/wall` is the one route that calls a public mainnet JSON-RPC, and only for `server_info` and `feature` on `https://xrplcluster.com/`. It does not submit. The env vars above still cannot steer the rest of the desk onto a mainnet host. The same route merges Cointelegraph Ripple RSS with X recent search. X rows are labeled `X post. Not on-chain.` After `X_BEARER_TOKEN` is saved, redeploy, then:
+`/api/wall` is the one route that calls a public mainnet JSON-RPC, for `server_info`, `feature`, and `account_info` on allowlisted mainnet-live accounts, all on `https://xrplcluster.com/`. It does not submit. The env vars above still cannot steer the rest of the desk onto a mainnet host. The same route merges Cointelegraph Ripple RSS with X recent search. X rows are labeled `X post. Not on-chain.` After `X_BEARER_TOKEN` is saved, redeploy, then:
 
 ```bash
 curl -sS https://aether-foundry-desk.vercel.app/api/wall | jq '.headlines[] | {actor,label,url,title}'

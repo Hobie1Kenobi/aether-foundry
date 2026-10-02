@@ -36,6 +36,12 @@ function truncateId(id: string): string {
   return `${id.slice(0, 4)}…${id.slice(-4)}`;
 }
 
+function ledgerSeen(iso: string): string {
+  const stamp = wireStamp(iso);
+  if (!stamp) return "";
+  return ` · seen ${stamp.day} ${stamp.time}`;
+}
+
 function wireStamp(iso: string): { day: string; time: string } | null {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
@@ -107,6 +113,12 @@ function Telegram({
       {program.onchain.id ? (
         <p className="mono wire-hash" title={program.onchain.id}>
           {truncateId(program.onchain.id)}
+        </p>
+      ) : null}
+      {program.ledger?.present ? (
+        <p className="mono wire-ledger">
+          on ledger · seq {program.ledger.sequence} · {program.ledger.balance_xrp} XRP
+          {ledgerSeen(program.ledger.seen_at)}
         </p>
       ) : null}
       <p className="wire-chips">

@@ -33,7 +33,14 @@ import {
   validateSources,
   type Program,
 } from "../../web/lib/wall-schema.ts";
-import { applyFoundryTwins, buildWall, renderRss, resolveAmendmentDots } from "../../web/lib/wall.ts";
+import {
+  applyFoundryTwins,
+  buildWall,
+  dropsToXrp,
+  mainnetAccountTargets,
+  renderRss,
+  resolveAmendmentDots,
+} from "../../web/lib/wall.ts";
 
 const sources = validateSources(sourcesJson);
 
@@ -54,8 +61,28 @@ function program(over: Partial<Program> & Pick<Program, "id" | "stage">): Progra
 
 test("schema rejects mainnet-live without an explorer url", () => {
   for (const row of programsJson as unknown[]) validateProgram(row, sources);
-  assert.ok((programsJson as unknown[]).length >= 18);
-  assert.ok((programsJson as unknown[]).length <= 20);
+  assert.ok((programsJson as unknown[]).length >= 21);
+  assert.ok((programsJson as unknown[]).length <= 24);
+  const byId = Object.fromEntries(
+    (programsJson as { id: string; onchain: { kind: string; id?: string; url?: string } }[]).map((row) => [
+      row.id,
+      row,
+    ])
+  );
+  assert.equal(byId["sg-forge-eur"].onchain.id, "rUNaS5sqRuxZz6V7rBGhoSaZiVYA3ut4UL");
+  assert.equal(byId["rlusd-issuer"].onchain.id, "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De");
+  assert.equal(byId["circle-usdc"].onchain.id, "rGm7WCVp9gb4jZHWTEtGUr4dd74z2XuWhE");
+  assert.equal(byId["ondo-ousg"].onchain.id, "rHuiXXjHLpMP8ZE9sSQU5aADQVWDwv6h5p");
+  assert.equal(byId["quantoz-eurq-usdq"].onchain.id, "rDk1xiArDMjDqnrR2yWypwQAKg4mKnQYvs");
+  assert.equal(byId["schuman-europ"].onchain.id, "rMkEuRii9w9uBMQDnWV5AA43gvYZR9JxVK");
+  for (const id of ["sg-forge-eur", "rlusd-issuer", "circle-usdc", "ondo-ousg", "quantoz-eurq-usdq", "schuman-europ"]) {
+    assert.equal(byId[id].onchain.kind, "account");
+    assert.match(byId[id].onchain.url || "", /^https:\/\/livenet\.xrpl\.org\/accounts\/r/);
+  }
+  for (const id of ["guggenheim-dcp", "archax-abrdn-mmf", "ctrl-alt-dld", "openeden-tbill"]) {
+    assert.equal(byId[id].onchain.kind, "none");
+    assert.equal(byId[id].onchain.id, undefined);
+  }
   const liveRows = (programsJson as { stage: string; onchain: { kind: string; url?: string } }[]).filter(
     (row) => row.stage === "mainnet-live"
   );
@@ -863,4 +890,216 @@ test("wall merges cointelegraph and x headlines without inventing posts", async 
   assert.match(xOnly.probe_notes.join(" "), /Cointelegraph Ripple press feed was unavailable/);
   assert.doesNotMatch(xOnly.probe_notes.join(" "), /Headlines stay empty/);
   assert.equal(xOnly.programs.length, (programsJson as unknown[]).length);
+});
+
+const LIVE_IDS = ["sg-forge-eur", "rlusd-issuer", "circle-usdc", "ondo-ousg", "quantoz-eurq-usdq", "schuman-europ"];
+const PILOT_IDS = ["guggenheim-dcp", "archax-abrdn-mmf", "ctrl-alt-dld"];
+
+function freshAmendments(now: number) {
+  return {
+    probed_at: new Date(now).toISOString(),
+    build_version: "3.4.1",
+    amendments: [] as { name: string; enabled: boolean; majority: null }[],
+  };
+}
+
+function accountInfoResult(account: string, drops: string, sequence: number, validated = true) {
+  return {
+    account_data: { Account: account, Balance: drops, Sequence: sequence },
+    validated,
+    ledger_index: 107390809,
+  };
+}
+
+test("on-chain and mainnet filters stay on curated rows", () => {
+  const rows = (programsJson as unknown[]).map((row) => validateProgram(row, sources));
+  const targets = mainnetAccountTargets(rows);
+  assert.deepEqual(
+    targets.map((row) => row.id),
+    LIVE_IDS
+  );
+  assert.equal(targets.some((row) => PILOT_IDS.includes(row.id)), false);
+  assert.equal(targets.some((row) => row.id === "openeden-tbill"), false);
+  const onChain = filterPrograms(rows, "on-chain");
+  const mainnet = filterPrograms(rows, "mainnet");
+  assert.ok(onChain.every((row) => row.onchain.kind !== "none"));
+  for (const id of LIVE_IDS) {
+    assert.equal(onChain.some((row) => row.id === id), true);
+    assert.equal(mainnet.some((row) => row.id === id), true);
+  }
+  for (const id of PILOT_IDS) {
+    assert.equal(onChain.some((row) => row.id === id), false);
+    assert.equal(mainnet.some((row) => row.id === id), true);
+    assert.equal(mainnet.find((row) => row.id === id)?.onchain.kind, "none");
+  }
+  assert.equal(onChain.some((row) => row.id === "openeden-tbill"), false);
+  assert.equal(mainnet.some((row) => row.id === "openeden-tbill"), false);
+  assert.equal(mainnet.some((row) => row.id === "odl-sbi-tranglo"), false);
+  const tsx = readFileSync(new URL("../../web/components/wall-of-change.tsx", import.meta.url), "utf8");
+  assert.match(tsx, /filter !== "all" && filter !== "press"/);
+  assert.match(tsx, /on ledger · seq/);
+  assert.equal(dropsToXrp("1500000"), "1.500000");
+  assert.equal(dropsToXrp("118249602"), "118.249602");
+  assert.equal(dropsToXrp("nope"), null);
+});
+
+test("mainnet account read refreshes allowlisted cards and fails soft", async () => {
+  const now = Date.parse("2026-10-02T22:13:00.000Z");
+  const fresh = freshAmendments(now);
+  const curated = (programsJson as unknown[]).map((row) => validateProgram(row, sources));
+  const expectedAccounts = new Map(mainnetAccountTargets(curated).map((row) => [row.id, row.account]));
+  const calls: { host: string; method: string; account?: string }[] = [];
+
+  function wallFetch(mode: "ok" | "down" | "missing" | "bad-network"): typeof fetch {
+    return (async (input, init) => {
+      const url = new URL(String(input));
+      const body = JSON.parse(String(init?.body)) as { method?: string; params?: Record<string, unknown>[] };
+      const method = String(body.method);
+      const account = typeof body.params?.[0]?.account === "string" ? body.params[0].account : undefined;
+      calls.push({ host: url.hostname, method, account });
+      assert.ok(method === "server_info" || method === "feature" || method === "account_info");
+      assert.notEqual(method, "submit");
+      assert.notEqual(method, "sign");
+      if (url.hostname === "xrplcluster.com" && method === "server_info") {
+        return rpcResponse({
+          info: {
+            network_id: mode === "bad-network" ? 1 : 0,
+            build_version: "3.4.1",
+            validated_ledger: { seq: 107390809 },
+          },
+        });
+      }
+      if (url.hostname === "xrplcluster.com" && method === "feature") {
+        return rpcResponse({
+          features: {
+            BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB: {
+              name: "TokenEscrow",
+              enabled: true,
+              majority: null,
+            },
+          },
+        });
+      }
+      if (url.hostname === "xrplcluster.com" && method === "account_info") {
+        assert.equal(url.pathname, "/");
+        assert.equal(body.params?.[0]?.ledger_index, "validated");
+        assert.equal([...expectedAccounts.values()].includes(String(account)), true);
+        if (mode === "down") throw new Error("mainnet unreachable");
+        if (mode === "missing" && account === expectedAccounts.get("circle-usdc")) {
+          return rpcResponse({ error: "actNotFound", error_message: "Account not found.", status: "error" });
+        }
+        return rpcResponse(accountInfoResult(String(account), "1500000", 42));
+      }
+      if (url.hostname === "s.altnet.rippletest.net" && method === "server_info") {
+        return rpcResponse({
+          info: { network_id: 1, build_version: "3.4.1", validated_ledger: { seq: 9 } },
+        });
+      }
+      throw new Error(`unexpected ${method} ${url.hostname}`);
+    }) as typeof fetch;
+  }
+
+  calls.length = 0;
+  const payload = await buildWall({
+    xBearerToken: null,
+    headlines: [],
+    now,
+    status: {},
+    testnetFile: fresh,
+    devnetFile: fresh,
+    lastSeen: { amendments: {} },
+    fetch: wallFetch("ok"),
+  });
+  assert.equal(payload.wire_status, "ok");
+  assert.equal(payload.amendments.TokenEscrow.mainnet, "on");
+  assert.equal(payload.headlines.length, 0);
+  const asked = calls.filter((call) => call.method === "account_info").map((call) => call.account);
+  assert.deepEqual(asked.slice().sort(), [...expectedAccounts.values()].slice().sort());
+  assert.equal(calls.some((call) => call.method === "submit" || call.method === "sign"), false);
+  assert.equal(calls.some((call) => call.host !== "xrplcluster.com" && call.host !== "s.altnet.rippletest.net"), false);
+  for (const id of LIVE_IDS) {
+    const row = payload.programs.find((item) => item.id === id);
+    const prior = curated.find((item) => item.id === id);
+    assert.ok(row);
+    assert.ok(prior);
+    assert.equal(row.actor, prior.actor);
+    assert.equal(row.claim, prior.claim);
+    assert.equal(row.onchain.id, prior.onchain.id);
+    assert.equal(row.onchain.url, prior.onchain.url);
+    assert.equal(row.ledger?.present, true);
+    assert.equal(row.ledger?.sequence, 42);
+    assert.equal(row.ledger?.balance_xrp, "1.500000");
+    assert.equal(row.ledger?.seen_at, "2026-10-02T22:13:00.000Z");
+  }
+  for (const id of [...PILOT_IDS, "openeden-tbill"]) {
+    const row = payload.programs.find((item) => item.id === id);
+    assert.equal(row?.ledger, undefined);
+    assert.equal(row?.onchain.kind, "none");
+  }
+  const onChain = filterPrograms(payload.programs, "on-chain");
+  const mainnet = filterPrograms(payload.programs, "mainnet");
+  assert.ok(LIVE_IDS.every((id) => onChain.some((row) => row.id === id)));
+  assert.ok(PILOT_IDS.every((id) => !onChain.some((row) => row.id === id)));
+  assert.ok(PILOT_IDS.every((id) => mainnet.some((row) => row.id === id)));
+  assert.doesNotMatch(JSON.stringify(payload), /seed|secret|sEd/);
+
+  calls.length = 0;
+  const down = await buildWall({
+    xBearerToken: null,
+    headlines: [],
+    now,
+    status: {},
+    testnetFile: fresh,
+    devnetFile: fresh,
+    lastSeen: { amendments: {} },
+    fetch: wallFetch("down"),
+  });
+  assert.equal(down.wire_status, "degraded");
+  assert.match(down.probe_notes.join(" "), /Mainnet account probe failed for/);
+  assert.match(down.probe_notes.join(" "), /Curated cards stay/);
+  for (const id of LIVE_IDS) {
+    const row = down.programs.find((item) => item.id === id);
+    const prior = curated.find((item) => item.id === id);
+    assert.equal(row?.ledger, undefined);
+    assert.equal(row?.claim, prior?.claim);
+    assert.equal(row?.onchain.id, prior?.onchain.id);
+    assert.equal(filterPrograms(down.programs, "on-chain").some((item) => item.id === id), true);
+    assert.equal(filterPrograms(down.programs, "mainnet").some((item) => item.id === id), true);
+  }
+  assert.equal(filterPrograms(down.programs, "mainnet").some((row) => row.id === "guggenheim-dcp"), true);
+  assert.equal(filterPrograms(down.programs, "on-chain").some((row) => row.id === "guggenheim-dcp"), false);
+
+  const missing = await buildWall({
+    xBearerToken: null,
+    headlines: [],
+    now,
+    status: {},
+    testnetFile: fresh,
+    devnetFile: fresh,
+    lastSeen: { amendments: {} },
+    fetch: wallFetch("missing"),
+  });
+  assert.equal(missing.wire_status, "degraded");
+  assert.match(missing.probe_notes.join(" "), /not on the validated ledger for circle-usdc/);
+  assert.equal(missing.programs.find((row) => row.id === "circle-usdc")?.ledger, undefined);
+  assert.equal(missing.programs.find((row) => row.id === "circle-usdc")?.onchain.id, expectedAccounts.get("circle-usdc"));
+  assert.equal(missing.programs.find((row) => row.id === "rlusd-issuer")?.ledger?.sequence, 42);
+
+  calls.length = 0;
+  const refused = await buildWall({
+    xBearerToken: null,
+    headlines: [],
+    now,
+    status: {},
+    testnetFile: fresh,
+    devnetFile: fresh,
+    lastSeen: { amendments: {} },
+    fetch: wallFetch("bad-network"),
+  });
+  assert.equal(calls.some((call) => call.method === "account_info"), false);
+  assert.match(refused.probe_notes.join(" "), /Mainnet feature probe failed/);
+  assert.match(refused.probe_notes.join(" "), /Mainnet account probe was not applied/);
+  assert.equal(refused.programs.find((row) => row.id === "sg-forge-eur")?.ledger, undefined);
+  assert.equal(refused.amendments.TokenEscrow.mainnet, "unknown");
+  assert.notEqual(refused.amendments.TokenEscrow.mainnet, "on");
 });

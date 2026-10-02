@@ -1,7 +1,8 @@
 /**
  * Wall of Change merge. Read-only JSON-RPC.
  * Testnet, Devnet, and one public mainnet host.
- * The mainnet host is used for server_info and feature only.
+ * The mainnet host is used for server_info, feature, and account_info
+ * on allowlisted mainnet-live classic accounts.
  * A failed probe never becomes enabled.
  * The desk does not sign and does not submit.
  */
@@ -24,6 +25,7 @@ import {
   validateSources,
   type AmendmentDots,
   type Dot,
+  type MainnetLedger,
   type PressHeadline,
   type Program,
   type Source,
@@ -32,14 +34,15 @@ import {
 
 export const WALL_ORIGIN = "https://aether-foundry-desk.vercel.app";
 export const MAINNET_NOTE =
-  "Mainnet dots are read-only server_info and feature on xrplcluster.com (network id 0). This route does not submit.";
+  "Mainnet dots are read-only server_info and feature on xrplcluster.com (network id 0). Allowlisted mainnet-live accounts are read with account_info on that same host. This route does not submit.";
 
 const FRESH_MS = 36 * 60 * 60 * 1000;
 const TESTNET_HTTP = "https://s.altnet.rippletest.net:51234";
 const DEVNET_HTTP = "https://s.devnet.rippletest.net:51234";
 const MAINNET_HTTP = "https://xrplcluster.com/";
 const MAINNET_NETWORK_ID = 0;
-const READ_METHODS = new Set(["server_info", "feature"]);
+const READ_METHODS = new Set(["server_info", "feature", "account_info"]);
+const CLASSIC_ACCOUNT_RE = /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/;
 const ALLOWED_HOSTS = new Set([
   "s.altnet.rippletest.net:51234",
   "s.devnet.rippletest.net:51234",
@@ -131,13 +134,40 @@ function assertAllowedHost(raw: string): void {
   if (!ALLOWED_HOSTS.has(key)) throw new Error("refusing non-allowlisted XRPL host");
 }
 
-async function rpc(fetchImpl: FetchLike, url: string, method: string): Promise<Record<string, unknown>> {
+function accountReadParams(url: string, params: Record<string, unknown>): Record<string, unknown> {
+  let host: URL;
+  try {
+    host = new URL(url);
+  } catch {
+    throw new Error("refusing unparseable XRPL url");
+  }
+  const key = `${host.hostname.toLowerCase()}${host.port ? `:${host.port}` : ""}`;
+  if (key !== "xrplcluster.com") throw new Error("refusing account_info host");
+  const keys = Object.keys(params).sort();
+  if (keys.length !== 2 || keys[0] !== "account" || keys[1] !== "ledger_index") {
+    throw new Error("refusing account_info params");
+  }
+  if (params.ledger_index !== "validated") throw new Error("refusing account_info ledger");
+  if (typeof params.account !== "string" || !CLASSIC_ACCOUNT_RE.test(params.account)) {
+    throw new Error("refusing account_info account");
+  }
+  return { account: params.account, ledger_index: "validated" };
+}
+
+async function rpc(
+  fetchImpl: FetchLike,
+  url: string,
+  method: string,
+  params: Record<string, unknown> = {}
+): Promise<Record<string, unknown>> {
   if (!READ_METHODS.has(method)) throw new Error("refusing XRPL method");
   assertAllowedHost(url);
+  const bodyParams = method === "account_info" ? accountReadParams(url, params) : null;
+  if (method !== "account_info" && Object.keys(params).length !== 0) throw new Error("refusing XRPL params");
   const res = await fetchImpl(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ method, params: [{}] }),
+    body: JSON.stringify({ method, params: [bodyParams ?? {}] }),
     redirect: "error",
     signal: AbortSignal.timeout(5000),
   });
@@ -448,6 +478,98 @@ export function downWall(now = Date.now()): WallPayload {
   };
 }
 
+export function dropsToXrp(drops: string): string | null {
+  if (!/^\d+$/.test(drops)) return null;
+  const value = BigInt(drops);
+  const whole = value / 1_000_000n;
+  const frac = (value % 1_000_000n).toString().padStart(6, "0");
+  return `${whole.toString()}.${frac}`;
+}
+
+function balanceDrops(value: unknown): string | null {
+  if (typeof value === "string" && /^\d+$/.test(value)) return value;
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return String(value);
+  return null;
+}
+
+/** Curated mainnet-live classic accounts. This is the only account_info allowlist. */
+export function mainnetAccountTargets(programs: Program[]): { id: string; account: string }[] {
+  const out: { id: string; account: string }[] = [];
+  for (const program of programs) {
+    if (program.stage !== "mainnet-live") continue;
+    if (!program.networks.includes("xrpl:0")) continue;
+    if (program.onchain.kind !== "account") continue;
+    const account = program.onchain.id;
+    const url = program.onchain.url;
+    if (typeof account !== "string" || !CLASSIC_ACCOUNT_RE.test(account)) continue;
+    if (typeof url !== "string" || !/^https:\/\//.test(url)) continue;
+    out.push({ id: program.id, account });
+  }
+  return out;
+}
+
+function readAccountFacts(
+  result: Record<string, unknown>,
+  expected: string
+): { sequence: number; balance_xrp: string } {
+  if (result.validated !== true) throw new Error("account_info not validated");
+  const data = result.account_data;
+  if (!data || typeof data !== "object") throw new Error("account_info missing account_data");
+  const rec = data as { Account?: unknown; Balance?: unknown; Sequence?: unknown };
+  if (rec.Account !== expected) throw new Error("account_info account mismatch");
+  if (typeof rec.Sequence !== "number" || !Number.isSafeInteger(rec.Sequence) || rec.Sequence < 0) {
+    throw new Error("account_info sequence");
+  }
+  const drops = balanceDrops(rec.Balance);
+  if (!drops) throw new Error("account_info balance");
+  const balance = dropsToXrp(drops);
+  if (!balance) throw new Error("account_info balance");
+  return { sequence: rec.Sequence, balance_xrp: balance };
+}
+
+async function readMainnetAccounts(
+  fetchImpl: FetchLike,
+  targets: { id: string; account: string }[],
+  seenAt: string
+): Promise<{ reads: Map<string, MainnetLedger>; missing: string[]; failed: string[] }> {
+  const reads = new Map<string, MainnetLedger>();
+  const missing: string[] = [];
+  const failed: string[] = [];
+  await Promise.all(
+    targets.map(async (target) => {
+      try {
+        const result = await rpc(fetchImpl, MAINNET_HTTP, "account_info", {
+          account: target.account,
+          ledger_index: "validated",
+        });
+        const facts = readAccountFacts(result, target.account);
+        reads.set(target.id, { present: true, ...facts, seen_at: seenAt });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "";
+        if (message === "actNotFound") missing.push(target.id);
+        else failed.push(target.id);
+      }
+    })
+  );
+  const order = new Map(targets.map((target, index) => [target.id, index]));
+  const byOrder = (a: string, b: string) => (order.get(a) ?? 0) - (order.get(b) ?? 0);
+  missing.sort(byOrder);
+  failed.sort(byOrder);
+  return { reads, missing, failed };
+}
+
+export function applyMainnetAccountReads(
+  programs: Program[],
+  reads: ReadonlyMap<string, MainnetLedger>
+): Program[] {
+  if (reads.size === 0) return programs;
+  return programs.map((program) => {
+    const ledger = reads.get(program.id);
+    if (!ledger) return program;
+    return { ...program, ledger };
+  });
+}
+
 export async function buildWall(opts: BuildWallOptions = {}): Promise<WallPayload> {
   const now = opts.now == null ? Date.now() : opts.now;
   const fetchImpl = opts.fetch || fetch;
@@ -474,19 +596,57 @@ export async function buildWall(opts: BuildWallOptions = {}): Promise<WallPayloa
   let degraded = opts.status == null;
   if (opts.status == null) notes.push("Desk status was unavailable. Foundry twin ids were not attached.");
 
+  const accountTargets = mainnetAccountTargets(programs);
+  const seenAt = new Date(now).toISOString();
   let mainnetMode: SideMode = "failed";
   let mainnetProbe: AmendmentFile | null = null;
-  const mainnetTask = probeNetwork(fetchImpl, MAINNET_HTTP, MAINNET_NETWORK_ID)
-    .then((probed) => {
-      mainnetProbe = probed;
-      mainnetMode = "probe";
-    })
-    .catch(() => {
+  const mainnetInfoTask = rpc(fetchImpl, MAINNET_HTTP, "server_info")
+    .then((info) => readServer(info, MAINNET_NETWORK_ID))
+    .catch(() => null);
+  const mainnetFeatureTask = mainnetInfoTask.then(async (server) => {
+    if (!server) {
       mainnetMode = "failed";
       mainnetProbe = null;
       degraded = true;
       notes.push("Mainnet feature probe failed. Mainnet dots stay unknown.");
-    });
+      return;
+    }
+    try {
+      const feature = await rpc(fetchImpl, MAINNET_HTTP, "feature");
+      mainnetProbe = {
+        probed_at: seenAt,
+        build_version: server.build,
+        ledger_index: server.ledger,
+        amendments: featureRows(feature),
+      };
+      mainnetMode = "probe";
+    } catch {
+      mainnetMode = "failed";
+      mainnetProbe = null;
+      degraded = true;
+      notes.push("Mainnet feature probe failed. Mainnet dots stay unknown.");
+    }
+  });
+  const accountTask = mainnetInfoTask.then(async (server) => {
+    if (accountTargets.length === 0) return new Map<string, MainnetLedger>();
+    if (!server) {
+      degraded = true;
+      notes.push("Mainnet account probe was not applied. The network id read failed. Curated cards stay.");
+      return new Map<string, MainnetLedger>();
+    }
+    const outcome = await readMainnetAccounts(fetchImpl, accountTargets, seenAt);
+    if (outcome.missing.length > 0) {
+      degraded = true;
+      notes.push(
+        `Mainnet account was not on the validated ledger for ${outcome.missing.join(", ")}. Curated cards stay.`
+      );
+    }
+    if (outcome.failed.length > 0) {
+      degraded = true;
+      notes.push(`Mainnet account probe failed for ${outcome.failed.join(", ")}. Curated cards stay.`);
+    }
+    return outcome.reads;
+  });
 
   const xToken = opts.xBearerToken === undefined ? readXBearerToken() : opts.xBearerToken;
   const headlineTask =
@@ -539,7 +699,7 @@ export async function buildWall(opts: BuildWallOptions = {}): Promise<WallPayloa
     }
   }
 
-  await mainnetTask;
+  const [ledgerReads] = await Promise.all([accountTask, mainnetFeatureTask]);
 
   const amendments = resolveAmendmentDots({
     names: CLOCK.map((row) => row.name),
@@ -554,7 +714,10 @@ export async function buildWall(opts: BuildWallOptions = {}): Promise<WallPayloa
     mainnetProbe,
   });
 
-  const merged = sortNewest(applyFoundryTwins(programs, opts.status ?? null));
+  const merged = applyMainnetAccountReads(
+    sortNewest(applyFoundryTwins(programs, opts.status ?? null)),
+    ledgerReads
+  );
   const [headlineResult, xResult] = await Promise.all([headlineTask, xTask]);
   const headlines = mergePressHeadlines(
     headlineResult.ok ? headlineResult.headlines : [],
