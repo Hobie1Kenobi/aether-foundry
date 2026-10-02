@@ -241,42 +241,37 @@ async function main() {
     const prepared = await client.autofill(tx);
     if (prepared.NetworkID === 0) die("refusing NetworkID 0");
     const signed = wallet.sign(prepared);
-    const submitted = await client.submitAndWait(signed.tx_blob);
-    const view = submittedView(submitted);
-    if (view.result !== "tesSUCCESS") {
-      die(`payment result ${view.result || "missing"}`);
-    }
-    const hash = view.hash || signed.hash;
-    console.log("paid", hash);
-
-    const payload = guard.buildSignaturePayload({
+    const delivered = await guard.deliverForeignPayment({
+      fetchImpl: fetch,
+      resourceUrl,
       required,
       accept,
       txBlob: signed.tx_blob,
-      hash,
+      hash: signed.hash,
+      sleep,
+      submit: async () => {
+        const submitted = await client.submitAndWait(signed.tx_blob);
+        const view = submittedView(submitted);
+        return {
+          hash: view.hash || signed.hash,
+          result: view.result,
+          ledger_index: view.ledger_index,
+        };
+      },
     });
-    const signature = guard.encodeHeader(payload);
-    let retry;
-    let text = "";
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      retry = await fetch(resourceUrl, {
-        headers: {
-          Accept: "application/json",
-          "PAYMENT-SIGNATURE": signature,
-        },
-      });
-      text = await retry.text();
-      if (retry.status === 200) break;
-      const parsed = parseBody(text);
-      const code = parsed && parsed.code;
-      if (code !== "payment_not_on_ledger" && code !== "payment_not_validated") break;
-      await sleep(1000 * (attempt + 1));
+    if (delivered.hash && (delivered.http_status === 200 || delivered.submitted)) {
+      console.log("paid", delivered.hash);
     }
-    console.log("status", retry.status);
-    console.log(text);
-    if (retry.status !== 200) {
-      console.error("payment submitted; HTTP retry did not return 200. Do not pay again.");
-      console.error("tx", hash);
+    console.log("settlement", delivered.mode);
+    console.log("status", delivered.http_status);
+    console.log(delivered.body);
+    if (delivered.http_status !== 200) {
+      if (delivered.submitted) {
+        console.error("payment submitted; HTTP retry did not return 200. Do not pay again.");
+        console.error("tx", delivered.hash);
+      } else {
+        console.error("shop did not settle the presigned payment. Nothing was submitted.");
+      }
       process.exitCode = 1;
       return;
     }
@@ -289,8 +284,8 @@ async function main() {
         amount_drops: accept.amount,
         source_tag: extra.sourceTag == null ? null : Number(extra.sourceTag),
         invoice_id: extra.invoiceId || null,
-        hash,
-        ledger_index: view.ledger_index,
+        hash: delivered.hash,
+        ledger_index: delivered.ledger_index,
         http_status: 200,
       });
       console.log("recorded", JSON.stringify(recorded));

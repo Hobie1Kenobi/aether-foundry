@@ -6,6 +6,9 @@
  * Dry-run unless --live. Cap 500000 drops (0.5 XRP).
  * SourceTag plus an aether-foundry memo so an indexer can see the payment.
  * Does not call a facilitator settle endpoint. Does not print a seed.
+ * A shop that settles the presigned blob gets PAYMENT-SIGNATURE first
+ * (payload.signedTxBlob and payload.invoiceId) and is not submitted by Foundry.
+ * payment_not_on_ledger still submits that same blob once, then retries.
  *
  *   npm run x402:citizen
  *   npm run x402:citizen -- --url https://foreign.example/sku
@@ -273,9 +276,53 @@ async function run(opts) {
   if (runtimePolicy.paidOnUtcDay(rows, "x402_outbound", options.now || new Date())) {
     throw Object.assign(new Error("refusing a second outbound on this UTC day"), { code: "NOT_DUE" });
   }
-  if (typeof options.submit === "function") {
-    const submitted = await options.submit(tx, found.chosen);
-    return baseReport(Object.assign(preview, { dry_run: false, signed: true, hash: submitted.hash, result: submitted.result }));
+  const fetchPaid = options.fetchImpl || globalThis.fetch;
+  async function finishLive(signed, submit, keyEnv) {
+    if (!signed || typeof signed.tx_blob !== "string" || !signed.tx_blob || !signed.hash) {
+      throw Object.assign(new Error("signer did not return a signed blob"), { code: "SUBMIT" });
+    }
+    const delivered = await guard.deliverForeignPayment({
+      fetchImpl: fetchPaid,
+      resourceUrl: found.chosen.resourceUrl,
+      required: found.chosen.required,
+      accept,
+      txBlob: signed.tx_blob,
+      hash: signed.hash,
+      submit,
+      sleep: options.sleep,
+    });
+    if (args.record && delivered.http_status === 200 && delivered.hash) {
+      const write = options.recordOutbound || record.recordOutbound;
+      write({
+        network: "xrpl:1",
+        resource_url: found.chosen.resourceUrl,
+        pay_to: accept.payTo,
+        payer: guard.W3_ADDRESS,
+        amount_drops: drops,
+        source_tag: tx.SourceTag,
+        invoice_id: preview.invoice,
+        hash: delivered.hash,
+        ledger_index: delivered.ledger_index,
+        http_status: 200,
+      });
+    }
+    return baseReport(
+      Object.assign(preview, {
+        dry_run: false,
+        signed: true,
+        submitted: delivered.submitted,
+        settlement: delivered.mode,
+        hash: delivered.hash,
+        result: delivered.result,
+        http_status: delivered.http_status,
+        body: delivered.body,
+        key_env: keyEnv || undefined,
+      })
+    );
+  }
+  if (typeof options.sign === "function") {
+    const signed = await options.sign(tx);
+    return finishLive(signed, options.submit, "");
   }
   const loaded = loadSignerSeed(env, options.io);
   if (!loaded.seed) {
@@ -305,47 +352,19 @@ async function run(opts) {
       throw Object.assign(new Error("refusing NetworkID other than 1"), { code: "invalid_network" });
     }
     const signed = wallet.sign(prepared);
-    const submitted = await client.submitAndWait(signed.tx_blob);
-    const result = (submitted && (submitted.result || submitted)) || {};
-    const meta = result.meta || result.metaData || {};
-    if (meta.TransactionResult !== "tesSUCCESS") {
-      throw Object.assign(new Error(`payment result ${meta.TransactionResult || "missing"}`), { code: "SUBMIT" });
-    }
-    const hash = result.hash || signed.hash;
-    const payload = guard.buildSignaturePayload({
-      required: found.chosen.required,
-      accept,
-      txBlob: signed.tx_blob,
-      hash,
-    });
-    const retry = await fetchImpl(found.chosen.resourceUrl, {
-      headers: { Accept: "application/json", "PAYMENT-SIGNATURE": guard.encodeHeader(payload) },
-    });
-    const retryText = await retry.text();
-    if (args.record && retry.status === 200) {
-      record.recordOutbound({
-        network: "xrpl:1",
-        resource_url: found.chosen.resourceUrl,
-        pay_to: accept.payTo,
-        payer: wallet.classicAddress,
-        amount_drops: drops,
-        source_tag: tx.SourceTag,
-        invoice_id: preview.invoice,
-        hash,
-        ledger_index: result.ledger_index == null ? null : result.ledger_index,
-        http_status: 200,
-      });
-    }
-    return baseReport(
-      Object.assign(preview, {
-        dry_run: false,
-        signed: true,
-        hash,
-        result: "tesSUCCESS",
-        http_status: retry.status,
-        body: retryText,
-        key_env: loaded.key_env,
-      })
+    return finishLive(
+      signed,
+      async () => {
+        const submitted = await client.submitAndWait(signed.tx_blob);
+        const result = (submitted && (submitted.result || submitted)) || {};
+        const meta = result.meta || result.metaData || {};
+        return {
+          hash: result.hash || signed.hash,
+          result: meta.TransactionResult,
+          ledger_index: result.ledger_index == null ? null : result.ledger_index,
+        };
+      },
+      loaded.key_env
     );
   } finally {
     await client.disconnect();
@@ -368,6 +387,8 @@ function printReport(report) {
   console.log("x402_outbound_hits", report.hits ? report.hits.x402_outbound_hits : 0);
   if (report.reason) console.log("reason", report.reason);
   if (report.notes && report.notes.length) console.log("notes", report.notes.join(" | "));
+  if (report.settlement) console.log("settlement", report.settlement);
+  if (report.http_status != null) console.log("http_status", report.http_status);
   if (report.hash) console.log("hash", report.hash);
   else console.log("no tx hash (not submitted)");
 }
@@ -377,6 +398,7 @@ async function main() {
     const report = await run({ argv: process.argv.slice(2), env: process.env });
     printReport(report);
     if (report.code === "CAP") process.exitCode = 2;
+    else if (!report.dry_run && report.http_status != null && report.http_status !== 200) process.exitCode = 1;
   } catch (error) {
     console.error(error.message || error);
     process.exit(error.code === "CAP" || error.code === "NOT_DUE" || error.code === "LIVE_GATE" ? 2 : 1);

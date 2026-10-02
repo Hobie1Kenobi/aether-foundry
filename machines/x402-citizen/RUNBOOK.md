@@ -35,6 +35,8 @@ No `--url` and an empty `candidates.json` is a successful dry-run: `foreign_shop
 
 `--record` appends `x402_outbound` only after HTTP 200. The signer is `W3_REGULAR_SEED`, then `W3_SEED`, and the classic address must be W3. The process refuses NetworkID other than 1.
 
+The signature payload includes `invoiceId` from the challenge when `extra.invoiceId` is set. Foundry does not submit first. A shop that settles the presigned blob (CryptoBuddy / t54, Testnet only) returns 200 from that signature. A shop that only looks up a validated Payment answers `payment_not_on_ledger`; Foundry then submits the same blob once and retries. The fingerprint memo and the shop `SourceTag` stay on the Payment.
+
 ## Counts
 
 `/api/status` fields:

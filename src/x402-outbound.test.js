@@ -10,6 +10,7 @@ const { spawn } = require("child_process");
 const guard = require("./x402-outbound-guard");
 const record = require("./x402-outbound-record");
 const payer = require("./x402-outbound");
+const runtimeOutbound = require("./runtime/actions/outbound");
 const pub = require("../machines/x402-outbound/foreign-public");
 const shop = require("../machines/x402-outbound/foreign-shop");
 const rules = require("../web/lib/x402-rules");
@@ -444,5 +445,244 @@ describe("outbound CLI", () => {
     assert.match(result.stderr, /npm run x402:outbound -- --url /);
     assert.match(result.stderr, /--record/);
     assert.doesNotMatch(`${result.stdout}${result.stderr}`, /paid /);
+  });
+});
+
+function jsonReply(status, body) {
+  return {
+    status,
+    headers: { get: () => "" },
+    text: async () => JSON.stringify(body),
+  };
+}
+
+describe("PAYMENT-SIGNATURE invoiceId", () => {
+  const accept = {
+    scheme: "exact",
+    network: "xrpl:1",
+    amount: "1000",
+    asset: "XRP",
+    payTo: pub.FOREIGN_ADDRESS,
+    extra: { sourceTag: 20260908, invoiceId: "02DEA90ED40A4CFFB8A774C6F74B0109" },
+  };
+
+  it("echoes accept.extra.invoiceId and keeps the signed blob", () => {
+    const payload = guard.buildSignaturePayload({
+      required: { resource: { url: "https://x402.example/sku" } },
+      accept,
+      txBlob: "BLOB",
+      hash: "AB".repeat(32),
+    });
+    assert.equal(payload.x402Version, 2);
+    assert.equal(payload.payload.signedTxBlob, "BLOB");
+    assert.equal(payload.payload.transaction, "AB".repeat(32));
+    assert.equal(payload.payload.invoiceId, "02DEA90ED40A4CFFB8A774C6F74B0109");
+  });
+
+  it("omits invoiceId and transaction when the challenge has neither", () => {
+    const payload = guard.buildSignaturePayload({
+      required: {},
+      accept: { payTo: pub.FOREIGN_ADDRESS, amount: "1000", extra: {} },
+      txBlob: "BLOB",
+    });
+    assert.equal(payload.payload.signedTxBlob, "BLOB");
+    assert.equal(Object.prototype.hasOwnProperty.call(payload.payload, "invoiceId"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(payload.payload, "transaction"), false);
+  });
+
+  it("shop-settle returns 200 without submitting", async () => {
+    let submits = 0;
+    const seen = [];
+    const delivered = await guard.deliverForeignPayment({
+      resourceUrl: "https://x402.example/sku",
+      required: { resource: { url: "https://x402.example/sku" } },
+      accept,
+      txBlob: "BLOB",
+      hash: "C".repeat(64),
+      sleep: async () => {},
+      fetchImpl: async (_url, init) => {
+        seen.push(rules.decodeHeader(init.headers["PAYMENT-SIGNATURE"]).payload);
+        return jsonReply(200, { ok: true });
+      },
+      submit: async () => {
+        submits += 1;
+        return { hash: "C".repeat(64), result: "tesSUCCESS" };
+      },
+    });
+    assert.equal(submits, 0);
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].signedTxBlob, "BLOB");
+    assert.equal(seen[0].invoiceId, accept.extra.invoiceId);
+    assert.equal(Object.prototype.hasOwnProperty.call(seen[0], "transaction"), false);
+    assert.equal(delivered.mode, "shop-settle");
+    assert.equal(delivered.submitted, false);
+    assert.equal(delivered.http_status, 200);
+    assert.equal(delivered.hash, "C".repeat(64));
+  });
+
+  it("does not submit when the shop rejects the signature", async () => {
+    let submits = 0;
+    const delivered = await guard.deliverForeignPayment({
+      resourceUrl: "https://x402.example/sku",
+      accept,
+      txBlob: "BLOB",
+      hash: "C".repeat(64),
+      sleep: async () => {},
+      fetchImpl: async () => jsonReply(400, { error: "missing_invoiceId" }),
+      submit: async () => {
+        submits += 1;
+        return { hash: "C".repeat(64), result: "tesSUCCESS" };
+      },
+    });
+    assert.equal(submits, 0);
+    assert.equal(delivered.mode, "refused");
+    assert.equal(delivered.submitted, false);
+    assert.equal(delivered.http_status, 400);
+    assert.equal(delivered.hash, null);
+  });
+
+  it("submits once after payment_not_on_ledger and retries with the hash", async () => {
+    let submits = 0;
+    const seen = [];
+    const delivered = await guard.deliverForeignPayment({
+      resourceUrl: "https://x402.example/sku",
+      accept,
+      txBlob: "BLOB",
+      hash: "E".repeat(64),
+      sleep: async () => {},
+      fetchImpl: async (_url, init) => {
+        const payload = rules.decodeHeader(init.headers["PAYMENT-SIGNATURE"]).payload;
+        seen.push(payload);
+        if (seen.length === 1) return jsonReply(402, { code: "payment_not_on_ledger" });
+        return jsonReply(200, { ok: true, ledger_index: 88 });
+      },
+      submit: async () => {
+        submits += 1;
+        return { hash: "E".repeat(64), result: "tesSUCCESS", ledger_index: 87 };
+      },
+    });
+    assert.equal(submits, 1);
+    assert.equal(seen[0].invoiceId, accept.extra.invoiceId);
+    assert.equal(Object.prototype.hasOwnProperty.call(seen[0], "transaction"), false);
+    assert.equal(seen[1].transaction, "E".repeat(64));
+    assert.equal(seen[1].invoiceId, accept.extra.invoiceId);
+    assert.equal(delivered.mode, "client-submit");
+    assert.equal(delivered.submitted, true);
+    assert.equal(delivered.http_status, 200);
+    assert.equal(delivered.ledger_index, 88);
+    assert.equal(delivered.hash, "E".repeat(64));
+  });
+
+  it("desk buyer still submits before the signature helper", () => {
+    const src = fs.readFileSync(path.join(ROOT, "src", "x402-pay.js"), "utf8");
+    const submitAt = src.indexOf("submitAndWait");
+    const payloadAt = src.indexOf("buildSignaturePayload");
+    assert.ok(submitAt > 0);
+    assert.ok(payloadAt > submitAt);
+    for (const file of ["src/x402-outbound.js", "src/x402-citizen-buy.js"]) {
+      const payerSrc = fs.readFileSync(path.join(ROOT, file), "utf8");
+      const deliverAt = payerSrc.indexOf("deliverForeignPayment");
+      const waitAt = payerSrc.indexOf("submitAndWait");
+      assert.ok(deliverAt > 0, file);
+      assert.ok(waitAt > deliverAt, file);
+      assert.equal(payerSrc.indexOf("submitAndWait", waitAt + 1), -1, file);
+    }
+    const runtimeSrc = fs.readFileSync(path.join(ROOT, "src", "runtime", "actions", "outbound.js"), "utf8");
+    assert.ok(runtimeSrc.includes("deliverForeignPayment"));
+    assert.equal(runtimeSrc.includes("submitAndWait"), false);
+  });
+});
+
+describe("runtime outbound shop-settle", () => {
+  const required = {
+    x402Version: 2,
+    accepts: [
+      {
+        scheme: "exact",
+        network: "xrpl:1",
+        amount: "5000",
+        asset: "XRP",
+        payTo: pub.FOREIGN_ADDRESS,
+        extra: { sourceTag: 1, invoiceId: "fx-runtime-invoice" },
+      },
+    ],
+  };
+
+  function state() {
+    return {
+      wallets: { W3: { regular_key: "rav5cYVarjSaXeeqCbsghMmmVGcJWB5y7Q" } },
+      watched: { batch: { atomic_enabled: false } },
+    };
+  }
+
+  it("records HTTP 200 without submitBlob when the shop settles", async () => {
+    let submits = 0;
+    const recorded = [];
+    const done = await runtimeOutbound.execute({
+      env: { FOUNDRY_DAEMON_LIVE: "yes", CI: "", GITHUB_ACTIONS: "" },
+      state: state(),
+      now: new Date("2026-09-29T12:00:00.000Z"),
+      history: [],
+      required,
+      resourceUrl: "https://foreign.example/sku",
+      sleep: async () => {},
+      sign: async (tx) => {
+        assert.equal(tx.Destination, pub.FOREIGN_ADDRESS);
+        assert.equal(tx.Amount, "5000");
+        return { tx_blob: "BLOB", hash: "C".repeat(64) };
+      },
+      submitBlob: async () => {
+        submits += 1;
+        return { hash: "C".repeat(64), result: "tesSUCCESS" };
+      },
+      fetchImpl: async (_url, init) => {
+        const payload = rules.decodeHeader(init.headers["PAYMENT-SIGNATURE"]).payload;
+        assert.equal(payload.invoiceId, "fx-runtime-invoice");
+        assert.equal(payload.signedTxBlob, "BLOB");
+        assert.equal(Object.prototype.hasOwnProperty.call(payload, "transaction"), false);
+        return jsonReply(200, { ok: true });
+      },
+      archive: () => {},
+      recordOutbound: (row) => recorded.push(row),
+    });
+    assert.equal(submits, 0);
+    assert.equal(done.settlement, "shop-settle");
+    assert.equal(done.submitted, false);
+    assert.equal(done.http_status, 200);
+    assert.equal(done.hash, "C".repeat(64));
+    assert.equal(recorded.length, 1);
+    assert.equal(recorded[0].invoice_id, "fx-runtime-invoice");
+    assert.equal(recorded[0].action, "x402_outbound");
+  });
+
+  it("uses submitBlob only after payment_not_on_ledger", async () => {
+    let submits = 0;
+    let calls = 0;
+    const done = await runtimeOutbound.execute({
+      env: { FOUNDRY_DAEMON_LIVE: "yes", CI: "", GITHUB_ACTIONS: "" },
+      state: state(),
+      now: new Date("2026-09-29T12:00:00.000Z"),
+      history: [],
+      required,
+      resourceUrl: "https://foreign.example/sku",
+      sleep: async () => {},
+      sign: async () => ({ tx_blob: "BLOB", hash: "E".repeat(64) }),
+      submitBlob: async (blob) => {
+        submits += 1;
+        assert.equal(blob, "BLOB");
+        return { hash: "E".repeat(64), result: "tesSUCCESS", ledger_index: 12 };
+      },
+      fetchImpl: async () => {
+        calls += 1;
+        if (calls === 1) return jsonReply(402, { code: "payment_not_on_ledger" });
+        return jsonReply(200, { ok: true });
+      },
+      archive: () => {},
+      recordOutbound: () => {},
+    });
+    assert.equal(submits, 1);
+    assert.equal(done.settlement, "client-submit");
+    assert.equal(done.submitted, true);
+    assert.equal(done.http_status, 200);
   });
 });
