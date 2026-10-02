@@ -3,8 +3,9 @@
 
 /**
  * W3 CHANNELS outbound x402 payer. Testnet only.
- * Loads W3_SEED from AETHER_SECRETS or /workspace/aether-foundry-secrets/.env.
- * Never prints the seed. Refuses CI, mainnet, and any Foundry payTo.
+ * Prefers W3_REGULAR_SEED, then W3_SEED, from the env or the secrets file.
+ * Payment Account stays W3. Never prints the seed.
+ * Refuses CI, mainnet, and any Foundry payTo.
  *
  *   npm run x402:outbound -- --url http://127.0.0.1:8787/foreign-oracle-ping --max-drops 10000 --dry-run
  *   npm run x402:outbound -- --url http://127.0.0.1:8787/foreign-oracle-ping --max-drops 10000 --record
@@ -17,7 +18,7 @@ const guard = require("./x402-outbound-guard");
 const record = require("./x402-outbound-record");
 const runtimePolicy = require("./runtime/policy");
 
-const SECRETS_PATH = "/workspace/aether-foundry-secrets/.env";
+const SECRETS_PATH = guard.SECRETS_PATH;
 const ROOT = path.resolve(__dirname, "..");
 
 function die(message, code) {
@@ -54,7 +55,7 @@ function loadW3Seed(env, io = {}) {
 
 function missingSeedMessage(resourceUrl) {
   return [
-    "W3_SEED is not loaded. Put W3_SEED in AETHER_SECRETS or /workspace/aether-foundry-secrets/.env.",
+    "W3_REGULAR_SEED or W3_SEED is not loaded. Put one in AETHER_SECRETS or /workspace/aether-foundry-secrets/.env.",
     "Refusing to sign.",
     "One-click on the Foundry box (start the foreign shop if that is the URL):",
     "npm run x402:foreign",
@@ -216,24 +217,27 @@ async function main() {
 
   if (repoOutboundPaidToday()) die("refusing a second outbound on this UTC day", 2);
 
-  const seed = loadW3Seed(process.env);
-  if (!seed) die(missingSeedMessage(resourceUrl));
+  const loaded = guard.loadW3SignerSeed(process.env);
+  if (!loaded.seed) die(missingSeedMessage(resourceUrl));
 
   let wallet;
   try {
-    wallet = xrpl.Wallet.fromSeed(seed);
+    wallet = xrpl.Wallet.fromSeed(loaded.seed);
   } catch {
-    die("W3_SEED is not a usable seed");
+    die(`${loaded.key_env} is not a usable seed`);
   }
-  if (wallet.classicAddress !== guard.W3_ADDRESS) {
-    die(`W3_SEED address ${wallet.classicAddress} is not W3 CHANNELS ${guard.W3_ADDRESS}`);
+  try {
+    guard.assertW3Signer(wallet, loaded, process.env);
+  } catch (error) {
+    die(error.message);
   }
-  console.log("payer", wallet.classicAddress);
+  console.log("payer", guard.W3_ADDRESS);
+  console.log("key_env", loaded.key_env);
   console.log("payTo", accept.payTo);
   console.log("drops", accept.amount);
   if (extra.invoiceId) console.log("invoice", extra.invoiceId);
 
-  const tx = guard.buildPaymentTx({ account: wallet.classicAddress, accept });
+  const tx = guard.buildPaymentTx({ account: guard.W3_ADDRESS, accept });
   const client = new xrpl.Client(ws);
   await client.connect();
   try {
@@ -280,7 +284,7 @@ async function main() {
         network: "xrpl:1",
         resource_url: resourceUrl,
         pay_to: accept.payTo,
-        payer: wallet.classicAddress,
+        payer: guard.W3_ADDRESS,
         amount_drops: accept.amount,
         source_tag: extra.sourceTag == null ? null : Number(extra.sourceTag),
         invoice_id: extra.invoiceId || null,

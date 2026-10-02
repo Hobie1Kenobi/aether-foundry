@@ -3,7 +3,9 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
+const xrpl = require("xrpl");
 const rules = require("../web/lib/x402-rules");
 const guard = require("./x402-outbound-guard");
 const citizen = require("./x402-citizen-buy");
@@ -61,7 +63,9 @@ describe("citizen buyer", () => {
     assert.equal(report.fingerprint_memo, "aether-foundry:f11");
     assert.match(report.reason, /no foreign shop/);
     const filed = JSON.parse(fs.readFileSync(citizen.CANDIDATES, "utf8"));
-    assert.deepEqual(filed.urls, []);
+    assert.deepEqual(filed.urls, [
+      "https://x402.cryptobuddy.com.au/crypto/australia/best?asset=XRP&amount=5000&side=buy",
+    ]);
     assert.equal(filed.network, "xrpl:1");
   });
 
@@ -243,5 +247,278 @@ describe("citizen buyer", () => {
     assert.equal(hits.x402_outbound_hits, 1);
     const src = fs.readFileSync(path.join(ROOT, "src", "x402-citizen-buy.js"), "utf8");
     assert.equal(src.includes("/settle"), false);
+  });
+});
+
+function liveEnv(extra) {
+  return Object.assign(
+    {
+      FOUNDRY_DAEMON_LIVE: "yes",
+      CI: "",
+      GITHUB_ACTIONS: "",
+      AETHER_SECRETS: path.join(os.tmpdir(), "aether-citizen-missing.env"),
+    },
+    extra || {}
+  );
+}
+
+function fakeClient(hooks) {
+  return {
+    networkID: hooks && hooks.networkID != null ? hooks.networkID : 1,
+    async autofill(tx) {
+      if (hooks && hooks.autofill) return hooks.autofill(tx);
+      return Object.assign({}, tx, { Fee: "12", Sequence: 1 });
+    },
+    async submitAndWait(blob) {
+      if (hooks && hooks.submitAndWait) return hooks.submitAndWait(blob);
+      return { result: { hash: "D".repeat(64), meta: { TransactionResult: "tesSUCCESS" } } };
+    },
+    async disconnect() {},
+  };
+}
+
+describe("W3 regular key signer", () => {
+  const packRegular = guard.w3RegularAddress({});
+
+  it("accepts the activated regular key and keeps the payment Account on W3", async () => {
+    assert.notEqual(packRegular, guard.W3_ADDRESS);
+    assert.doesNotThrow(() =>
+      guard.assertW3Signer({ classicAddress: packRegular }, { key_env: "W3_REGULAR_SEED" }, {})
+    );
+    assert.throws(
+      () => guard.assertW3Signer({ classicAddress: guard.W3_ADDRESS }, { key_env: "W3_REGULAR_SEED" }, {}),
+      (error) => error.code === "ACCOUNT" && /regular key/.test(error.message)
+    );
+    let seenSeed = "";
+    const report = await citizen.run({
+      args: citizen.parseArgs(["--live", "--url", "https://foreign.example/sku"]),
+      env: liveEnv({ W3_REGULAR_SEED: "regular-placeholder", W3_SEED: "master-placeholder" }),
+      ledgerText: "",
+      sleep: async () => {},
+      fetchImpl: async (_url, init) => {
+        if (!init || !init.headers || !init.headers["PAYMENT-SIGNATURE"]) return challenge(FOREIGN);
+        const decoded = rules.decodeHeader(init.headers["PAYMENT-SIGNATURE"]);
+        assert.equal(decoded.payload.signedTxBlob, "blob");
+        assert.equal(decoded.payload.invoiceId, "foreign-day6");
+        assert.equal(Object.prototype.hasOwnProperty.call(decoded.payload, "transaction"), false);
+        return {
+          status: 200,
+          headers: { get: () => "" },
+          text: async () => "{}",
+        };
+      },
+      walletFromSeed(seed) {
+        seenSeed = seed;
+        return {
+          classicAddress: packRegular,
+          sign(tx) {
+            assert.equal(tx.Account, guard.W3_ADDRESS);
+            return { tx_blob: "blob", hash: "D".repeat(64) };
+          },
+        };
+      },
+      connect: async () => fakeClient({
+        submitAndWait() {
+          throw new Error("shop-settle must not submit");
+        },
+      }),
+    });
+    assert.equal(seenSeed, "regular-placeholder");
+    assert.equal(report.signed, true);
+    assert.equal(report.submitted, false);
+    assert.equal(report.settlement, "shop-settle");
+    assert.equal(report.payer, guard.W3_ADDRESS);
+    assert.equal(report.key_env, "W3_REGULAR_SEED");
+    assert.equal(report.tx.Account, guard.W3_ADDRESS);
+    assert.equal(report.hash, "D".repeat(64));
+  });
+
+  it("signs with the regular key wallet when W3_REGULAR_ADDRESS matches that classic", async () => {
+    const regular = xrpl.Wallet.generate();
+    const report = await citizen.run({
+      args: citizen.parseArgs(["--live", "--url", "https://foreign.example/sku"]),
+      env: liveEnv({
+        W3_REGULAR_SEED: regular.seed,
+        W3_SEED: xrpl.Wallet.generate().seed,
+        W3_REGULAR_ADDRESS: regular.classicAddress,
+      }),
+      ledgerText: "",
+      sleep: async () => {},
+      fetchImpl: async (_url, init) => {
+        if (!init || !init.headers || !init.headers["PAYMENT-SIGNATURE"]) return challenge(FOREIGN);
+        const decoded = rules.decodeHeader(init.headers["PAYMENT-SIGNATURE"]);
+        const tx = xrpl.decode(decoded.payload.signedTxBlob);
+        assert.equal(tx.Account, guard.W3_ADDRESS);
+        assert.notEqual(tx.Account, regular.classicAddress);
+        assert.equal(tx.SigningPubKey, regular.publicKey);
+        assert.equal(decoded.payload.invoiceId, "foreign-day6");
+        return {
+          status: 200,
+          headers: { get: () => "" },
+          text: async () => "{}",
+        };
+      },
+      connect: async (url) => {
+        assert.equal(url, guard.XRPL_WS);
+        return fakeClient({
+          submitAndWait() {
+            throw new Error("shop-settle must not submit");
+          },
+        });
+      },
+    });
+    assert.equal(report.signed, true);
+    assert.equal(report.submitted, false);
+    assert.equal(report.settlement, "shop-settle");
+    assert.match(report.hash, /^[0-9A-F]{64}$/);
+    assert.equal(report.key_env, "W3_REGULAR_SEED");
+    assert.equal(report.payer, guard.W3_ADDRESS);
+    assert.equal(JSON.stringify(report).includes(regular.seed), false);
+  });
+
+  it("refuses a regular seed that is not the known regular key, and a master seed that is not W3", async () => {
+    const stranger = xrpl.Wallet.generate();
+    let connects = 0;
+    const connect = async () => {
+      connects += 1;
+      throw new Error("should not connect");
+    };
+    await assert.rejects(
+      () =>
+        citizen.run({
+          args: citizen.parseArgs(["--live", "--url", "https://foreign.example/sku"]),
+          env: liveEnv({ W3_REGULAR_SEED: stranger.seed, W3_SEED: "master-should-not-be-used" }),
+          ledgerText: "",
+          fetchImpl: async () => challenge(FOREIGN),
+          connect,
+        }),
+      (error) => error.code === "ACCOUNT" && /regular key/.test(error.message) && error.message.includes(packRegular)
+    );
+    await assert.rejects(
+      () =>
+        citizen.run({
+          args: citizen.parseArgs(["--live", "--url", "https://foreign.example/sku"]),
+          env: liveEnv({ W3_SEED: stranger.seed }),
+          ledgerText: "",
+          fetchImpl: async () => challenge(FOREIGN),
+          connect,
+        }),
+      (error) => error.code === "ACCOUNT" && /W3 CHANNELS/.test(error.message)
+    );
+    await assert.rejects(
+      () =>
+        citizen.run({
+          args: citizen.parseArgs(["--live", "--url", "https://foreign.example/sku"]),
+          env: liveEnv({ W3_REGULAR_SEED: "not-a-seed" }),
+          ledgerText: "",
+          fetchImpl: async () => challenge(FOREIGN),
+          connect,
+        }),
+      (error) => error.code === "SEED"
+    );
+    assert.equal(connects, 0);
+    const master = await citizen.run({
+      args: citizen.parseArgs(["--live", "--url", "https://foreign.example/sku"]),
+      env: liveEnv({ W3_SEED: "master-placeholder" }),
+      ledgerText: "",
+      sleep: async () => {},
+      fetchImpl: async (_url, init) => {
+        if (!init || !init.headers || !init.headers["PAYMENT-SIGNATURE"]) return challenge(FOREIGN);
+        return {
+          status: 200,
+          headers: { get: () => "" },
+          text: async () => "{}",
+        };
+      },
+      walletFromSeed(seed) {
+        assert.equal(seed, "master-placeholder");
+        return {
+          classicAddress: guard.W3_ADDRESS,
+          sign(tx) {
+            assert.equal(tx.Account, guard.W3_ADDRESS);
+            return { tx_blob: "blob", hash: "F".repeat(64) };
+          },
+        };
+      },
+      connect: async () => fakeClient({
+        submitAndWait() {
+          throw new Error("shop-settle must not submit");
+        },
+      }),
+    });
+    assert.equal(master.signed, true);
+    assert.equal(master.key_env, "W3_SEED");
+    assert.equal(master.payer, guard.W3_ADDRESS);
+  });
+
+  it("refuses CI and a non-testnet websocket before signing", async () => {
+    const regular = xrpl.Wallet.generate();
+    await assert.rejects(
+      () =>
+        citizen.run({
+          args: citizen.parseArgs(["--live", "--url", "https://foreign.example/sku"]),
+          env: liveEnv({ CI: "true", W3_REGULAR_SEED: regular.seed }),
+          ledgerText: "",
+          fetchImpl: async () => challenge(FOREIGN),
+          connect: async () => {
+            throw new Error("should not connect");
+          },
+        }),
+      (error) => error.code === "CI"
+    );
+    await assert.rejects(
+      () =>
+        citizen.run({
+          args: citizen.parseArgs(["--live", "--url", "https://foreign.example/sku"]),
+          env: liveEnv({
+            W3_REGULAR_SEED: regular.seed,
+            W3_REGULAR_ADDRESS: regular.classicAddress,
+            XRPL_WS_URL: "wss://xrplcluster.com",
+          }),
+          ledgerText: "",
+          fetchImpl: async () => challenge(FOREIGN),
+          connect: async () => {
+            throw new Error("should not connect");
+          },
+        }),
+      (error) => error.code === "MAINNET"
+    );
+    await assert.rejects(
+      () =>
+        citizen.run({
+          args: citizen.parseArgs(["--live", "--url", "https://foreign.example/sku"]),
+          env: liveEnv({
+            W3_REGULAR_SEED: regular.seed,
+            W3_REGULAR_ADDRESS: regular.classicAddress,
+          }),
+          ledgerText: "",
+          fetchImpl: async () => challenge(FOREIGN),
+          connect: async () => fakeClient({ networkID: 0 }),
+        }),
+      (error) => error.code === "invalid_network"
+    );
+  });
+
+  it("prefers a regular seed in the secrets file over an env master seed", () => {
+    const file = path.join(os.tmpdir(), `w3-regular-${process.pid}.env`);
+    fs.writeFileSync(file, "W3_REGULAR_SEED=file-regular\nW3_SEED=file-master\n");
+    const fromFile = citizen.loadSignerSeed({ AETHER_SECRETS: file, W3_SEED: "env-master" });
+    assert.deepEqual(fromFile, { seed: "file-regular", key_env: "W3_REGULAR_SEED" });
+    const fromEnv = citizen.loadSignerSeed({
+      AETHER_SECRETS: file,
+      W3_REGULAR_SEED: "env-regular",
+      W3_SEED: "env-master",
+    });
+    assert.deepEqual(fromEnv, { seed: "env-regular", key_env: "W3_REGULAR_SEED" });
+    fs.unlinkSync(file);
+    assert.equal(guard.w3RegularAddress({ W3_REGULAR_ADDRESS: `  ${packRegular}  ` }), packRegular);
+    assert.throws(
+      () => guard.w3RegularAddress({ W3_REGULAR_ADDRESS: guard.W3_ADDRESS }),
+      (error) => error.code === "ACCOUNT"
+    );
+    assert.throws(
+      () => guard.w3RegularAddress({ W3_REGULAR_ADDRESS: "not-an-address" }),
+      (error) => error.code === "ACCOUNT"
+    );
   });
 });

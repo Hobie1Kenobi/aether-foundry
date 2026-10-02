@@ -1,5 +1,7 @@
 {
   "network": "xrpl:1",
   "note": "HTTPS URLs of other agents' XRPL Testnet x402 SKUs. Empty means the daily buy dry-runs and records no hash. Do not list the Foundry desk. Pay-to must stay outside WALLETS.",
-  "urls": []
+  "urls": [
+    "https://x402.cryptobuddy.com.au/crypto/australia/best?asset=XRP&amount=5000&side=buy"
+  ]
 }
