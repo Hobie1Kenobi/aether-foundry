@@ -542,13 +542,18 @@ test("x bearer stays out of git and a missing token does not fetch", async () =>
   assert.equal(X_HEADLINE_TIMEOUT_MS, 5000);
   assert.equal(X_HEADLINE_CACHE_MS, 3 * 60 * 1000);
   assert.equal(MERGED_HEADLINE_CAP, 15);
-  assert.deepEqual(X_ACCOUNT_ALLOWLIST, ["Ripple", "RippleXDev", "RippleX", "bgarlinghouse"]);
+  assert.deepEqual(X_ACCOUNT_ALLOWLIST, ["Ripple", "RippleXDev", "RippleX", "bgarlinghouse", "smqkedqg"]);
+  assert.equal(
+    X_HEADLINE_QUERY,
+    `(from:${X_ACCOUNT_ALLOWLIST.join(" OR from:")}) -is:retweet -is:reply lang:en`
+  );
   for (const name of X_ACCOUNT_ALLOWLIST) {
     assert.match(X_HEADLINE_QUERY, new RegExp(`from:${name}\\b`));
   }
   assert.match(X_HEADLINE_QUERY, /-is:retweet/);
   assert.match(X_HEADLINE_QUERY, /-is:reply/);
   assert.match(X_HEADLINE_QUERY, /lang:en/);
+  assert.doesNotMatch(X_HEADLINE_QUERY, /\bOR\s+(?:Ripple|RLUSD|XRPL|XRP)\b/);
   assert.doesNotMatch(X_HEADLINE_QUERY, /bearer|seed|secret/i);
   const endpoint = new URL(xRecentSearchUrl());
   assert.equal(endpoint.origin + endpoint.pathname, X_SEARCH_ENDPOINT);
@@ -610,6 +615,12 @@ test("x recent search maps posts, drops noise, and caches without the bearer", a
         author_id: "200",
         created_at: "2026-09-30T16:30:00.000Z",
       }),
+      xTweet({
+        id: "1840000000000000012",
+        text: "Desk note from the founder account",
+        author_id: "400",
+        created_at: "2026-09-30T16:45:00.000Z",
+      }),
       xTweet({ id: "1840000000000000001", text: long, created_at: "2026-09-30T16:00:00.000Z" }),
       xTweet({ id: "1840000000000000001", text: "Ripple duplicate id", created_at: "2026-09-30T16:00:00.000Z" }),
       xTweet({
@@ -621,7 +632,7 @@ test("x recent search maps posts, drops noise, and caches without the bearer", a
       xTweet({ id: "1840000000000000011", text: "XRPL from a missing author", author_id: "404", created_at: "2026-09-30T15:30:00.000Z" }),
     ],
     includes: {
-      users: [xUser("100", "Ripple"), xUser("200", "xrpl_watch"), xUser("300", "bad.name")],
+      users: [xUser("100", "Ripple"), xUser("200", "xrpl_watch"), xUser("300", "bad.name"), xUser("400", "smqkedqg")],
     },
     meta: { next_token: "do-not-page" },
   };
@@ -635,15 +646,21 @@ test("x recent search maps posts, drops noise, and caches without the bearer", a
   assert.equal(headlines[0].onchain.kind, "none");
   assert.equal(headlines[0].label, X_POST_LABEL);
   assert.equal(headlines[0].source_title, "X");
-  assert.equal(headlines[1].actor, "@xrpl_watch");
-  assert.equal(headlines[1].title, "Quoted note on RLUSD");
+  assert.equal(headlines[1].actor, "@smqkedqg");
+  assert.equal(headlines[1].title, "Desk note from the founder account");
+  assert.equal(headlines[1].url, "https://x.com/smqkedqg/status/1840000000000000012");
   assert.equal(headlines[2].actor, "@Ripple");
   assert.equal(headlines[2].title.length <= 240, true);
   assert.ok(headlines[2].title.endsWith("…"));
+  assert.equal(headlines[3].actor, "@Ripple");
   assert.equal(headlines[3].title, "RLUSD settlement update for the XRPL.");
   assert.equal(new Set(headlines.map((row) => row.url)).size, headlines.length);
+  for (const row of headlines) {
+    const handle = row.actor.slice(1).toLowerCase();
+    assert.ok(X_ACCOUNT_ALLOWLIST.some((name) => name.toLowerCase() === handle));
+  }
   const blob = JSON.stringify(headlines);
-  assert.doesNotMatch(blob, /seed|secret|sEd|giveaway|español|duplicate|numeric|missing author|\bgm\b/);
+  assert.doesNotMatch(blob, /seed|secret|sEd|giveaway|español|duplicate|numeric|missing author|\bgm\b|xrpl_watch|Quoted note/);
   assert.doesNotMatch(blob, new RegExp(X_TOKEN));
   assert.equal(parseXHeadlines({ meta: { result_count: 0 } }).length, 0);
   const many = parseXHeadlines({
@@ -766,13 +783,24 @@ test("wall merges cointelegraph and x headlines without inventing posts", async 
       source_title: "X",
       label: X_POST_LABEL,
     },
+    {
+      id: "x-1840000000000000177",
+      ts: "2026-09-30T18:00:00.000Z",
+      actor: "@TJJXRP",
+      title: "RLUSD keyword from outside the allowlist",
+      stage: "press" as const,
+      onchain: { kind: "none" as const },
+      url: "https://x.com/TJJXRP/status/1840000000000000177",
+      source_title: "X",
+      label: X_POST_LABEL,
+    },
   ]);
   assert.equal(merged.length, MERGED_HEADLINE_CAP);
   assert.equal(merged.filter((row) => row.label === X_POST_LABEL).length, 10);
   assert.equal(merged.filter((row) => row.actor === "Cointelegraph").length, 5);
   assert.ok(Date.parse(merged[0].ts) >= Date.parse(merged[merged.length - 1].ts));
   assert.equal(new Set(merged.map((row) => row.url.toLowerCase())).size, merged.length);
-  assert.doesNotMatch(JSON.stringify(merged), /seed|secret|sEd|mismatch/);
+  assert.doesNotMatch(JSON.stringify(merged), /seed|secret|sEd|mismatch|TJJXRP|outside the allowlist/);
 
   const xml = feedXml([
     itemXml("Ripple custody desk expands", "/news/ripple-custody-desk", "Wed, 30 Sep 2026 15:00:00 +0000"),

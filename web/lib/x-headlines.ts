@@ -13,9 +13,9 @@ import {
 } from "./wall-schema";
 
 export const X_SEARCH_ENDPOINT = "https://api.x.com/2/tweets/search/recent";
-/** Official accounts in the fixed query. RippleXDev is the engineering account. */
-export const X_ACCOUNT_ALLOWLIST = ["Ripple", "RippleXDev", "RippleX", "bgarlinghouse"] as const;
-export const X_HEADLINE_QUERY = `(from:${X_ACCOUNT_ALLOWLIST.join(" OR from:")} OR Ripple OR RLUSD OR XRPL) -is:retweet -is:reply lang:en`;
+/** Official accounts the fixed recent-search query may return. Exact handles. */
+export const X_ACCOUNT_ALLOWLIST = ["Ripple", "RippleXDev", "RippleX", "bgarlinghouse", "smqkedqg"] as const;
+export const X_HEADLINE_QUERY = `(from:${X_ACCOUNT_ALLOWLIST.join(" OR from:")}) -is:retweet -is:reply lang:en`;
 export const X_HEADLINE_MAX = 10;
 export const X_HEADLINE_TIMEOUT_MS = 5000;
 /** Short memory cache so a warm server does not repeat the recent-search call. */
@@ -26,7 +26,6 @@ const MAX_BODY_CHARS = 1_000_000;
 const MAX_TITLE_CHARS = 240;
 const USERNAME_RE = /^[A-Za-z0-9_]{1,15}$/;
 const TWEET_ID_RE = /^[1-9]\d{0,21}$/;
-const TOPIC_RE = /\b(?:ripple|rlusd|xrpl|xrp)\b/i;
 const ALLOWED_ACCOUNTS = new Set(X_ACCOUNT_ALLOWLIST.map((name) => name.toLowerCase()));
 
 export type XHeadlineFetch = {
@@ -147,9 +146,8 @@ function userNames(body: Record<string, unknown>): Map<string, string> {
   return map;
 }
 
-function onTopic(username: string, text: string): boolean {
-  if (ALLOWED_ACCOUNTS.has(username.toLowerCase())) return true;
-  return TOPIC_RE.test(text);
+function allowedAccount(username: string): boolean {
+  return ALLOWED_ACCOUNTS.has(username.toLowerCase());
 }
 
 export function parseXHeadlines(body: unknown, token: string | null = null): PressHeadline[] {
@@ -166,9 +164,9 @@ export function parseXHeadlines(body: unknown, token: string | null = null): Pre
     if (typeof entry.lang === "string" && entry.lang !== "en") continue;
     if (typeof entry.author_id !== "string") continue;
     const username = names.get(entry.author_id);
-    if (!username) continue;
+    if (!username || !allowedAccount(username)) continue;
     const title = clipTitle(entry.text);
-    if (!title || !onTopic(username, title)) continue;
+    if (!title) continue;
     if (typeof entry.created_at !== "string") continue;
     const published = Date.parse(entry.created_at);
     if (Number.isNaN(published)) continue;
@@ -212,6 +210,7 @@ export function sanitizeXHeadlines(raw: unknown): PressHeadline[] {
     const url = canonicalXStatusUrl(item.url);
     const handle = item.actor.slice(1);
     const tweetId = item.id.slice(2);
+    if (!allowedAccount(handle)) continue;
     if (!url || url !== `https://x.com/${handle}/status/${tweetId}`) continue;
     if (Number.isNaN(Date.parse(item.ts))) continue;
     if (seen.has(url) || seen.has(item.id)) continue;
