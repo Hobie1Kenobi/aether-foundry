@@ -11,6 +11,21 @@ import {
   parseRippleHeadlines,
 } from "../../web/lib/ripple-headlines.ts";
 import {
+  MERGED_HEADLINE_CAP,
+  X_ACCOUNT_ALLOWLIST,
+  X_HEADLINE_CACHE_MS,
+  X_HEADLINE_MAX,
+  X_HEADLINE_QUERY,
+  X_HEADLINE_TIMEOUT_MS,
+  X_SEARCH_ENDPOINT,
+  fetchXHeadlines,
+  mergePressHeadlines,
+  parseXHeadlines,
+  readXBearerToken,
+  xRecentSearchUrl,
+} from "../../web/lib/x-headlines.ts";
+import { X_POST_LABEL } from "../../web/lib/wall-schema.ts";
+import {
   CLOCK,
   WALL_TICKER_LOOP_S,
   filterPrograms,
@@ -92,6 +107,7 @@ test("rss is well-formed and has one item per non-rumor program", () => {
 
 test("serialized wall JSON does not match seed, secret, or sEd", async () => {
   const payload = await buildWall({
+    xBearerToken: null,
     now: Date.parse("2026-09-30T02:00:00.000Z"),
     status: null,
     fetch: async () => {
@@ -162,6 +178,7 @@ test("foundry twin rows take live ids and drop a stale file hash", () => {
 
 test("FOUNDRY TWIN filter returns only rows with foundry_twin", async () => {
   const payload = await buildWall({
+    xBearerToken: null,
     now: Date.parse("2026-09-30T02:00:00.000Z"),
     status: null,
     fetch: async () => {
@@ -233,6 +250,7 @@ test("wall merge reads mainnet feature flags and refuses a bad network id", asyn
   };
   const calls: { host: string; method: string }[] = [];
   const payload = await buildWall({
+    xBearerToken: null,
     now,
     status: {},
     programs: [],
@@ -295,6 +313,7 @@ test("wall merge reads mainnet feature flags and refuses a bad network id", asyn
   assert.equal(calls.some((call) => call.host === "s1.ripple.com"), false);
 
   const refused = await buildWall({
+    xBearerToken: null,
     now,
     status: {},
     programs: [],
@@ -415,6 +434,7 @@ test("headline fetch times out and fails soft", async () => {
 
 test("wall stays up when the press feed fails and merges headlines without touching programs", async () => {
   const down = await buildWall({
+    xBearerToken: null,
     now: Date.parse("2026-09-30T02:00:00.000Z"),
     status: null,
     fetch: async () => {
@@ -425,6 +445,8 @@ test("wall stays up when the press feed fails and merges headlines without touch
   assert.deepEqual(down.headlines, []);
   assert.ok(down.programs.length >= 12);
   assert.match(down.probe_notes.join(" "), /Cointelegraph Ripple press feed was unavailable/);
+  assert.match(down.probe_notes.join(" "), /No X bearer is configured/);
+  assert.match(down.probe_notes.join(" "), /X headlines stay empty/);
   assert.doesNotMatch(JSON.stringify(down), /seed|secret|sEd/);
 
   const xml = feedXml([
@@ -432,6 +454,7 @@ test("wall stays up when the press feed fails and merges headlines without touch
     itemXml("Ripple seed round is not kept", "/news/ripple-seed-round", "Wed, 30 Sep 2026 18:00:00 +0000"),
   ]);
   const payload = await buildWall({
+    xBearerToken: null,
     now: Date.parse("2026-09-30T02:00:00.000Z"),
     status: null,
     fetch: async (input) => {
@@ -455,6 +478,7 @@ test("wall stays up when the press feed fails and merges headlines without touch
   assert.doesNotMatch(JSON.stringify(payload), /seed|secret|sEd/);
 
   const poisoned = await buildWall({
+    xBearerToken: null,
     now: Date.parse("2026-09-30T02:00:00.000Z"),
     status: null,
     headlines: [
@@ -491,4 +515,324 @@ test("wall marquee loop is slow and still pauses", () => {
   assert.match(css, /\.ticker-copy \{\s*display:\s*none;/);
   assert.match(tsx, /animationDuration: `\$\{WALL_TICKER_LOOP_S\}s`/);
   assert.match(tsx, /PRESS/);
+  assert.match(tsx, /X_POST_LABEL/);
+  assert.match(tsx, /Cointelegraph titles and X posts/);
+});
+
+const X_TOKEN = "test-bearer-token-value-0123456789";
+
+function xUser(id: string, username: string): { id: string; username: string } {
+  return { id, username };
+}
+
+function xTweet(over: Record<string, unknown>): Record<string, unknown> {
+  return {
+    id: "1840000000000000001",
+    text: "RLUSD settlement update for the XRPL.",
+    author_id: "100",
+    created_at: "2026-09-30T16:00:00.000Z",
+    lang: "en",
+    ...over,
+  };
+}
+
+test("x bearer stays out of git and a missing token does not fetch", async () => {
+  assert.equal(X_SEARCH_ENDPOINT, "https://api.x.com/2/tweets/search/recent");
+  assert.equal(X_HEADLINE_MAX, 10);
+  assert.equal(X_HEADLINE_TIMEOUT_MS, 5000);
+  assert.equal(X_HEADLINE_CACHE_MS, 3 * 60 * 1000);
+  assert.equal(MERGED_HEADLINE_CAP, 15);
+  assert.deepEqual(X_ACCOUNT_ALLOWLIST, ["Ripple", "RippleXDev", "RippleX", "bgarlinghouse"]);
+  for (const name of X_ACCOUNT_ALLOWLIST) {
+    assert.match(X_HEADLINE_QUERY, new RegExp(`from:${name}\\b`));
+  }
+  assert.match(X_HEADLINE_QUERY, /-is:retweet/);
+  assert.match(X_HEADLINE_QUERY, /-is:reply/);
+  assert.match(X_HEADLINE_QUERY, /lang:en/);
+  assert.doesNotMatch(X_HEADLINE_QUERY, /bearer|seed|secret/i);
+  const endpoint = new URL(xRecentSearchUrl());
+  assert.equal(endpoint.origin + endpoint.pathname, X_SEARCH_ENDPOINT);
+  assert.equal(endpoint.searchParams.get("query"), X_HEADLINE_QUERY);
+  assert.equal(endpoint.searchParams.get("max_results"), "10");
+  assert.equal(endpoint.searchParams.get("next_token"), null);
+  assert.equal(readXBearerToken({}), null);
+  assert.equal(readXBearerToken({ X_BEARER_TOKEN: "short" }), null);
+  assert.equal(readXBearerToken({ X_BEARER_TOKEN: "bad token value that is long enough!!" }), null);
+  assert.equal(readXBearerToken({ X_BEARER_TOKEN: "a".repeat(20), TWITTER_BEARER_TOKEN: "b".repeat(20) }), "a".repeat(20));
+  assert.equal(readXBearerToken({ TWITTER_BEARER_TOKEN: "c".repeat(25) }), "c".repeat(25));
+  const example = readFileSync(new URL("../../web/.env.example", import.meta.url), "utf8");
+  assert.match(example, /X_BEARER_TOKEN=/);
+  assert.doesNotMatch(example, /X_BEARER_TOKEN=\S+/);
+  let calls = 0;
+  const missed = await fetchXHeadlines(
+    async () => {
+      calls += 1;
+      throw new Error("should not fetch");
+    },
+    { token: null, cache: null }
+  );
+  assert.equal(calls, 0);
+  assert.equal(missed.ok, false);
+  assert.equal(missed.reason, "unconfigured");
+  assert.deepEqual(missed.headlines, []);
+});
+
+test("x recent search maps posts, drops noise, and caches without the bearer", async () => {
+  const long = `Ripple ${"A".repeat(300)}`;
+  const body = {
+    data: [
+      xTweet({ id: "1840000000000000009", text: "Ripple seed phrase giveaway", created_at: "2026-09-30T18:00:00.000Z" }),
+      xTweet({ id: "1840000000000000008", text: "sEdABCDEF shown in a post", created_at: "2026-09-30T17:50:00.000Z" }),
+      xTweet({
+        id: "1840000000000000007",
+        text: "RT @Ripple: copied post about XRPL",
+        referenced_tweets: [{ type: "retweeted", id: "1" }],
+        created_at: "2026-09-30T17:40:00.000Z",
+      }),
+      xTweet({
+        id: "1840000000000000006",
+        text: "Replying about XRPL",
+        referenced_tweets: [{ type: "replied_to", id: "2" }],
+        created_at: "2026-09-30T17:30:00.000Z",
+      }),
+      xTweet({ id: "1840000000000000005", text: "XRPL en español", lang: "es", created_at: "2026-09-30T17:20:00.000Z" }),
+      xTweet({
+        id: "1840000000000000004",
+        text: "gm",
+        author_id: "200",
+        created_at: "2026-09-30T17:10:00.000Z",
+      }),
+      xTweet({ id: "1840000000000000003", text: "Office hours today", created_at: "2026-09-30T17:00:00.000Z" }),
+      xTweet({
+        id: "1840000000000000002",
+        text: "Quoted note on RLUSD",
+        referenced_tweets: [{ type: "quoted", id: "3" }],
+        author_id: "200",
+        created_at: "2026-09-30T16:30:00.000Z",
+      }),
+      xTweet({ id: "1840000000000000001", text: long, created_at: "2026-09-30T16:00:00.000Z" }),
+      xTweet({ id: "1840000000000000001", text: "Ripple duplicate id", created_at: "2026-09-30T16:00:00.000Z" }),
+      xTweet({
+        id: "1840000000000000010",
+        text: "RLUSD settlement update for the XRPL.",
+        created_at: "2026-09-30T15:45:00.000Z",
+      }),
+      { id: 1840000000000000001, text: "Ripple numeric id", author_id: "100", created_at: "2026-09-30T15:00:00.000Z", lang: "en" },
+      xTweet({ id: "1840000000000000011", text: "XRPL from a missing author", author_id: "404", created_at: "2026-09-30T15:30:00.000Z" }),
+    ],
+    includes: {
+      users: [xUser("100", "Ripple"), xUser("200", "xrpl_watch"), xUser("300", "bad.name")],
+    },
+    meta: { next_token: "do-not-page" },
+  };
+  const headlines = parseXHeadlines(body, X_TOKEN);
+  assert.equal(headlines.length, 4);
+  assert.equal(headlines[0].actor, "@Ripple");
+  assert.equal(headlines[0].title, "Office hours today");
+  assert.equal(headlines[0].url, "https://x.com/Ripple/status/1840000000000000003");
+  assert.equal(headlines[0].id, "x-1840000000000000003");
+  assert.equal(headlines[0].stage, "press");
+  assert.equal(headlines[0].onchain.kind, "none");
+  assert.equal(headlines[0].label, X_POST_LABEL);
+  assert.equal(headlines[0].source_title, "X");
+  assert.equal(headlines[1].actor, "@xrpl_watch");
+  assert.equal(headlines[1].title, "Quoted note on RLUSD");
+  assert.equal(headlines[2].actor, "@Ripple");
+  assert.equal(headlines[2].title.length <= 240, true);
+  assert.ok(headlines[2].title.endsWith("…"));
+  assert.equal(headlines[3].title, "RLUSD settlement update for the XRPL.");
+  assert.equal(new Set(headlines.map((row) => row.url)).size, headlines.length);
+  const blob = JSON.stringify(headlines);
+  assert.doesNotMatch(blob, /seed|secret|sEd|giveaway|español|duplicate|numeric|missing author|\bgm\b/);
+  assert.doesNotMatch(blob, new RegExp(X_TOKEN));
+  assert.equal(parseXHeadlines({ meta: { result_count: 0 } }).length, 0);
+  const many = parseXHeadlines({
+    data: Array.from({ length: 12 }, (_, i) =>
+      xTweet({
+        id: `1840000000000002${String(i).padStart(3, "0")}`,
+        text: "XRPL bulletin",
+        created_at: new Date(Date.UTC(2026, 8, 1, 0, i, 0)).toISOString(),
+      })
+    ),
+    includes: { users: [xUser("100", "Ripple")] },
+  });
+  assert.equal(many.length, X_HEADLINE_MAX);
+  assert.equal(many[0].id, "x-1840000000000002011");
+
+  const memory: { slot: { at: number; key: string; result: { headlines: unknown[]; ok: boolean } } | null } = { slot: null };
+  let calls = 0;
+  const fetchImpl = async (input: string, init?: RequestInit) => {
+    calls += 1;
+    assert.equal(String(input).includes(X_TOKEN), false);
+    assert.equal(String(input).includes("next_token"), false);
+    assert.equal(init?.method, "GET");
+    assert.equal(init?.redirect, "error");
+    assert.equal(init?.cache, "no-store");
+    assert.equal(Boolean(init?.signal), true);
+    const headers = init?.headers as Record<string, string>;
+    assert.equal(headers.authorization, `Bearer ${X_TOKEN}`);
+    return new Response(JSON.stringify(body), { status: 200 });
+  };
+  const first = await fetchXHeadlines(fetchImpl, { token: X_TOKEN, now: 1_000, cache: memory });
+  const second = await fetchXHeadlines(fetchImpl, { token: X_TOKEN, now: 1_000 + 60_000, cache: memory });
+  assert.equal(calls, 1);
+  assert.equal(first.ok, true);
+  assert.equal(second.headlines.length, first.headlines.length);
+  assert.equal(JSON.stringify(memory).includes(X_TOKEN), false);
+  const third = await fetchXHeadlines(fetchImpl, { token: X_TOKEN, now: 1_000 + X_HEADLINE_CACHE_MS, cache: memory });
+  assert.equal(calls, 2);
+  assert.equal(third.ok, true);
+
+  const denied = await fetchXHeadlines(async () => new Response(JSON.stringify({ errors: [{ message: X_TOKEN }] }), { status: 401 }), {
+    token: X_TOKEN,
+    cache: null,
+  });
+  assert.equal(denied.ok, false);
+  assert.equal(denied.reason, "failed");
+  assert.doesNotMatch(JSON.stringify(denied), new RegExp(X_TOKEN));
+
+  const empty = await fetchXHeadlines(async () => new Response(JSON.stringify({ meta: { result_count: 0 } }), { status: 200 }), {
+    token: X_TOKEN,
+    cache: null,
+  });
+  assert.equal(empty.ok, true);
+  assert.deepEqual(empty.headlines, []);
+
+  const offHost = await fetchXHeadlines(
+    async () => ({ ok: true, url: "https://evil.example/phish", text: async () => JSON.stringify(body) }) as Response,
+    { token: X_TOKEN, cache: null }
+  );
+  assert.equal(offHost.ok, false);
+  assert.deepEqual(offHost.headlines, []);
+
+  const down = await fetchXHeadlines(
+    async () => {
+      throw new Error("network down");
+    },
+    { token: X_TOKEN, cache: null }
+  );
+  assert.equal(down.ok, false);
+  assert.deepEqual(down.headlines, []);
+});
+
+test("wall merges cointelegraph and x headlines without inventing posts", async () => {
+  const older: PressHeadline[] = [];
+  for (let i = 0; i < 10; i += 1) {
+    older.push({
+      id: `ct-ripple-bulletin-${i}`,
+      ts: new Date(Date.UTC(2026, 8, 20, 12, i, 0)).toISOString(),
+      actor: "Cointelegraph",
+      title: `Ripple bulletin ${i}`,
+      stage: "press",
+      onchain: { kind: "none" },
+      url: `https://cointelegraph.com/news/ripple-bulletin-${i}`,
+      source_title: "Cointelegraph",
+      label: "Press headline. Not on-chain.",
+    });
+  }
+  const posts = Array.from({ length: 10 }, (_, i) => ({
+    id: `x-18400000000000001${i.toString().padStart(2, "0")}`,
+    ts: new Date(Date.UTC(2026, 8, 21, 12, i, 0)).toISOString(),
+    actor: "@Ripple",
+    title: `XRPL note ${i}`,
+    stage: "press" as const,
+    onchain: { kind: "none" as const },
+    url: `https://x.com/Ripple/status/18400000000000001${i.toString().padStart(2, "0")}`,
+    source_title: "X",
+    label: X_POST_LABEL,
+  }));
+  const merged = mergePressHeadlines(older, [
+    ...posts,
+    { ...posts[0], url: "https://www.x.com/Ripple/status/1840000000000000100" },
+    {
+      id: "x-1840000000000000199",
+      ts: "2026-09-30T18:00:00.000Z",
+      actor: "@Ripple",
+      title: "Ripple seed phrase giveaway",
+      stage: "press" as const,
+      onchain: { kind: "none" as const },
+      url: "https://x.com/Ripple/status/1840000000000000199",
+      source_title: "X",
+      label: X_POST_LABEL,
+    },
+    {
+      id: "x-1840000000000000188",
+      ts: "2026-09-30T18:00:00.000Z",
+      actor: "@Other",
+      title: "XRPL mismatch",
+      stage: "press" as const,
+      onchain: { kind: "none" as const },
+      url: "https://x.com/Ripple/status/1840000000000000188",
+      source_title: "X",
+      label: X_POST_LABEL,
+    },
+  ]);
+  assert.equal(merged.length, MERGED_HEADLINE_CAP);
+  assert.equal(merged.filter((row) => row.label === X_POST_LABEL).length, 10);
+  assert.equal(merged.filter((row) => row.actor === "Cointelegraph").length, 5);
+  assert.ok(Date.parse(merged[0].ts) >= Date.parse(merged[merged.length - 1].ts));
+  assert.equal(new Set(merged.map((row) => row.url.toLowerCase())).size, merged.length);
+  assert.doesNotMatch(JSON.stringify(merged), /seed|secret|sEd|mismatch/);
+
+  const xml = feedXml([
+    itemXml("Ripple custody desk expands", "/news/ripple-custody-desk", "Wed, 30 Sep 2026 15:00:00 +0000"),
+  ]);
+  const xBody = {
+    data: [
+      xTweet({ id: "1840000000000000042", text: "RLUSD is live for institutions.", created_at: "2026-09-30T16:00:00.000Z" }),
+    ],
+    includes: { users: [xUser("100", "Ripple")] },
+  };
+  let xCalls = 0;
+  const payload = await buildWall({
+    xBearerToken: X_TOKEN,
+    xCache: { slot: null },
+    now: Date.parse("2026-09-30T02:00:00.000Z"),
+    status: null,
+    fetch: async (input, init) => {
+      const url = String(input);
+      if (url === RIPPLE_HEADLINE_FEED) return new Response(xml, { status: 200 });
+      if (url === xRecentSearchUrl()) {
+        xCalls += 1;
+        assert.equal((init?.headers as Record<string, string>).authorization, `Bearer ${X_TOKEN}`);
+        assert.equal(url.includes(X_TOKEN), false);
+        return new Response(JSON.stringify(xBody), { status: 200 });
+      }
+      throw new Error("rpc down");
+    },
+  });
+  assert.equal(xCalls, 1);
+  assert.equal(payload.headlines.length, 2);
+  assert.equal(payload.headlines[0].actor, "@Ripple");
+  assert.equal(payload.headlines[0].label, "X post. Not on-chain.");
+  assert.equal(payload.headlines[0].url, "https://x.com/Ripple/status/1840000000000000042");
+  assert.equal(payload.headlines[1].actor, "Cointelegraph");
+  assert.equal(payload.headlines[1].label, "Press headline. Not on-chain.");
+  assert.equal(payload.programs.length, (programsJson as unknown[]).length);
+  assert.doesNotMatch(payload.probe_notes.join(" "), /X press feed was unavailable/);
+  assert.doesNotMatch(JSON.stringify(payload), new RegExp(X_TOKEN));
+  assert.doesNotMatch(JSON.stringify(payload), /seed|secret|sEd/);
+  const rss = renderRss(payload.programs, payload.generated_at, payload.headlines);
+  assert.match(rss, /X post\. Not on-chain\./);
+  assert.match(rss, /https:\/\/x\.com\/Ripple\/status\/1840000000000000042/);
+  assert.match(rss, /Press headline\. Not on-chain\./);
+  assert.match(rss, /https:\/\/cointelegraph\.com\/news\/ripple-custody-desk/);
+  const rumors = payload.programs.filter((row) => row.stage === "rumor").length;
+  assert.equal((rss.match(/<item>/g) || []).length, payload.programs.length - rumors + payload.headlines.length);
+
+  const xOnly = await buildWall({
+    xBearerToken: X_TOKEN,
+    xCache: { slot: null },
+    now: Date.parse("2026-09-30T02:00:00.000Z"),
+    status: null,
+    fetch: async (input) => {
+      if (String(input) === xRecentSearchUrl()) return new Response(JSON.stringify(xBody), { status: 200 });
+      throw new Error("rss down");
+    },
+  });
+  assert.equal(xOnly.headlines.length, 1);
+  assert.equal(xOnly.headlines[0].label, X_POST_LABEL);
+  assert.match(xOnly.probe_notes.join(" "), /Cointelegraph Ripple press feed was unavailable/);
+  assert.doesNotMatch(xOnly.probe_notes.join(" "), /Headlines stay empty/);
+  assert.equal(xOnly.programs.length, (programsJson as unknown[]).length);
 });

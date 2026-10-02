@@ -13,10 +13,12 @@ import sourcesJson from "../../lab/wall/sources.json" with { type: "json" };
 import lastSeenJson from "../../lab/wall/last-seen.json" with { type: "json" };
 import testnetJson from "../../lab/frontier/amendments.json" with { type: "json" };
 import devnetJson from "../../lab/frontier/amendments-devnet.json" with { type: "json" };
-import { fetchRippleHeadlines, sanitizeHeadlines } from "./ripple-headlines";
+import { fetchRippleHeadlines } from "./ripple-headlines";
+import { fetchXHeadlines, mergePressHeadlines, readXBearerToken, type XHeadlineCache } from "./x-headlines";
 import {
   CLOCK,
   PRESS_HEADLINE_LABEL,
+  X_POST_LABEL,
   assertNoSecrets,
   validateProgram,
   validateSources,
@@ -84,6 +86,10 @@ export type BuildWallOptions = {
   lastSeen?: unknown;
   /** When set, skip the public RSS fetch and use this list (still sanitized). */
   headlines?: PressHeadline[];
+  /** Undefined reads X_BEARER_TOKEN. Null skips X. A string is used only for that request. */
+  xBearerToken?: string | null;
+  /** Undefined uses the module cache. Null skips it. */
+  xCache?: XHeadlineCache | null;
 };
 
 function readLab(rel: string, fallback: unknown): unknown {
@@ -361,15 +367,15 @@ function pubDateOrEpoch(iso: string): string {
   return Number.isNaN(pub.getTime()) ? new Date(0).toUTCString() : pub.toUTCString();
 }
 
+function isRssHeadline(row: PressHeadline): boolean {
+  if (row.stage !== "press" || row.onchain.kind !== "none") return false;
+  if (row.label === PRESS_HEADLINE_LABEL && row.url.startsWith("https://cointelegraph.com/news/")) return true;
+  return row.label === X_POST_LABEL && /^https:\/\/x\.com\/[A-Za-z0-9_]{1,15}\/status\/[1-9]\d{0,21}$/.test(row.url);
+}
+
 function headlineRssItems(headlines: PressHeadline[]): string {
   return headlines
-    .filter(
-      (row) =>
-        row.stage === "press" &&
-        row.onchain.kind === "none" &&
-        row.label === PRESS_HEADLINE_LABEL &&
-        row.url.startsWith("https://cointelegraph.com/news/")
-    )
+    .filter(isRssHeadline)
     .map((row) =>
       rssItem({
         title: `Press · ${row.actor} — ${row.title}`,
@@ -412,7 +418,7 @@ export function renderRss(
     "  <channel>",
     "    <title>Aether Foundry — Wall of Change</title>",
     `    <link>${WALL_ORIGIN}/wall</link>`,
-    "    <description>Curated wire of XRPL institutional primitives and named programs. Cointelegraph items are press headlines, not on-chain claims. Not a bank leaderboard.</description>",
+    "    <description>Curated wire of XRPL institutional primitives and named programs. Cointelegraph items and X posts are press headlines, not on-chain claims. Not a bank leaderboard.</description>",
     `    <lastBuildDate>${lastBuildDate}</lastBuildDate>`,
     body,
     "  </channel>",
@@ -482,10 +488,12 @@ export async function buildWall(opts: BuildWallOptions = {}): Promise<WallPayloa
       notes.push("Mainnet feature probe failed. Mainnet dots stay unknown.");
     });
 
+  const xToken = opts.xBearerToken === undefined ? readXBearerToken() : opts.xBearerToken;
   const headlineTask =
     opts.headlines === undefined
       ? fetchRippleHeadlines(fetchImpl)
       : Promise.resolve({ headlines: opts.headlines, ok: true });
+  const xTask = fetchXHeadlines(fetchImpl, { token: xToken, now, cache: opts.xCache });
 
   let testnetMode: SideMode = isFresh(testnetFile?.probed_at, now) ? "file" : "failed";
   let devnetMode: SideMode = isFresh(devnetFile?.probed_at, now) ? "file" : "failed";
@@ -547,10 +555,21 @@ export async function buildWall(opts: BuildWallOptions = {}): Promise<WallPayloa
   });
 
   const merged = sortNewest(applyFoundryTwins(programs, opts.status ?? null));
-  const headlineResult = await headlineTask;
-  const headlines = sanitizeHeadlines(headlineResult.ok ? headlineResult.headlines : []);
+  const [headlineResult, xResult] = await Promise.all([headlineTask, xTask]);
+  const headlines = mergePressHeadlines(
+    headlineResult.ok ? headlineResult.headlines : [],
+    xResult.ok ? xResult.headlines : []
+  );
   if (!headlineResult.ok) {
-    notes.push("Cointelegraph Ripple press feed was unavailable. Headlines stay empty.");
+    const tail = headlines.length === 0 && !xResult.ok ? " Headlines stay empty." : "";
+    notes.push(`Cointelegraph Ripple press feed was unavailable.${tail}`);
+  }
+  if (!xResult.ok) {
+    notes.push(
+      xResult.reason === "unconfigured"
+        ? "X press feed was unavailable. No X bearer is configured. X headlines stay empty."
+        : "X press feed was unavailable. X headlines stay empty."
+    );
   }
   assertNoSecrets({ amendments, programs: merged, sources, notes, headlines });
 

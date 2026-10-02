@@ -5,6 +5,7 @@ import {
   CLOCK,
   TWIN_HREF,
   WALL_TICKER_LOOP_S,
+  X_POST_LABEL,
   filterPrograms,
   type AmendmentDots,
   type Dot,
@@ -49,17 +50,26 @@ function tickerLine(name: string, dots: AmendmentDots | undefined): string {
 }
 
 type TickerItem =
-  | { key: string; kind: "headline"; title: string; href: string }
+  | { key: string; kind: "headline"; mark: string; title: string; href: string }
   | { key: string; kind: "mark" }
   | { key: string; kind: "amendment"; name: string; text: string };
 
+function tickerHeadline(row: PressHeadline): { mark: string; title: string } {
+  if (row.label === X_POST_LABEL) return { mark: "X", title: `${row.actor} — ${row.title}` };
+  return { mark: "PRESS", title: row.title };
+}
+
 function tickerItems(headlines: PressHeadline[], amendments: Record<string, AmendmentDots> | undefined): TickerItem[] {
-  const stories: TickerItem[] = headlines.map((row) => ({
-    key: `h-${row.id}`,
-    kind: "headline",
-    title: row.title,
-    href: row.url,
-  }));
+  const stories: TickerItem[] = headlines.map((row) => {
+    const line = tickerHeadline(row);
+    return {
+      key: `h-${row.id}`,
+      kind: "headline",
+      mark: line.mark,
+      title: line.title,
+      href: row.url,
+    };
+  });
   const clock: TickerItem[] = CLOCK.map((row) => ({
     key: `a-${row.name}`,
     kind: "amendment",
@@ -170,7 +180,7 @@ function TickerBit({
         tabIndex={copy ? -1 : undefined}
         aria-hidden={copy || undefined}
       >
-        <span className="ticker-press">PRESS ·</span> {item.title}
+        <span className="ticker-press">{item.mark} ·</span> {item.title}
       </a>
     );
   }
@@ -413,7 +423,7 @@ export function WallOfChange({
 
         <footer className="wall-foot">
           <p>This wall is curated. RippleNet messaging ≠ XRPL settlement.</p>
-          <p>Press headlines are Cointelegraph titles. They are not on-chain reads.</p>
+          <p>Press headlines are Cointelegraph titles and X posts. They are not on-chain reads.</p>
           <p>No row is live without a source. The desk does not sign.</p>
           <p>
             <a href="/api/wall/rss.xml">RSS</a>

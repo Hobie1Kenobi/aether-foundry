@@ -10,7 +10,8 @@ const HEADERS = {
 };
 
 /**
- * Curated programs, a read-only amendment clock, and Cointelegraph Ripple press headlines.
+ * Curated programs, a read-only amendment clock, and press headlines.
+ * Cointelegraph RSS plus X recent search when X_BEARER_TOKEN is set.
  * Mainnet is server_info and feature on one public host.
  * The desk does not sign and does not submit.
  */
