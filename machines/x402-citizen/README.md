@@ -47,7 +47,7 @@ The catalog at `GET /api/x402` and `howToPay.facilitator` advertise the testnet 
 
 `npm run x402:citizen` is the daily buy from W3. Dry-run is the default. `--live` needs `FOUNDRY_DAEMON_LIVE=yes` on the Foundry box. The cap is `500000` drops (0.5 XRP), the same Hands outbound cap.
 
-The Payment carries the shop's `SourceTag` when the 402 names one, otherwise SourceTag `202609296`. It always adds a memo whose type is `aether-foundry` and whose data is `aether-foundry:f11`.
+The Payment carries the shop's `SourceTag` when the 402 names one, otherwise SourceTag `202609296`. It always adds a memo whose type is `aether-foundry` and whose data is `aether-foundry:f11`. The retry header carries `payload.invoiceId` from the challenge. Foundry does not submit that blob when the shop settles it.
 
 `machines/x402-citizen/candidates.json` ships with an empty `urls` list. No foreign shop was known at pack time, so a run with no `--url` dry-runs and does not invent a hash. Pass `--url` when a Testnet SKU outside `WALLETS` answers 402.
 

@@ -45,6 +45,7 @@ const PUBLIC_KEYS = [
   "payTo",
   "hash",
   "resourceUrl",
+  "settlement",
 ];
 
 function parseArgs(argv) {
@@ -99,6 +100,88 @@ function archive(root, row) {
   policy.assertNoSeedFields(clean);
   const file = path.join(root, "lab", "ledger-log.jsonl");
   fs.appendFileSync(file, `${JSON.stringify(clean)}\n`);
+}
+
+async function signOnly(tx, keyEnv, regularAddress, env, loadSeed) {
+  policy.assertLiveGate(env);
+  policy.assertSigningTx(tx);
+  const seed = loadSeed(keyEnv);
+  if (!seed) throw policy.coded(`${keyEnv} is not loaded. Refusing to sign.`, "NO_SEED");
+  const xrpl = require("xrpl");
+  let wallet;
+  try {
+    wallet = xrpl.Wallet.fromSeed(seed);
+  } catch {
+    throw policy.coded(`${keyEnv} is not a usable seed`, "NO_SEED");
+  }
+  const signer = wallet.classicAddress || wallet.address;
+  if (signer !== regularAddress) throw policy.coded(`${keyEnv} address is not the regular key`, "SIGNER");
+  policy.assertSigningRpc(anchors.XRPL_WS);
+  const client = new xrpl.Client(anchors.XRPL_WS);
+  try {
+    await client.connect();
+    if (client.networkID !== anchors.XRPL_NETWORK_ID) {
+      throw policy.coded(
+        `RPC did not prove XRPL Testnet network id (${client.networkID == null ? "missing" : client.networkID})`,
+        "MAINNET"
+      );
+    }
+    const prepared = await client.autofill(tx);
+    if (prepared.NetworkID === 0) throw policy.coded("refusing NetworkID 0", "MAINNET");
+    policy.assertSigningTx(prepared);
+    const signed = wallet.sign(prepared);
+    if (!signed || !signed.tx_blob || !signed.hash) {
+      throw policy.coded("signer did not return a blob", "SUBMIT");
+    }
+    return { tx_blob: signed.tx_blob, hash: signed.hash };
+  } catch (error) {
+    if (error && error.code && error.message && !String(error.message).includes(seed || "\0")) throw error;
+    throw policy.coded(
+      policy.redact(error && error.message ? error.message : "sign failed", [seed, env.FOUNDRY_SIGNER_TOKEN]),
+      (error && error.code) || "SUBMIT"
+    );
+  } finally {
+    try {
+      await client.disconnect();
+    } catch {
+      /* already closed */
+    }
+  }
+}
+
+async function submitSignedBlob(txBlob, env) {
+  policy.assertLiveGate(env);
+  if (typeof txBlob !== "string" || !txBlob) throw policy.coded("refusing to submit an empty blob", "SUBMIT");
+  policy.assertSigningRpc(anchors.XRPL_WS);
+  const xrpl = require("xrpl");
+  const client = new xrpl.Client(anchors.XRPL_WS);
+  try {
+    await client.connect();
+    if (client.networkID !== anchors.XRPL_NETWORK_ID) {
+      throw policy.coded(
+        `RPC did not prove XRPL Testnet network id (${client.networkID == null ? "missing" : client.networkID})`,
+        "MAINNET"
+      );
+    }
+    const submitted = await client.submitAndWait(txBlob);
+    const result = (submitted && submitted.result) || submitted || {};
+    const meta = result.meta || result.metaData || {};
+    if (meta.TransactionResult !== "tesSUCCESS" || !result.hash) {
+      throw policy.coded(`result ${meta.TransactionResult || "missing"}`, "SUBMIT");
+    }
+    return {
+      hash: String(result.hash).toUpperCase(),
+      result: "tesSUCCESS",
+      ledger_index: result.ledger_index == null ? null : result.ledger_index,
+      tx_blob: txBlob,
+    };
+  } finally {
+    try {
+      await client.disconnect();
+    } catch {
+      /* already closed */
+    }
+  }
 }
 
 async function signAndSubmit(tx, keyEnv, regularAddress, env, loadSeed) {
@@ -222,6 +305,8 @@ async function pass(opts) {
     index: options.index,
     loadSeed: guardedLoad,
     submit: (tx, keyEnv, regular) => signAndSubmit(tx, keyEnv, regular, env, guardedLoad),
+    sign: (tx, keyEnv, regular) => signOnly(tx, keyEnv, regular, env, guardedLoad),
+    submitBlob: (txBlob) => submitSignedBlob(txBlob, env),
     archive: (row) => archive(root, row),
     fetchImpl: options.fetchImpl,
     pollSellOffers: options.pollSellOffers,
@@ -248,9 +333,10 @@ async function pass(opts) {
     for (const [, draft, action] of steps) {
       if (!draft.allow) continue;
       const done = await action.execute(shared);
-      draft.submitted = true;
+      draft.submitted = done && typeof done.submitted === "boolean" ? done.submitted : true;
       draft.signed = true;
       draft.hash = done && done.hash ? done.hash : null;
+      if (done && done.settlement) draft.settlement = done.settlement;
     }
   }
 

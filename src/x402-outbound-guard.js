@@ -228,15 +228,169 @@ function buildPaymentTx({ account, accept }) {
 }
 
 function buildSignaturePayload({ required, accept, txBlob, hash }) {
+  const payload = {};
+  if (typeof txBlob === "string" && txBlob.length > 0) payload.signedTxBlob = txBlob;
+  if (typeof hash === "string" && hash.length > 0) payload.transaction = hash;
+  const extra = accept && accept.extra && typeof accept.extra === "object" ? accept.extra : {};
+  if (typeof extra.invoiceId === "string" && extra.invoiceId.length > 0) {
+    payload.invoiceId = extra.invoiceId;
+  }
   return {
     x402Version: 2,
     resource: required && required.resource,
     accepted: accept,
-    payload: {
-      signedTxBlob: txBlob,
-      transaction: hash,
-    },
+    payload,
   };
+}
+
+function parseJsonObject(text) {
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeHash(value) {
+  const text = String(value || "").trim().toUpperCase();
+  return /^[0-9A-F]{64}$/.test(text) ? text : null;
+}
+
+function ledgerIndexFrom(parsed) {
+  if (!parsed || typeof parsed !== "object") return null;
+  const value = parsed.ledger_index != null ? parsed.ledger_index : parsed.ledgerIndex;
+  return typeof value === "number" ? value : null;
+}
+
+function headerValue(headers, name) {
+  if (!headers) return "";
+  if (typeof headers.get === "function") return headers.get(name) || headers.get(name.toLowerCase()) || "";
+  return headers[name] || headers[name.toLowerCase()] || "";
+}
+
+function hashFromResponse(last) {
+  const raw = headerValue(last && last.headers, "payment-response");
+  if (raw) {
+    try {
+      const decoded = rules.decodeHeader(raw);
+      const fromHeader = normalizeHash(decoded && decoded.transaction);
+      if (fromHeader) return fromHeader;
+    } catch {
+      /* body fallback */
+    }
+  }
+  const parsed = last && last.parsed;
+  if (!parsed) return null;
+  return normalizeHash(parsed.transaction || parsed.hash || parsed.txHash);
+}
+
+function codeOf(parsed) {
+  return parsed && typeof parsed.code === "string" ? parsed.code : "";
+}
+
+function defaultSleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Offer a presigned Payment first. Shops that settle the blob (CryptoBuddy / t54)
+ * return 200. A verify-only shop answers payment_not_on_ledger; submit that same
+ * blob once, then retry. Do not submit on any other refusal.
+ */
+async function deliverForeignPayment(opts) {
+  const options = opts || {};
+  const fetchImpl = options.fetchImpl;
+  const sleep = options.sleep || defaultSleep;
+  const resourceUrl = options.resourceUrl;
+  if (typeof fetchImpl !== "function") {
+    throw Object.assign(new Error("deliverForeignPayment needs fetchImpl"), { code: "PARSE" });
+  }
+  if (!resourceUrl) {
+    throw Object.assign(new Error("deliverForeignPayment needs a resource url"), { code: "PARSE" });
+  }
+  let activeHash = normalizeHash(options.hash);
+
+  async function send(includeTxHash) {
+    const payload = buildSignaturePayload({
+      required: options.required,
+      accept: options.accept,
+      txBlob: options.txBlob,
+      hash: includeTxHash ? activeHash : null,
+    });
+    const response = await fetchImpl(resourceUrl, {
+      headers: {
+        Accept: "application/json",
+        "PAYMENT-SIGNATURE": rules.encodeHeader(payload),
+      },
+    });
+    const text = await response.text();
+    return {
+      status: response.status,
+      headers: response.headers,
+      text,
+      parsed: parseJsonObject(text),
+      payload,
+    };
+  }
+
+  function finish(mode, submitted, last, ledgerIndex) {
+    const echoed = hashFromResponse(last);
+    let hash = null;
+    if (last.status === 200) hash = echoed || activeHash;
+    else if (submitted) hash = activeHash;
+    const fromBody = ledgerIndexFrom(last.parsed);
+    return {
+      mode,
+      submitted,
+      http_status: last.status,
+      body: last.text,
+      parsed: last.parsed,
+      hash,
+      ledger_index: fromBody != null ? fromBody : ledgerIndex,
+      result: last.status === 200 || submitted ? "tesSUCCESS" : null,
+      payload: last.payload,
+    };
+  }
+
+  async function confirm(times) {
+    let last = null;
+    for (let attempt = 0; attempt < times; attempt += 1) {
+      if (attempt > 0) await sleep(1000 * attempt);
+      last = await send(true);
+      if (last.status === 200) return last;
+      const code = codeOf(last.parsed);
+      if (code !== "payment_not_on_ledger" && code !== "payment_not_validated") return last;
+    }
+    return last;
+  }
+
+  let last = await send(false);
+  if (last.status === 200) return finish("shop-settle", false, last, null);
+
+  if (codeOf(last.parsed) === "payment_not_validated") {
+    last = await confirm(4);
+    return finish(last.status === 200 ? "shop-settle" : "refused", false, last, null);
+  }
+
+  if (codeOf(last.parsed) !== "payment_not_on_ledger") {
+    return finish("refused", false, last, null);
+  }
+
+  if (typeof options.submit !== "function") {
+    throw Object.assign(new Error("shop does not settle signed blobs"), { code: "SUBMIT" });
+  }
+  const submittedView = await options.submit();
+  if (!submittedView || submittedView.result !== "tesSUCCESS" || !submittedView.hash) {
+    throw Object.assign(
+      new Error(`payment result ${(submittedView && submittedView.result) || "missing"}`),
+      { code: "SUBMIT" }
+    );
+  }
+  activeHash = normalizeHash(submittedView.hash) || activeHash;
+  const ledgerIndex = submittedView.ledger_index == null ? null : submittedView.ledger_index;
+  last = await confirm(4);
+  return finish(last.status === 200 ? "client-submit" : "submitted-unpaid", true, last, ledgerIndex);
 }
 
 function loadEnvText(text) {
@@ -356,6 +510,7 @@ module.exports = {
   priceVerdict,
   buildPaymentTx,
   buildSignaturePayload,
+  deliverForeignPayment,
   assertResourceUrl,
   encodeHeader: rules.encodeHeader,
 };

@@ -47,7 +47,7 @@ npm run x402:outbound -- \
 
 Expect `paid <64-hex>`, then `status 200`, then a JSON body with `work` `foreign-oracle-ping` and a numeric `ledger_index`. `--record` appends `lab/ledger-log.jsonl` (`action` `x402_outbound`) and sets `x402_outbound_hits` to the count of unique hashes. A second record of the same hash does not double-count.
 
-The payer retries the HTTP call if the shop has not seen the tx yet. It submits the Payment once. If HTTP stays non-200, it prints the hash and tells you not to pay again.
+This shop does not submit `signedTxBlob`. The payer offers the presigned blob first (`payload.signedTxBlob` and `payload.invoiceId`). The local shop answers `payment_not_on_ledger`, and only then does the payer submit that blob once and retry. A CryptoBuddy / t54 Testnet shop settles the presigned blob itself and returns 200 without that submit. If Foundry already submitted and HTTP stays non-200, the payer prints the hash and tells you not to pay again. If the shop refuses the presigned blob for any other reason, nothing is submitted.
 
 ## 4. Any other foreign resource
 

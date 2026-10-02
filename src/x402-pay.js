@@ -12,6 +12,7 @@
 
 const xrpl = require("xrpl");
 const rules = require("../web/lib/x402-rules");
+const guard = require("./x402-outbound-guard");
 const hits = require("./x402-hits");
 
 function die(message) {
@@ -124,15 +125,12 @@ async function main() {
     const hash = result.hash;
     console.log("paid", hash);
 
-    const payload = {
-      x402Version: 2,
-      resource: required.resource,
-      accepted: accept,
-      payload: {
-        signedTxBlob: signed.tx_blob,
-        transaction: hash,
-      },
-    };
+    const payload = guard.buildSignaturePayload({
+      required,
+      accept,
+      txBlob: signed.tx_blob,
+      hash,
+    });
     const retry = await fetch(url, {
       headers: {
         Accept: "application/json",

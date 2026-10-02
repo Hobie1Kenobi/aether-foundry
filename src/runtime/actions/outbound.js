@@ -129,43 +129,72 @@ async function execute(opts) {
   const draft = planFromInvoice(Object.assign({}, options, { force: true }), invoice);
   if (!draft.allow || !draft.tx) throw policy.coded(draft.message || "outbound refused", draft.code || "REFUSED");
   const regular = policy.regularKey(options.state, "W3");
-  const submitted = await options.submit(draft.tx, "W3_REGULAR_SEED", regular);
-  if (!submitted || submitted.result !== "tesSUCCESS" || !submitted.hash) {
-    throw policy.coded("outbound payment did not succeed", "SUBMIT");
+  if (typeof options.sign !== "function") {
+    throw policy.coded("outbound sign hook is missing", "SIGN");
   }
-  const payload = guard.buildSignaturePayload({
+  if (!draft.resourceUrl) {
+    throw policy.coded("refusing outbound without a resource url", "MISSING_402");
+  }
+  const signed = await options.sign(draft.tx, "W3_REGULAR_SEED", regular);
+  if (!signed || typeof signed.tx_blob !== "string" || !signed.tx_blob || !signed.hash) {
+    throw policy.coded("outbound signer did not return a signed blob", "SUBMIT");
+  }
+  const fetchImpl = options.fetchImpl || globalThis.fetch;
+  const delivered = await guard.deliverForeignPayment({
+    fetchImpl,
+    resourceUrl: draft.resourceUrl,
     required: draft.required,
     accept: draft.accept,
-    txBlob: submitted.tx_blob,
-    hash: submitted.hash,
+    txBlob: signed.tx_blob,
+    hash: signed.hash,
+    sleep: options.sleep,
+    submit: async () => {
+      if (typeof options.submitBlob !== "function") {
+        throw policy.coded("shop does not settle and submitBlob is missing", "SUBMIT");
+      }
+      return options.submitBlob(signed.tx_blob);
+    },
   });
-  const signature = guard.encodeHeader(payload);
-  const fetchImpl = options.fetchImpl || globalThis.fetch;
-  let status = 0;
-  if (draft.resourceUrl) {
-    const retry = await fetchImpl(draft.resourceUrl, {
-      headers: { Accept: "application/json", "PAYMENT-SIGNATURE": signature },
-    });
-    status = retry.status;
+  const status = delivered.http_status || 0;
+  const hash = delivered.hash;
+  if ((delivered.submitted || status === 200) && hash) {
+    const row = {
+      ts: new Date().toISOString(),
+      action: "x402_outbound",
+      network: "xrpl:1",
+      resource_url: draft.resourceUrl,
+      pay_to: draft.payTo,
+      payer: anchors.WALLETS.W3.address,
+      amount_drops: draft.tx.Amount,
+      hash,
+      result: "tesSUCCESS",
+      ledger_index: delivered.ledger_index == null ? null : delivered.ledger_index,
+      http_status: status,
+      invoice_id:
+        draft.accept && draft.accept.extra && draft.accept.extra.invoiceId
+          ? draft.accept.extra.invoiceId
+          : null,
+    };
+    if (options.archive && delivered.result === "tesSUCCESS") options.archive(row);
+    if (status === 200) {
+      const write = options.recordOutbound || record.recordOutbound;
+      write(row);
+    }
   }
-  const row = {
-    ts: new Date().toISOString(),
-    action: "x402_outbound",
-    network: "xrpl:1",
-    resource_url: draft.resourceUrl,
-    pay_to: draft.payTo,
-    payer: anchors.WALLETS.W3.address,
-    amount_drops: draft.tx.Amount,
-    hash: submitted.hash,
-    result: "tesSUCCESS",
-    ledger_index: submitted.ledger_index == null ? null : submitted.ledger_index,
+  if (!hash || (status !== 200 && !delivered.submitted)) {
+    throw policy.coded(
+      status ? `shop returned ${status} and did not settle` : "outbound payment did not succeed",
+      status ? "HTTP" : "SUBMIT"
+    );
+  }
+  return {
+    hash,
+    result: delivered.result || "tesSUCCESS",
     http_status: status,
+    payTo: draft.payTo,
+    submitted: delivered.submitted,
+    settlement: delivered.mode,
   };
-  if (options.archive) options.archive(row);
-  if (status === 200) {
-    record.recordOutbound(row);
-  }
-  return { hash: submitted.hash, result: "tesSUCCESS", http_status: status, payTo: draft.payTo };
 }
 
 module.exports = { plan, execute, planFromInvoice, urlFromActions };
