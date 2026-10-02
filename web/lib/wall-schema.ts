@@ -35,6 +35,14 @@ export interface Onchain {
   id?: string;
 }
 
+/** Request-time public mainnet account_info. Not stored in programs.json. */
+export interface MainnetLedger {
+  present: true;
+  sequence: number;
+  balance_xrp: string;
+  seen_at: string;
+}
+
 export interface Program {
   id: string;
   ts: string;
@@ -48,6 +56,8 @@ export interface Program {
   foundry_twin?: string;
   sources: string[];
   last_verified: string;
+  /** Set only after a validated mainnet account_info. Absent when the probe misses. */
+  ledger?: MainnetLedger;
 }
 
 export interface Source {

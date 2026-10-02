@@ -4,13 +4,13 @@ A curated wire of XRPL institutional primitives and named programs. It is not a 
 
 The desk renders it at [https://aether-foundry-desk.vercel.app/wall](https://aether-foundry-desk.vercel.app/wall). JSON: `/api/wall`. RSS: [/api/wall/rss.xml](https://aether-foundry-desk.vercel.app/api/wall/rss.xml).
 
-The desk does not sign. It does not submit. Mainnet dots come from a read-only `server_info` and `feature` probe of `https://xrplcluster.com/` (network id 0) inside this merge only. Any other method, path, or host is refused before fetch. There is no second mainnet host. A failed probe stays `unknown` and is not stored as `enabled: true`. Submit paths elsewhere still refuse `xrplcluster.com`.
+The desk does not sign. It does not submit. Mainnet dots come from a read-only `server_info` and `feature` probe of `https://xrplcluster.com/` (network id 0) inside this merge only. The same host is used for `account_info` on curated `mainnet-live` classic accounts. Any other method, path, or host is refused before fetch. There is no second mainnet host. A failed probe stays `unknown` and is not stored as `enabled: true`. Submit paths elsewhere still refuse `xrplcluster.com`.
 
 ## Files
 
 | File | Role |
 |------|------|
-| `programs.json` | Editorial rows. 12–20. One sentence, one stage, one rail. |
+| `programs.json` | Editorial rows. 12–24. One sentence, one stage, one rail. The allowlist of accounts the route may read. |
 | `sources.json` | Citation map. Every program points at keys in this file. |
 | `last-seen.json` | Amendment dots last acknowledged. The card's left bar pulses only when a live dot differs. |
 
@@ -29,6 +29,12 @@ Foundry twin rows (`foundry-heartbeat`, `foundry-oracle`, `foundry-labor-mpt`, `
 Testnet prefers `lab/frontier/amendments.json` when `probed_at` is under 36 hours. Otherwise the route calls `server_info` and `feature` on `https://s.altnet.rippletest.net:51234` (network id 1). Devnet uses `lab/frontier/amendments-devnet.json` or `https://s.devnet.rippletest.net:51234` (network id 2). Mainnet has no cached file. Each read calls `server_info` and `feature` on `https://xrplcluster.com/` and keeps the dots only when `network_id` is 0. `enabled: true` is on. `enabled: false` with a majority close time is voting. `enabled: false` with no majority is off. A missing name stays unknown.
 
 `last-seen.json` records the mainnet column read at 2026-09-30T03:36:35Z. The route does not rewrite that file. Batch is whatever the live read says. This folder does not mark Batch enabled.
+
+## Mainnet accounts
+
+`programs.json` is the allowlist. The route calls `account_info` with `ledger_index: validated` only for rows whose stage is `mainnet-live`, whose network includes `xrpl:0`, and whose `onchain.kind` is `account` with a classic address and an https explorer URL. It does not scan the ledger for new issuers. `mainnet-pilot` rows with `onchain.kind: none` are not read.
+
+A successful read adds `ledger.present`, `ledger.sequence`, `ledger.balance_xrp` (that account's XRP balance, not token supply), and `ledger.seen_at`. Editorial `claim`, `actor`, and `onchain.id` stay. If the network id read fails, the host is unreachable, or `account_info` misses, the curated card stays and `probe_notes` records it. `actNotFound` does not become a live ledger. The desk does not sign and does not submit.
 
 ## Press headlines
 

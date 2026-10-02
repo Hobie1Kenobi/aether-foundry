@@ -148,5 +148,30 @@
     "title": "Ripple press — Ctrl Alt and Dubai Land Department title deeds",
     "url": "https://ripple.com/ripple-press/ripple-expands-global-custody-footprint-into-middle-east-with-ctrl-alt/",
     "retrieved_at": "2026-09-30"
+  },
+  "ondo-ousg-addresses": {
+    "title": "Ondo docs — OUSG issuer on the XRP Ledger",
+    "url": "https://docs.ondo.finance/addresses",
+    "retrieved_at": "2026-10-02"
+  },
+  "ripple-insight-ousg-xrpl-2025-06-11": {
+    "title": "Ripple — tokenized treasuries go live on the XRPL",
+    "url": "https://ripple.com/insights/tokenized-treasuries-go-live-on-the-xrpl/",
+    "retrieved_at": "2026-10-02"
+  },
+  "quantoz-tokens-xrpl-issuer": {
+    "title": "Quantoz — EURQ and USDQ XRP Ledger issuer",
+    "url": "https://www.quantoz.com/tokens/",
+    "retrieved_at": "2026-10-02"
+  },
+  "schuman-europ-addresses": {
+    "title": "Schuman — EURØP issuer addresses",
+    "url": "https://schuman.io/smart-contracts/",
+    "retrieved_at": "2026-10-02"
+  },
+  "ripple-press-schuman-europ-2025-05-22": {
+    "title": "Ripple press — EURØP on the XRP Ledger",
+    "url": "https://ripple.com/ripple-press/euro-stablecoin-on-xrp-ledger/",
+    "retrieved_at": "2026-10-02"
   }
 }

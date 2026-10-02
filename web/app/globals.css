@@ -820,7 +820,8 @@ ul.clean li {
 }
 
 .wire-when,
-.wire-hash {
+.wire-hash,
+.wire-ledger {
   margin: 0;
   color: var(--muted);
 }
