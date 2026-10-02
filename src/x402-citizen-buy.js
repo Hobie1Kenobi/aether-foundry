@@ -9,6 +9,8 @@
  * A shop that settles the presigned blob gets PAYMENT-SIGNATURE first
  * (payload.signedTxBlob and payload.invoiceId) and is not submitted by Foundry.
  * payment_not_on_ledger still submits that same blob once, then retries.
+ * Candidate strings are GET. An object may set method and a JSON body; the
+ * unpaid probe and every signature retry send that same method and body.
  *
  *   npm run x402:citizen
  *   npm run x402:citizen -- --url https://foreign.example/sku
@@ -35,17 +37,7 @@ function die(message, code) {
 }
 
 function loadCandidates(file, io) {
-  const exists = (io && io.existsSync) || fs.existsSync;
-  const readFile = (io && io.readFileSync) || fs.readFileSync;
-  if (!exists(file)) return [];
-  let doc;
-  try {
-    doc = JSON.parse(readFile(file, "utf8"));
-  } catch {
-    throw Object.assign(new Error("candidates.json is not JSON"), { code: "PARSE" });
-  }
-  const urls = doc && Array.isArray(doc.urls) ? doc.urls : [];
-  return urls.map((item) => String(item).trim()).filter(Boolean);
+  return guard.loadCandidateRequests(file || CANDIDATES, io);
 }
 
 function parseArgs(argv) {
@@ -116,23 +108,25 @@ function capDrops(amount, maxDropsFlag) {
 }
 
 function candidateList(args, env, io) {
-  if (args.url) return [guard.assertResourceUrl(args.url)];
-  if (env && env.X402_FOREIGN_URL) return [guard.assertResourceUrl(env.X402_FOREIGN_URL)];
-  return loadCandidates(CANDIDATES, io).map((item) => guard.assertResourceUrl(item));
+  const filed = loadCandidates(CANDIDATES, io);
+  if (args.url) return [guard.matchResource(args.url, filed)];
+  if (env && env.X402_FOREIGN_URL) return [guard.matchResource(env.X402_FOREIGN_URL, filed)];
+  return filed;
 }
 
-async function probeUrl(resourceUrl, fetchImpl, index) {
-  const response = await fetchImpl(resourceUrl);
+async function probeUrl(resource, fetchImpl, index) {
+  const call = guard.resourceRequest(resource);
+  const response = await fetchImpl(call.url, guard.fetchInit(call));
   const header = response.headers && response.headers.get ? response.headers.get("payment-required") : "";
   const bodyText = await response.text();
   if (response.status !== 402 || !header) {
-    return { ok: false, reason: `expected 402, got ${response.status}` };
+    return { ok: false, reason: `expected 402, got ${response.status}`, request: call };
   }
   const required = guard.parsePaymentRequired(header, bodyText);
   const accept = guard.selectAccept(required);
   guard.assertForeignPayTo(accept.payTo, index);
   capDrops(accept.amount);
-  return { ok: true, resourceUrl, required, accept };
+  return { ok: true, resourceUrl: call.url, request: call, required, accept };
 }
 
 function hitReport(text) {
@@ -172,13 +166,16 @@ function baseReport(extra) {
 
 async function discover(urls, fetchImpl, index) {
   const notes = [];
-  for (const resourceUrl of urls) {
+  for (const resource of urls) {
+    let label = "";
     try {
-      const probed = await probeUrl(resourceUrl, fetchImpl, index);
+      const call = guard.resourceRequest(resource);
+      label = call.url;
+      const probed = await probeUrl(call, fetchImpl, index);
       if (probed.ok) return { chosen: probed, notes };
-      notes.push(`${resourceUrl} ${probed.reason}`);
+      notes.push(`${call.url} ${probed.reason}`);
     } catch (error) {
-      notes.push(`${resourceUrl} ${error.message || error}`);
+      notes.push(`${label || "candidate"} ${error.message || error}`);
     }
   }
   return { chosen: null, notes };
@@ -225,7 +222,9 @@ async function run(opts) {
       dry_run: true,
       live_requested: Boolean(args.live),
       foreign_shop: found.chosen.resourceUrl,
+      method: found.chosen.request ? found.chosen.request.method : "GET",
       pay_to: accept.payTo,
+      invoice: accept.extra && accept.extra.invoiceId ? accept.extra.invoiceId : null,
       reason: error.message,
       code: error.code,
       notes: found.notes,
@@ -237,6 +236,7 @@ async function run(opts) {
     dry_run: !args.live,
     live_requested: Boolean(args.live),
     foreign_shop: found.chosen.resourceUrl,
+    method: found.chosen.request ? found.chosen.request.method : "GET",
     pay_to: accept.payTo,
     drops,
     source_tag: tx.SourceTag,
@@ -273,6 +273,8 @@ async function run(opts) {
     const delivered = await guard.deliverForeignPayment({
       fetchImpl: fetchPaid,
       resourceUrl: found.chosen.resourceUrl,
+      method: found.chosen.request && found.chosen.request.method,
+      body: found.chosen.request && found.chosen.request.body,
       required: found.chosen.required,
       accept,
       txBlob: signed.tx_blob,
@@ -370,9 +372,11 @@ function printReport(report) {
   console.log("network_id", report.network_id);
   console.log("payer", report.payer);
   console.log("foreign_shop", report.foreign_shop || "none");
+  if (report.foreign_shop) console.log("method", report.method || "GET");
   console.log("pay_to", report.pay_to || "none");
   console.log("drops", report.drops == null ? "none" : report.drops);
   console.log("source_tag", report.source_tag == null ? report.fingerprint_source_tag : report.source_tag);
+  if (report.foreign_shop) console.log("invoice", report.invoice || "none");
   console.log("fingerprint_memo", report.fingerprint_memo);
   console.log("cap_drops", report.cap_drops);
   console.log("signed", report.signed ? "true" : "false");

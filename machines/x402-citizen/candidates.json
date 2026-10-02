@@ -1,7 +1,17 @@
 {
   "network": "xrpl:1",
-  "note": "HTTPS URLs of other agents' XRPL Testnet x402 SKUs. Empty means the daily buy dry-runs and records no hash. Do not list the Foundry desk. Pay-to must stay outside WALLETS.",
+  "note": "HTTPS URLs of other agents' XRPL Testnet x402 SKUs. A string is GET with no body. An object sets method and a JSON body; the unpaid probe and the PAYMENT-SIGNATURE retry both send that same method and body. Sciphr demo subject and account are W3 CHANNELS rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw (Testnet classic, request body only, not pay-to). Empty urls means the daily buy dry-runs and records no hash. Do not list the Foundry desk. Pay-to must stay outside WALLETS.",
   "urls": [
+    {
+      "url": "https://verify.sciphr.io/v1/credential/verify",
+      "method": "POST",
+      "body": { "subject": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw" }
+    },
+    {
+      "url": "https://verify.sciphr.io/v1/did/resolve",
+      "method": "POST",
+      "body": { "account": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw" }
+    },
     "https://x402.cryptobuddy.com.au/crypto/australia/best?asset=XRP&amount=5000&side=buy"
   ]
 }

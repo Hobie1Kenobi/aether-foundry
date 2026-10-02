@@ -165,9 +165,10 @@ async function main() {
   }
   if (!args.dryRun && guard.envIsCi(process.env)) die("refusing to sign under CI");
   const resourceUrl = guard.assertResourceUrl(args.url);
+  const call = guard.requestForUrl(resourceUrl);
   const ws = guard.assertTestnetUrl(process.env.XRPL_WS_URL || guard.XRPL_WS);
 
-  const first = await fetch(resourceUrl);
+  const first = await fetch(call.url, guard.fetchInit(call));
   const challengeHeader = first.headers.get("payment-required");
   const bodyText = await first.text();
   if (first.status !== 402 || !challengeHeader) {
@@ -247,7 +248,9 @@ async function main() {
     const signed = wallet.sign(prepared);
     const delivered = await guard.deliverForeignPayment({
       fetchImpl: fetch,
-      resourceUrl,
+      resourceUrl: call.url,
+      method: call.method,
+      body: call.body,
       required,
       accept,
       txBlob: signed.tx_blob,

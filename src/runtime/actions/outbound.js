@@ -23,21 +23,42 @@ function urlFromActions(nextActions) {
   return "";
 }
 
-async function loadInvoice(opts) {
-  if (opts.required) return { required: opts.required, resourceUrl: opts.resourceUrl || "" };
+function resolveRequest(opts) {
   const resourceUrl = opts.resourceUrl || urlFromActions(opts.state && opts.state.next_actions);
-  if (!resourceUrl) return { required: null, resourceUrl: "" };
-  policy.assertAltnet({ url: resourceUrl, signing: false });
+  if (!resourceUrl) return null;
+  if (opts.method || opts.body != null) {
+    return guard.resourceRequest({
+      url: resourceUrl,
+      method: opts.method,
+      body: opts.body,
+    });
+  }
+  if (Array.isArray(opts.candidates)) return guard.matchResource(resourceUrl, opts.candidates);
+  return guard.requestForUrl(resourceUrl, opts.io);
+}
+
+async function loadInvoice(opts) {
+  const request = resolveRequest(opts);
+  if (opts.required) {
+    return {
+      required: opts.required,
+      resourceUrl: (request && request.url) || opts.resourceUrl || "",
+      request,
+    };
+  }
+  if (!request) return { required: null, resourceUrl: "", request: null };
+  policy.assertAltnet({ url: request.url, signing: false });
   const fetchImpl = opts.fetchImpl || globalThis.fetch;
-  const response = await fetchImpl(resourceUrl);
+  const response = await fetchImpl(request.url, guard.fetchInit(request));
   const header = response.headers && response.headers.get ? response.headers.get("payment-required") : "";
   const bodyText = await response.text();
   if (response.status !== 402 || !header) {
-    return { required: null, resourceUrl, status: response.status };
+    return { required: null, resourceUrl: request.url, request, status: response.status };
   }
   return {
     required: guard.parsePaymentRequired(header, bodyText),
-    resourceUrl,
+    resourceUrl: request.url,
+    request,
     status: 402,
     bodyText,
   };
@@ -143,6 +164,8 @@ async function execute(opts) {
   const delivered = await guard.deliverForeignPayment({
     fetchImpl,
     resourceUrl: draft.resourceUrl,
+    method: invoice.request && invoice.request.method,
+    body: invoice.request && invoice.request.body,
     required: draft.required,
     accept: draft.accept,
     txBlob: signed.tx_blob,
