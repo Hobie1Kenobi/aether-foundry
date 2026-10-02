@@ -7,6 +7,7 @@ const http = require("http");
 const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
+const xrpl = require("xrpl");
 const guard = require("./x402-outbound-guard");
 const record = require("./x402-outbound-record");
 const payer = require("./x402-outbound");
@@ -233,7 +234,21 @@ describe("seed loading", () => {
     fs.writeFileSync(file, "FOREIGN_SEED=not-the-payer\nW3_SEED=from-file\n");
     assert.equal(payer.loadW3Seed({ AETHER_SECRETS: file, W3_SEED: "" }), "from-file");
     assert.equal(payer.loadW3Seed({ W3_SEED: "from-env", AETHER_SECRETS: file }), "from-env");
+    fs.writeFileSync(file, "W3_REGULAR_SEED=file-regular\nW3_SEED=file-master\n");
+    assert.deepEqual(guard.loadW3SignerSeed({ AETHER_SECRETS: file, W3_SEED: "env-master" }), {
+      seed: "file-regular",
+      key_env: "W3_REGULAR_SEED",
+    });
     fs.unlinkSync(file);
+    const pack = guard.w3RegularAddress({});
+    assert.notEqual(pack, guard.W3_ADDRESS);
+    const checked = guard.assertW3Signer({ classicAddress: pack }, { key_env: "W3_REGULAR_SEED" }, {});
+    assert.equal(checked.account, guard.W3_ADDRESS);
+    assert.equal(checked.signer, pack);
+    assert.throws(
+      () => guard.assertW3Signer({ classicAddress: pack }, { key_env: "W3_SEED" }, {}),
+      (error) => error.code === "ACCOUNT" && /W3 CHANNELS/.test(error.message)
+    );
   });
 
   it("does not log a seed from the payer source", () => {
@@ -433,6 +448,40 @@ describe("outbound CLI", () => {
     assert.match(result.stdout, /drops 5000/);
     assert.match(result.stdout, /no tx hash \(not submitted\)/);
     assert.doesNotMatch(`${result.stdout}${result.stderr}`, /not-a-real-seed/);
+  });
+
+  it("refuses a regular key seed that is not the W3 regular key before connecting", async () => {
+    const regular = xrpl.Wallet.generate();
+    const other = xrpl.Wallet.generate();
+    const url = `http://127.0.0.1:${foreignPort}/foreign-oracle-ping`;
+    const result = await spawnPayer(
+      ["--url", url, "--max-drops", "10000"],
+      isolatedEnv({
+        W3_REGULAR_SEED: regular.seed,
+        W3_SEED: other.seed,
+        W3_REGULAR_ADDRESS: other.classicAddress,
+      })
+    );
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /regular key/);
+    assert.match(result.stderr, new RegExp(other.classicAddress));
+    assert.doesNotMatch(`${result.stdout}${result.stderr}`, /paid /);
+    assert.equal(`${result.stdout}${result.stderr}`.includes(regular.seed), false);
+    assert.equal(`${result.stdout}${result.stderr}`.includes(other.seed), false);
+  });
+
+  it("refuses a master seed whose classic address is not W3", async () => {
+    const master = xrpl.Wallet.generate();
+    const url = `http://127.0.0.1:${foreignPort}/foreign-oracle-ping`;
+    const result = await spawnPayer(
+      ["--url", url, "--max-drops", "10000"],
+      isolatedEnv({ W3_SEED: master.seed })
+    );
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /W3 CHANNELS/);
+    assert.match(result.stderr, new RegExp(guard.W3_ADDRESS));
+    assert.doesNotMatch(`${result.stdout}${result.stderr}`, /paid /);
+    assert.equal(`${result.stdout}${result.stderr}`.includes(master.seed), false);
   });
 
   it("asks for W3_SEED and prints the one-click when the ceiling allows a pay", async () => {

@@ -33,7 +33,7 @@ FOUNDRY_DAEMON_LIVE=yes npm run x402:citizen -- --live --url https://foreign-sho
 
 No `--url` and an empty `candidates.json` is a successful dry-run: `foreign_shop none`, `signed false`, `no tx hash (not submitted)`. That is the honest result when no foreign Testnet SKU is known. Do not invent a hash to fill `x402_outbound_hits`.
 
-`--record` appends `x402_outbound` only after HTTP 200. The signer is `W3_REGULAR_SEED`, then `W3_SEED`, and the classic address must be W3. The process refuses NetworkID other than 1.
+`--record` appends `x402_outbound` only after HTTP 200. The signer prefers `W3_REGULAR_SEED`. That seed's classic address must be the W3 regular key in `machines/governance-board/activated.json`, or `W3_REGULAR_ADDRESS` when that env is set. `W3_SEED` is used only when the regular seed is absent, and then the classic address must be W3. The Payment `Account` stays W3 CHANNELS. The process refuses NetworkID other than 1.
 
 ## Counts
 

@@ -45,8 +45,8 @@ Flow:
 2. Require x402 v2 and an `exact` XRP accept on `xrpl:1`.
 3. Refuse if `payTo` is any address in `WALLETS` (W0–W6, AMM, BUYER, STRANGER).
 4. Cheapness gate. Ceiling is `--max-drops`, else `MAX_DROPS`, else a stated `diyCostDrops` on the challenge. If `accept.amount` is above that ceiling, the process prints `too expensive vs DIY` and exits 2 without paying. If the challenge states no DIY cost and you set no ceiling, the payer will pay the ask — set a ceiling for unknown shops.
-5. Load `W3_SEED` (env, else the secrets file). Refuse CI / `GITHUB_ACTIONS`. Refuse mainnet websockets and `NetworkID` 0. The seed's classic address must be W3. The seed is never printed.
-6. Sign and submit a Testnet Payment: `Amount`, `SourceTag`, and invoice memo from the accept.
+5. Prefer `W3_REGULAR_SEED`, else `W3_SEED` (env overrides the same name in the secrets file). A regular seed must match the W3 regular key in `machines/governance-board/activated.json`, or `W3_REGULAR_ADDRESS` when that env is set. A master seed's classic address must be W3. The Payment `Account` stays W3. Refuse CI / `GITHUB_ACTIONS`. Refuse mainnet websockets and `NetworkID` 0. The seed is never printed.
+6. Sign and submit a Testnet Payment: `Amount`, `SourceTag`, and invoice memo from the accept. The signing key is the regular key when that seed is loaded.
 7. Retry with `PAYMENT-SIGNATURE`. Print the status, the body, and the tx hash.
 
 `--dry-run` stops before the seed is read and does not invent a hash.
@@ -59,7 +59,7 @@ Terminal 1:
 npm run x402:foreign
 ```
 
-Terminal 2, with `W3_SEED` in `AETHER_SECRETS` or `/workspace/aether-foundry-secrets/.env`:
+Terminal 2, with `W3_REGULAR_SEED` (or `W3_SEED` if the regular seed is absent) in `AETHER_SECRETS` or `/workspace/aether-foundry-secrets/.env`:
 
 ```bash
 npm run x402:outbound -- --url http://127.0.0.1:8787/foreign-oracle-ping --max-drops 10000 --record

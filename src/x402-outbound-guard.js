@@ -11,8 +11,11 @@ const rules = require("../web/lib/x402-rules");
 
 const ROOT = path.resolve(__dirname, "..");
 const WALLETS_FILE = path.join(ROOT, "web", "lib", "xrpl-public.ts");
+const ACTIVATED_FILE = path.join(ROOT, "machines", "governance-board", "activated.json");
+const SECRETS_PATH = "/workspace/aether-foundry-secrets/.env";
 const W3_ADDRESS = "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw";
 const XRPL_WS = "wss://s.altnet.rippletest.net:51233";
+const ADDRESS_RE = /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/;
 
 function envIsCi(env) {
   if (env.GITHUB_ACTIONS === "true") return true;
@@ -236,6 +239,88 @@ function buildSignaturePayload({ required, accept, txBlob, hash }) {
   };
 }
 
+function loadEnvText(text) {
+  const out = {};
+  for (const line of String(text).split("\n")) {
+    const match = line.match(/^([A-Z0-9_]+)=(.*)$/);
+    if (!match) continue;
+    let value = match[2].trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    out[match[1]] = value;
+  }
+  return out;
+}
+
+function loadW3SignerSeed(env, io) {
+  const source = env || {};
+  const file = source.AETHER_SECRETS || SECRETS_PATH;
+  const exists = (io && io.existsSync) || fs.existsSync;
+  const readFile = (io && io.readFileSync) || fs.readFileSync;
+  const fromFile = exists(file) ? loadEnvText(readFile(file, "utf8")) : {};
+  const merged = Object.assign({}, fromFile);
+  if (source.W3_REGULAR_SEED) merged.W3_REGULAR_SEED = source.W3_REGULAR_SEED;
+  if (source.W3_SEED) merged.W3_SEED = source.W3_SEED;
+  if (merged.W3_REGULAR_SEED) return { seed: merged.W3_REGULAR_SEED, key_env: "W3_REGULAR_SEED" };
+  if (merged.W3_SEED) return { seed: merged.W3_SEED, key_env: "W3_SEED" };
+  return { seed: "", key_env: "" };
+}
+
+function w3RegularAddress(env, io) {
+  if (env && String(env.W3_REGULAR_ADDRESS || "").trim()) {
+    const address = String(env.W3_REGULAR_ADDRESS).trim();
+    if (!ADDRESS_RE.test(address)) {
+      throw Object.assign(new Error("W3_REGULAR_ADDRESS is not a classic address"), { code: "ACCOUNT" });
+    }
+    if (address === W3_ADDRESS) {
+      throw Object.assign(new Error("W3 regular key must not equal W3 CHANNELS"), { code: "ACCOUNT" });
+    }
+    return address;
+  }
+  const readFile = (io && io.readFileSync) || fs.readFileSync;
+  const file = (io && io.activatedFile) || ACTIVATED_FILE;
+  let doc;
+  try {
+    doc = JSON.parse(readFile(file, "utf8"));
+  } catch {
+    throw Object.assign(new Error("W3 regular key is missing from activated.json"), { code: "ACCOUNT" });
+  }
+  const row = (doc.regular_keys || []).find((item) => item && item.id === "W3");
+  if (!row || !ADDRESS_RE.test(row.regular_key || "") || row.regular_key === W3_ADDRESS) {
+    throw Object.assign(new Error("W3 regular key is missing from activated.json"), { code: "ACCOUNT" });
+  }
+  if (row.account !== W3_ADDRESS) {
+    throw Object.assign(new Error("activated.json W3 account drifted"), { code: "ACCOUNT" });
+  }
+  return row.regular_key;
+}
+
+function assertW3Signer(wallet, loaded, env, io) {
+  const keyEnv = loaded && loaded.key_env;
+  const classic = (wallet && (wallet.classicAddress || wallet.address)) || "";
+  if (keyEnv === "W3_REGULAR_SEED") {
+    const expected = w3RegularAddress(env, io);
+    if (classic !== expected) {
+      throw Object.assign(
+        new Error(`signer address ${classic} is not the W3 regular key ${expected}`),
+        { code: "ACCOUNT" }
+      );
+    }
+    return { account: W3_ADDRESS, signer: classic, key_env: keyEnv };
+  }
+  if (keyEnv === "W3_SEED" && classic === W3_ADDRESS) {
+    return { account: W3_ADDRESS, signer: classic, key_env: keyEnv };
+  }
+  throw Object.assign(
+    new Error(`signer address ${classic} is not W3 CHANNELS ${W3_ADDRESS}`),
+    { code: "ACCOUNT" }
+  );
+}
+
 function assertResourceUrl(raw) {
   let url;
   try {
@@ -253,6 +338,11 @@ module.exports = {
   W3_ADDRESS,
   XRPL_WS,
   WALLETS_FILE,
+  ACTIVATED_FILE,
+  SECRETS_PATH,
+  loadW3SignerSeed,
+  w3RegularAddress,
+  assertW3Signer,
   envIsCi,
   isMainnetUrl,
   assertTestnetUrl,

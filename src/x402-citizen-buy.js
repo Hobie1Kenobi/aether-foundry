@@ -18,7 +18,6 @@ const xrpl = require("xrpl");
 const guard = require("./x402-outbound-guard");
 const record = require("./x402-outbound-record");
 const runtimePolicy = require("./runtime/policy");
-const outbound = require("./x402-outbound");
 
 const ROOT = path.resolve(__dirname, "..");
 const CANDIDATES = path.join(ROOT, "machines", "x402-citizen", "candidates.json");
@@ -148,17 +147,7 @@ function ledgerText(root, io) {
 }
 
 function loadSignerSeed(env, io) {
-  if (env.W3_REGULAR_SEED) return { seed: env.W3_REGULAR_SEED, key_env: "W3_REGULAR_SEED" };
-  if (env.W3_SEED) return { seed: env.W3_SEED, key_env: "W3_SEED" };
-  const parsed = outbound.loadEnvText;
-  const file = env.AETHER_SECRETS || outbound.SECRETS_PATH;
-  const exists = (io && io.existsSync) || fs.existsSync;
-  const readFile = (io && io.readFileSync) || fs.readFileSync;
-  if (!exists(file)) return { seed: "", key_env: "" };
-  const values = parsed(readFile(file, "utf8"));
-  if (values.W3_REGULAR_SEED) return { seed: values.W3_REGULAR_SEED, key_env: "W3_REGULAR_SEED" };
-  if (values.W3_SEED) return { seed: values.W3_SEED, key_env: "W3_SEED" };
-  return { seed: "", key_env: "" };
+  return guard.loadW3SignerSeed(env, io);
 }
 
 function baseReport(extra) {
@@ -284,18 +273,22 @@ async function run(opts) {
       { code: "SEED" }
     );
   }
+  const walletFromSeed = options.walletFromSeed || ((seed) => xrpl.Wallet.fromSeed(seed));
   let wallet;
   try {
-    wallet = xrpl.Wallet.fromSeed(loaded.seed);
-  } catch {
+    wallet = walletFromSeed(loaded.seed);
+  } catch (error) {
+    if (error && error.code === "ACCOUNT") throw error;
     throw Object.assign(new Error("W3 signer seed is not usable"), { code: "SEED" });
   }
-  if (wallet.classicAddress !== guard.W3_ADDRESS) {
-    throw Object.assign(new Error("signer address is not W3 CHANNELS"), { code: "ACCOUNT" });
-  }
+  guard.assertW3Signer(wallet, loaded, env, options.io);
   const ws = guard.assertTestnetUrl(env.XRPL_WS_URL || guard.XRPL_WS);
-  const client = new xrpl.Client(ws);
-  await client.connect();
+  const connect = options.connect || (async (url) => {
+    const client = new xrpl.Client(url);
+    await client.connect();
+    return client;
+  });
+  const client = await connect(ws);
   try {
     if (client.networkID !== 1) {
       throw Object.assign(new Error(`refusing NetworkID ${client.networkID}`), { code: "invalid_network" });
@@ -327,7 +320,7 @@ async function run(opts) {
         network: "xrpl:1",
         resource_url: found.chosen.resourceUrl,
         pay_to: accept.payTo,
-        payer: wallet.classicAddress,
+        payer: guard.W3_ADDRESS,
         amount_drops: drops,
         source_tag: tx.SourceTag,
         invoice_id: preview.invoice,
