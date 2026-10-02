@@ -41,13 +41,13 @@ npm run x402:outbound -- --url <RESOURCE_URL> [--max-drops <drops>] [--record] [
 
 Flow:
 
-1. `GET` the resource. Require HTTP 402 and `PAYMENT-REQUIRED`.
+1. Request the resource. A URL listed in `machines/x402-citizen/candidates.json` uses that entry's method and JSON body. Anything else is GET with no body. Require HTTP 402 and `PAYMENT-REQUIRED`.
 2. Require x402 v2 and an `exact` XRP accept on `xrpl:1`.
 3. Refuse if `payTo` is any address in `WALLETS` (W0–W6, AMM, BUYER, STRANGER).
 4. Cheapness gate. Ceiling is `--max-drops`, else `MAX_DROPS`, else a stated `diyCostDrops` on the challenge. If `accept.amount` is above that ceiling, the process prints `too expensive vs DIY` and exits 2 without paying. If the challenge states no DIY cost and you set no ceiling, the payer will pay the ask — set a ceiling for unknown shops.
 5. Prefer `W3_REGULAR_SEED`, else `W3_SEED` (env overrides the same name in the secrets file). A regular seed must match the W3 regular key in `machines/governance-board/activated.json`, or `W3_REGULAR_ADDRESS` when that env is set. A master seed's classic address must be W3. The Payment `Account` stays W3. Refuse CI / `GITHUB_ACTIONS`. Refuse mainnet websockets and `NetworkID` 0. The seed is never printed.
 6. Sign a Testnet Payment: `Amount`, `SourceTag`, and invoice memo from the accept. Do not submit it yet. The signing key is the regular key when that seed is loaded.
-7. Retry with `PAYMENT-SIGNATURE`. The payload is `signedTxBlob` plus `invoiceId` from `accept.extra.invoiceId` when the challenge has one. A shop that settles the blob (CryptoBuddy / t54 on Testnet) returns 200 and submits that blob itself. A shop that answers `payment_not_on_ledger` does not settle; the payer then submits that same blob once and retries. Print the status, the body, and the tx hash only after HTTP 200 or after that submit.
+7. Retry with `PAYMENT-SIGNATURE` on the same method and JSON body. The payload is `signedTxBlob` plus `invoiceId` from `accept.extra.invoiceId` when the challenge has one. A shop that settles the blob (CryptoBuddy / t54 on Testnet) returns 200 and submits that blob itself. A shop that answers `payment_not_on_ledger` does not settle; the payer then submits that same blob once and retries. Print the status, the body, and the tx hash only after HTTP 200 or after that submit.
 
 `--dry-run` stops before the seed is read and does not invent a hash.
 

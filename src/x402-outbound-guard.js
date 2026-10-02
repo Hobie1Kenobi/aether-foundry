@@ -12,6 +12,7 @@ const rules = require("../web/lib/x402-rules");
 const ROOT = path.resolve(__dirname, "..");
 const WALLETS_FILE = path.join(ROOT, "web", "lib", "xrpl-public.ts");
 const ACTIVATED_FILE = path.join(ROOT, "machines", "governance-board", "activated.json");
+const CANDIDATES_FILE = path.join(ROOT, "machines", "x402-citizen", "candidates.json");
 const SECRETS_PATH = "/workspace/aether-foundry-secrets/.env";
 const W3_ADDRESS = "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw";
 const XRPL_WS = "wss://s.altnet.rippletest.net:51233";
@@ -293,22 +294,93 @@ function defaultSleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function resourceRequest(input) {
+  if (typeof input === "string") {
+    return { url: assertResourceUrl(input.trim()), method: "GET", body: null };
+  }
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw Object.assign(new Error("resource request is not a URL"), { code: "PARSE" });
+  }
+  const url = assertResourceUrl(String(input.url || input.resourceUrl || "").trim());
+  const method = String(input.method || "GET").toUpperCase();
+  if (method !== "GET" && method !== "POST") {
+    throw Object.assign(new Error("resource method must be GET or POST"), { code: "PARSE" });
+  }
+  if (input.body == null) return { url, method, body: null };
+  if (method !== "POST" || typeof input.body !== "object" || Array.isArray(input.body)) {
+    throw Object.assign(new Error("resource body must be a JSON object on POST"), { code: "PARSE" });
+  }
+  return { url, method, body: Object.assign({}, input.body) };
+}
+
+function matchResource(url, requests) {
+  const normalized = assertResourceUrl(String(url || "").trim());
+  const list = Array.isArray(requests) ? requests : [];
+  for (const item of list) {
+    const request = resourceRequest(item);
+    if (request.url === normalized) return request;
+  }
+  return resourceRequest(normalized);
+}
+
+function fetchInit(request, headers) {
+  const call = resourceRequest(request);
+  const init = {
+    method: call.method,
+    headers: Object.assign({ Accept: "application/json" }, headers || {}),
+  };
+  if (call.body != null) {
+    init.headers["Content-Type"] = "application/json";
+    init.body = JSON.stringify(call.body);
+  }
+  return init;
+}
+
+function loadCandidateRequests(file, io) {
+  const target = file || CANDIDATES_FILE;
+  const exists = (io && io.existsSync) || fs.existsSync;
+  const readFile = (io && io.readFileSync) || fs.readFileSync;
+  if (!exists(target)) return [];
+  let doc;
+  try {
+    doc = JSON.parse(readFile(target, "utf8"));
+  } catch {
+    throw Object.assign(new Error("candidates.json is not JSON"), { code: "PARSE" });
+  }
+  const urls = doc && Array.isArray(doc.urls) ? doc.urls : [];
+  const out = [];
+  for (const item of urls) {
+    if (typeof item === "string" && !item.trim()) continue;
+    out.push(resourceRequest(item));
+  }
+  return out;
+}
+
+function requestForUrl(url, io) {
+  return matchResource(url, loadCandidateRequests(CANDIDATES_FILE, io));
+}
+
 /**
  * Offer a presigned Payment first. Shops that settle the blob (CryptoBuddy / t54)
  * return 200. A verify-only shop answers payment_not_on_ledger; submit that same
  * blob once, then retry. Do not submit on any other refusal.
+ * The retry uses the same method and JSON body as the unpaid probe.
  */
 async function deliverForeignPayment(opts) {
   const options = opts || {};
   const fetchImpl = options.fetchImpl;
   const sleep = options.sleep || defaultSleep;
-  const resourceUrl = options.resourceUrl;
   if (typeof fetchImpl !== "function") {
     throw Object.assign(new Error("deliverForeignPayment needs fetchImpl"), { code: "PARSE" });
   }
-  if (!resourceUrl) {
+  if (!options.resourceUrl) {
     throw Object.assign(new Error("deliverForeignPayment needs a resource url"), { code: "PARSE" });
   }
+  const call = resourceRequest({
+    url: options.resourceUrl,
+    method: options.method,
+    body: options.body,
+  });
   let activeHash = normalizeHash(options.hash);
 
   async function send(includeTxHash) {
@@ -318,12 +390,10 @@ async function deliverForeignPayment(opts) {
       txBlob: options.txBlob,
       hash: includeTxHash ? activeHash : null,
     });
-    const response = await fetchImpl(resourceUrl, {
-      headers: {
-        Accept: "application/json",
-        "PAYMENT-SIGNATURE": rules.encodeHeader(payload),
-      },
-    });
+    const response = await fetchImpl(
+      call.url,
+      fetchInit(call, { "PAYMENT-SIGNATURE": rules.encodeHeader(payload) })
+    );
     const text = await response.text();
     return {
       status: response.status,
@@ -510,6 +580,12 @@ module.exports = {
   priceVerdict,
   buildPaymentTx,
   buildSignaturePayload,
+  resourceRequest,
+  matchResource,
+  fetchInit,
+  loadCandidateRequests,
+  requestForUrl,
+  CANDIDATES_FILE,
   deliverForeignPayment,
   assertResourceUrl,
   encodeHeader: rules.encodeHeader,

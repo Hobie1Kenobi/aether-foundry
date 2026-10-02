@@ -590,6 +590,52 @@ describe("PAYMENT-SIGNATURE invoiceId", () => {
     assert.equal(delivered.hash, null);
   });
 
+  it("retries a POST body on the signature and again after payment_not_on_ledger", async () => {
+    const body = { subject: guard.W3_ADDRESS };
+    const seen = [];
+    let submits = 0;
+    const delivered = await guard.deliverForeignPayment({
+      resourceUrl: "https://verify.sciphr.io/v1/credential/verify",
+      method: "POST",
+      body,
+      accept,
+      txBlob: "BLOB",
+      hash: "E".repeat(64),
+      sleep: async () => {},
+      fetchImpl: async (url, init) => {
+        seen.push({ url, method: init.method, body: init.body });
+        assert.equal(init.method, "POST");
+        assert.equal(init.body, JSON.stringify(body));
+        assert.equal(init.headers["Content-Type"], "application/json");
+        const payload = rules.decodeHeader(init.headers["PAYMENT-SIGNATURE"]).payload;
+        if (seen.length === 1) {
+          assert.equal(Object.prototype.hasOwnProperty.call(payload, "transaction"), false);
+          return jsonReply(402, { code: "payment_not_on_ledger" });
+        }
+        assert.equal(payload.transaction, "E".repeat(64));
+        assert.equal(payload.invoiceId, accept.extra.invoiceId);
+        return jsonReply(200, { ok: true });
+      },
+      submit: async () => {
+        submits += 1;
+        return { hash: "E".repeat(64), result: "tesSUCCESS" };
+      },
+    });
+    assert.equal(submits, 1);
+    assert.equal(seen.length, 2);
+    assert.equal(seen.every((call) => call.method === "POST" && call.body === JSON.stringify(body)), true);
+    assert.equal(delivered.mode, "client-submit");
+    assert.equal(delivered.http_status, 200);
+    assert.throws(
+      () => guard.resourceRequest({ url: "https://foreign.example/sku", method: "PUT" }),
+      (error) => error.code === "PARSE"
+    );
+    assert.throws(
+      () => guard.resourceRequest({ url: "https://foreign.example/sku", body: { subject: "r" } }),
+      (error) => error.code === "PARSE"
+    );
+  });
+
   it("submits once after payment_not_on_ledger and retries with the hash", async () => {
     let submits = 0;
     const seen = [];
@@ -733,5 +779,72 @@ describe("runtime outbound shop-settle", () => {
     assert.equal(done.settlement, "client-submit");
     assert.equal(done.submitted, true);
     assert.equal(done.http_status, 200);
+  });
+
+  it("probes and pays a filed POST candidate with the same JSON body", async () => {
+    const url = "https://verify.sciphr.io/v1/did/resolve";
+    const body = JSON.stringify({ account: guard.W3_ADDRESS });
+    const calls = [];
+    const required = {
+      x402Version: 2,
+      accepts: [
+        {
+          scheme: "exact",
+          network: "xrpl:1",
+          amount: "2000",
+          asset: "XRP",
+          payTo: pub.FOREIGN_ADDRESS,
+          extra: { sourceTag: 804681468, invoiceId: "post-body" },
+        },
+      ],
+    };
+    const done = await runtimeOutbound.execute({
+      env: { FOUNDRY_DAEMON_LIVE: "yes", CI: "", GITHUB_ACTIONS: "" },
+      state: state(),
+      now: new Date("2026-09-29T12:00:00.000Z"),
+      history: [],
+      resourceUrl: url,
+      sleep: async () => {},
+      sign: async (tx) => {
+        assert.equal(tx.Amount, "2000");
+        assert.equal(tx.Destination, pub.FOREIGN_ADDRESS);
+        return { tx_blob: "BLOB", hash: "C".repeat(64) };
+      },
+      submitBlob: async () => {
+        throw new Error("shop-settle must not submit");
+      },
+      fetchImpl: async (target, init) => {
+        calls.push({ target, method: init.method, body: init.body, signed: Boolean(init.headers["PAYMENT-SIGNATURE"]) });
+        assert.equal(target, url);
+        assert.equal(init.method, "POST");
+        assert.equal(init.body, body);
+        if (!init.headers["PAYMENT-SIGNATURE"]) {
+          return {
+            status: 402,
+            headers: {
+              get(name) {
+                return String(name).toLowerCase() === "payment-required" ? rules.encodeHeader(required) : "";
+              },
+            },
+            text: async () => JSON.stringify(required),
+          };
+        }
+        const payload = rules.decodeHeader(init.headers["PAYMENT-SIGNATURE"]).payload;
+        assert.equal(payload.invoiceId, "post-body");
+        assert.equal(payload.signedTxBlob, "BLOB");
+        assert.equal(Object.prototype.hasOwnProperty.call(payload, "transaction"), false);
+        return jsonReply(200, { ok: true });
+      },
+      archive: () => {},
+      recordOutbound: () => {},
+    });
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].signed, false);
+    assert.equal(calls[1].signed, true);
+    assert.equal(calls.every((call) => call.method === "POST" && call.body === body), true);
+    assert.equal(done.settlement, "shop-settle");
+    assert.equal(done.submitted, false);
+    assert.equal(done.http_status, 200);
+    assert.equal(done.hash, "C".repeat(64));
   });
 });

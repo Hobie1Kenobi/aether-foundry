@@ -49,7 +49,7 @@ The catalog at `GET /api/x402` and `howToPay.facilitator` advertise the testnet 
 
 The Payment carries the shop's `SourceTag` when the 402 names one, otherwise SourceTag `202609296`. It always adds a memo whose type is `aether-foundry` and whose data is `aether-foundry:f11`. The retry header carries `payload.invoiceId` from the challenge. Foundry does not submit that blob when the shop settles it.
 
-`machines/x402-citizen/candidates.json` ships with an empty `urls` list. No foreign shop was known at pack time, so a run with no `--url` dry-runs and does not invent a hash. Pass `--url` when a Testnet SKU outside `WALLETS` answers 402.
+`machines/x402-citizen/candidates.json` lists foreign Testnet SKUs. A string URL is probed with GET and no body. An object may set `method` and a JSON `body`; the unpaid probe and every `PAYMENT-SIGNATURE` retry send that same method and body. Sciphr credential verify and DID resolve are POST. Their demo `subject` and `account` are W3 CHANNELS `rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw`, a Testnet classic address used only as the request body, not as pay-to. CryptoBuddy stays a GET. The first candidate that answers 402 under the cap is the dry-run. Pass `--url` to pick one. A URL already in the file keeps that entry's method and body. An empty `urls` list dry-runs and does not invent a hash.
 
 ## Non-goals
 

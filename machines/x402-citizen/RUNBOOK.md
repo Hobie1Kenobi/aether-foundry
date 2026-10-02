@@ -27,11 +27,14 @@ Confirm `GET /api/status` shows `facilitator.mode` `dual`, `facilitator.host` `x
 
 ```bash
 npm run x402:citizen
-npm run x402:citizen -- --url https://foreign-shop.example/sku
-FOUNDRY_DAEMON_LIVE=yes npm run x402:citizen -- --live --url https://foreign-shop.example/sku --record
+npm run x402:citizen -- --url https://verify.sciphr.io/v1/credential/verify
+npm run x402:citizen -- --url https://verify.sciphr.io/v1/did/resolve
+FOUNDRY_DAEMON_LIVE=yes npm run x402:citizen -- --live --url https://verify.sciphr.io/v1/credential/verify --record
 ```
 
-No `--url` and an empty `candidates.json` is a successful dry-run: `foreign_shop none`, `signed false`, `no tx hash (not submitted)`. That is the honest result when no foreign Testnet SKU is known. Do not invent a hash to fill `x402_outbound_hits`.
+No `--url` probes `candidates.json` in order. Sciphr entries are POST with a JSON body. The demo `subject` (credential verify) and `account` (DID resolve) are W3 CHANNELS `rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw`. That address is the request body on Testnet. It is not the pay-to. CryptoBuddy stays a GET. A dry-run that finds a 402 prints `method`, `pay_to`, `drops`, and `source_tag`, and does not sign. An empty `urls` list is still a successful dry-run: `foreign_shop none`, `signed false`, `no tx hash (not submitted)`. Do not invent a hash to fill `x402_outbound_hits`.
+
+`--live` retries the same method and body with `PAYMENT-SIGNATURE`. Sciphr settles the presigned blob (HTTP 200, Foundry does not submit). `payment_not_on_ledger` is the only path that submits that blob once.
 
 `--record` appends `x402_outbound` only after HTTP 200. The signer prefers `W3_REGULAR_SEED`. That seed's classic address must be the W3 regular key in `machines/governance-board/activated.json`, or `W3_REGULAR_ADDRESS` when that env is set. `W3_SEED` is used only when the regular seed is absent, and then the classic address must be W3. The Payment `Account` stays W3 CHANNELS. The process refuses NetworkID other than 1.
 
