@@ -480,10 +480,10 @@ export function downWall(now = Date.now()): WallPayload {
 
 export function dropsToXrp(drops: string): string | null {
   if (!/^\d+$/.test(drops)) return null;
-  const value = BigInt(drops);
-  const whole = value / 1_000_000n;
-  const frac = (value % 1_000_000n).toString().padStart(6, "0");
-  return `${whole.toString()}.${frac}`;
+  const padded = drops.padStart(7, "0");
+  const whole = padded.slice(0, -6).replace(/^0+(?=\d)/, "");
+  const frac = padded.slice(-6);
+  return `${whole}.${frac}`;
 }
 
 function balanceDrops(value: unknown): string | null {
@@ -616,7 +616,6 @@ export async function buildWall(opts: BuildWallOptions = {}): Promise<WallPayloa
       mainnetProbe = {
         probed_at: seenAt,
         build_version: server.build,
-        ledger_index: server.ledger,
         amendments: featureRows(feature),
       };
       mainnetMode = "probe";
