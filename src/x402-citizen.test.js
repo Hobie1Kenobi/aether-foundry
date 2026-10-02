@@ -61,7 +61,11 @@ describe("citizen buyer", () => {
     assert.equal(report.fingerprint_memo, "aether-foundry:f11");
     assert.match(report.reason, /no foreign shop/);
     const filed = JSON.parse(fs.readFileSync(citizen.CANDIDATES, "utf8"));
-    assert.deepEqual(filed.urls, []);
+    assert.deepEqual(filed.urls, [
+      "https://verify.sciphr.io/v1/credential/verify",
+      "https://verify.sciphr.io/v1/did/resolve",
+      "https://x402.cryptobuddy.com.au/crypto/australia/best?asset=XRP&amount=5000&side=buy",
+    ]);
     assert.equal(filed.network, "xrpl:1");
   });
 
