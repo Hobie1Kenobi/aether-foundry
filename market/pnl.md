@@ -18,7 +18,7 @@ Live refresh via `npm run report:nav` — ledger **21094528**, CT **2026-09-27 ~
 | passive_offers_live | 4 (W1 CLOB wings) | live |
 | x402_hits | 0 | append desk x402_hit via npm run x402:hit |
 | x402_outbound_hits | 4 | append via npm run x402:outbound -- --record |
-| grants_paid | 2 | append via npm run grants:pay -- --record |
+| grants_paid | 3 | append via npm run grants:pay -- --record |
 | surprises | 3 (epoch scar; SettleDelay dest-vs-source; Batch disabled on testnet 3.4.1) | |
 
 ## Corp wallet snapshot (spendable XRP)
