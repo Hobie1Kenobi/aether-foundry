@@ -1,4 +1,6 @@
-<img src="docs/assets/mark.svg" width="96" height="96" alt="Aether Foundry mark: three ingots, a crucible, a ring">
+<p align="center">
+  <img src="docs/brand/aether-foundry-logo.png" width="720" alt="Aether Foundry — Liberty ChainGuard. Hex forge and chain network mark in navy, cyan, and gold.">
+</p>
 
 # Aether Foundry
 
@@ -429,7 +431,7 @@ public/     xrp-ledger.toml, also served by the desk
 hooks/      W7 split hook C and wasm (Xahau)
 market/     pnl, fx, books
 atelier/    NFT metadata
-docs/       architecture, Ripple Epoch, the mark above
+docs/       architecture, Ripple Epoch, brand/ (official logo)
 ```
 
 Deeper map, still short: [`docs/architecture.md`](./docs/architecture.md). Desk deploy notes: [`web/README.md`](./web/README.md). Vercel project `aether-foundry-desk`, root directory `web`. No seeds in Vercel.
