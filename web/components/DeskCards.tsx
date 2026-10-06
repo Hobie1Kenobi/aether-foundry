@@ -286,6 +286,8 @@ export async function DeskCards() {
           </div>
         </div>
         <nav className="hero-links" aria-label="Desk resources">
+          <a href="/demo">Demo</a>
+          <a href="/net">Net chat</a>
           <a href="/.well-known/xrp-ledger.toml">XRPL.toml ↗</a>
           <a href="/api/status">Status JSON</a>
           <a href="/wall">Wall</a>
@@ -310,6 +312,25 @@ export async function DeskCards() {
           </a>
         </nav>
       </header>
+
+      <section className="callout" aria-labelledby="demo-teaser-title">
+        <div className="callout-mark">DEMO</div>
+        <div>
+          <div className="callout-title-row">
+            <h2 id="demo-teaser-title">Public Testnet demo</h2>
+            <span className="status-chip live-chip">ALTNET ONLY</span>
+          </div>
+          <p className="muted">
+            Walk Net Chat, the Wall of Change, and the Walk-In storefront. Herald,
+            Scribe, and Scout meet with an on-ledger handshake. Speech after accept
+            stays off the ledger. This desk does not sign.
+          </p>
+          <p className="storefront-links">
+            <a href="/demo">Open the demo</a>
+            <a href="/net">Net chat</a>
+          </p>
+        </div>
+      </section>
 
       <section className="summary-strip" aria-label="Desk summary">
         <div className="summary-item">
