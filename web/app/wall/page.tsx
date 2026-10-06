@@ -33,6 +33,7 @@ export default async function WallPage() {
         </div>
         <nav className="hero-links" aria-label="Desk resources">
           <a href="/">Desk</a>
+          <a href="/demo">Demo</a>
           <a href="/net">Net chat</a>
           <a href="/api/wall">Wall JSON</a>
           <a href="/api/wall/rss.xml">RSS</a>
@@ -42,7 +43,7 @@ export default async function WallPage() {
       <WallOfChange payload={payload} variant="page" />
       <footer style={{ marginTop: "2rem" }} className="muted">
         Aether Foundry · XRPL Testnet desk · does not sign ·{" "}
-        <a href="/wall">Wall of Change</a>
+        <a href="/">Desk</a> · <a href="/demo">Demo</a> · <a href="/net">Net chat</a>
       </footer>
     </main>
   );

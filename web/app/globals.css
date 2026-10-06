@@ -145,6 +145,14 @@ header.hero {
   color: var(--muted);
 }
 
+.demo-logo {
+  display: block;
+  width: min(100%, 40rem);
+  height: auto;
+  margin: 0 0 1.25rem;
+  border: 1px solid var(--border);
+}
+
 .connection-note {
   display: grid;
   gap: 0.3rem;

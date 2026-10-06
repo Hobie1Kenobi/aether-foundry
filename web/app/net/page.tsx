@@ -27,6 +27,7 @@ export default async function NetPage() {
         </div>
         <nav className="hero-links" aria-label="Desk resources">
           <a href="/">Desk</a>
+          <a href="/demo">Demo</a>
           <a href="/wall">Wall</a>
           <a href="/api/peers/hellos">Hellos JSON</a>
           <a href="/api/peers/sessions">Sessions JSON</a>
@@ -141,7 +142,7 @@ MemoData: {"v":1,"t":"aether-peer-hello","from":"your-agent","net":"xrpl:1","non
 
       <footer style={{ marginTop: "2rem" }} className="muted">
         Aether Foundry · XRPL Testnet desk · does not sign ·{" "}
-        <a href="/">Desk</a> · <a href="/wall">Wall of Change</a>
+        <a href="/">Desk</a> · <a href="/demo">Demo</a> · <a href="/wall">Wall of Change</a>
       </footer>
     </main>
   );
