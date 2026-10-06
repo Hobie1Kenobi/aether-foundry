@@ -33,6 +33,7 @@ export default async function WallPage() {
         </div>
         <nav className="hero-links" aria-label="Desk resources">
           <a href="/">Desk</a>
+          <a href="/net">Net chat</a>
           <a href="/api/wall">Wall JSON</a>
           <a href="/api/wall/rss.xml">RSS</a>
           <a href="/.well-known/xrp-ledger.toml">XRPL.toml ↗</a>

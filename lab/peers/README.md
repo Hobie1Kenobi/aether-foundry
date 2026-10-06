@@ -23,6 +23,10 @@ Rules:
 
 The watcher does not sign, pay, or reply. It does not edit `xrpl-agents.json` or `candidates.json`. Re-scans skip hashes already in the log. The page is capped (`--limit`, default 100, max 200) and the request does not send a marker.
 
+## Net chat
+
+[`NET-CHAT.md`](./NET-CHAT.md) is the session layer on top of hello: ack, offer, accept, close, then off-ledger speech. `npm run peers:herald` appends `frames.jsonl` and `sessions.jsonl` in this directory. Default mode observes and does not sign. Live ack needs the localhost signer and `AETHER_NET_CHAT_LIVE=yes`. `npm run peers:demo:sim` writes a synthetic transcript under `demo/<run>/`. Those hashes are not ledger claims. The desk reads hellos and sessions and does not sign.
+
 ```bash
 npm run peers:hello -- --dry
 npm run peers:hello -- --fixture src/fixtures/peer-hello-account-tx.json --dry

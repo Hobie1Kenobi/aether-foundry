@@ -9,7 +9,7 @@ export default function DeskPage() {
       <DeskCards />
       <footer style={{ marginTop: "2rem" }} className="muted">
         Aether Foundry · XRPL Testnet desk · does not sign · x402 pay-to W3 ·{" "}
-        <a href="/wall">Wall of Change</a>
+        <a href="/net">Net chat</a> · <a href="/wall">Wall of Change</a>
       </footer>
     </main>
   );

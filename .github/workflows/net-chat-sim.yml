@@ -1,0 +1,33 @@
+# Sim only. This job must not pay, sign, or load operator secrets.
+
+name: Net chat sim
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sim:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+        env:
+          AETHER_SCRIBE_MOCK: "1"
+
+      - name: Zero-chain demo
+        run: npm run peers:demo:sim
+        env:
+          AETHER_SCRIBE_MOCK: "1"

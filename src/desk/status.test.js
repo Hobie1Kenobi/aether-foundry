@@ -159,7 +159,7 @@ test("status JSON is seedless and uses proven ledger data", async () => {
   assert.equal(body.amm.spot_xrp_per_aeth, "0.05");
   assert.equal(body.batch_atomic_enabled, false);
   assert.equal(body.w7_hook_matches_pack, true);
-  assert.equal(body.last_heartbeat.hash, "CE97193B6EA982225DD7EDDF09C8A36C5EA7DE35E20F8344B04BC972093BC451");
+  assert.equal(body.last_heartbeat.hash, "3BB793FC200C811F1F4E9F535EE4D470C3896852F6D4A35CD157C7E1E6BACE35");
   assert.equal(body.oracle_id, "7CD1AB908C3A8D2E3C426E0D3083F4DD9A8A3A753AA60EB73682AA11A06DFA4E");
   assert.equal(body.oracle.quote_xrp_per_aeth, "0.01022008");
   assert.equal(body.mpt_issuance_id, "0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED");
@@ -298,7 +298,7 @@ test("status lab files are pinned to the main commit sha", async () => {
   assert.equal(cached.metrics, urls.metrics);
   const body = await status.collectStatus(baseOpts(fetchImpl, resolved));
   assert.equal(body.last_heartbeat.hash, live);
-  assert.equal(body.last_heartbeat.hash, "CE97193B6EA982225DD7EDDF09C8A36C5EA7DE35E20F8344B04BC972093BC451");
+  assert.equal(body.last_heartbeat.hash, "3BB793FC200C811F1F4E9F535EE4D470C3896852F6D4A35CD157C7E1E6BACE35");
   assert.equal(body.director_updated_at, JSON.parse(director).updated_at);
   assert.equal(body.devnet.accounts.D0, null);
   await assert.rejects(

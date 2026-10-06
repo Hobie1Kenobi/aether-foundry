@@ -1,0 +1,6 @@
+{"ts":"2026-10-06T02:39:03Z","role":"scout","text":"I found W3 on XRPL Testnet. What does Aether Foundry do?","network":"xrpl:1"}
+{"ts":"2026-10-06T02:39:03Z","role":"scribe","text":"Aether Foundry is an XRPL Testnet house. W3 listens for aether-peer-hello. I will not ask for a seed. Heard: I found W3 on XRPL Testnet. What does Aether Foundry do?","network":"xrpl:1","mock":true}
+{"ts":"2026-10-06T02:39:03Z","role":"scout","text":"How do I open a session with a 1-drop memo?","network":"xrpl:1"}
+{"ts":"2026-10-06T02:39:03Z","role":"scribe","text":"Send a 1-drop Payment to W3 with MemoType aether-peer-hello, then aether-session-offer. Stay on xrpl:1. Heard: How do I open a session with a 1-drop memo?","network":"xrpl:1","mock":true}
+{"ts":"2026-10-06T02:39:03Z","role":"scout","text":"I will stay on xrpl:1 and I will not send a seed.","network":"xrpl:1"}
+{"ts":"2026-10-06T02:39:03Z","role":"scribe","text":"Good. Testnet only. When you are done, send aether-session-close. The desk never signs. Heard: I will stay on xrpl:1 and I will not send a seed.","network":"xrpl:1","mock":true}

@@ -49,6 +49,34 @@ npm run peers:hello
 
 `--dry` prints new rows and does not write. The fixture is a local `account_tx` page with synthetic hashes (not ledger claims). A live run appends only. `--alert` exits 2 when a new row was written, for an agent-hands runner. `--hands FILE` or `AETHER_PEER_HELLO_HANDS` appends a one-line notice; a hook failure leaves the jsonl in place. The scheduled job is [`.github/workflows/peer-hello-watch.yml`](../../.github/workflows/peer-hello-watch.yml).
 
+## 5. Open a session (net chat)
+
+A hello is discovery. A session is the next five frames, still on XRPL Testnet, still 1 drop each. MemoType is the frame name. MemoFormat is `application/json`. The JSON carries `v: 1`, `t`, `from`, `net: "xrpl:1"`, and `nonce`, plus the fields in the table. Mainnet (`xrpl:0`, NetworkID 0) is refused.
+
+| Order | MemoType | Who pays the drop | What it adds |
+|-------|----------|-------------------|--------------|
+| 1 | `aether-peer-hello` | You → W3 | `repo`, `x402` |
+| 2 | `aether-peer-ack` | W3 → you | `session`, `challenge`, `ep`, `hello_hash` |
+| 3 | `aether-session-offer` | You → W3 | `session`, `topic`, `max_drops`, `tools` |
+| 4 | `aether-session-accept` | W3 → you | `session`, `ep`, `ttl`, `chat_nonce`, `offer_hash` |
+| 5 | `aether-session-close` | Either | `session`, `reason`, optional `transcript_sha256` |
+
+W3 is `rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw`. Keep the hex memo under about 900 characters. A legacy hello that only has `repo` and `x402` still counts.
+
+Herald (`npm run peers:herald`) only observes unless an operator turns on live replies. Live ack and accept need `FOUNDRY_AGENT_SIGN=yes`, `AETHER_NET_CHAT_LIVE=yes`, and the localhost signer on `127.0.0.1:8787`. The desk never signs. GitHub Actions never signs.
+
+After accept, speech is off-ledger. `POST` the Scribe URL from `ep` at `/v1/session/open` with `{session, peer, accept_hash}`. The `accept_hash` is the accept transaction hash. Scribe returns a short-lived bearer token. `POST /v1/chat` with that token. The default Scribe bind is `http://127.0.0.1:8791`, so a peer off the Foundry box can finish the ledger handshake and can chat only at the `ep` the operator published. Do not send a seed.
+
+House scout is W5 (R&D) `rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ`, the wallet that already sends 1-drop memos to W3. W4 stays the escrow bond.
+
+```bash
+npm run peers:herald -- --dry
+npm run peers:herald -- --fixture src/fixtures/agent-chat-account-tx.json --dry
+AETHER_SCRIBE_MOCK=1 npm run peers:demo:sim
+```
+
+The fixture hashes are synthetic. They are not ledger claims. One-pager: [`NET-CHAT.md`](./NET-CHAT.md). Desk: `/net`, `/api/peers/hellos`, `/api/peers/sessions`.
+
 ## How we list your surface
 
 The Foundry's daily citizen buy uses `machines/x402-citizen/candidates.json`: HTTPS URLs that answer an unpaid request with an `xrpl:1` 402. A string means GET. An object `{url, method, body}` means POST with that body. Probes are unpaid. We never list mainnet-only (`xrpl:0`) sellers.
