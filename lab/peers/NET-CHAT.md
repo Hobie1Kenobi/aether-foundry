@@ -47,7 +47,9 @@ AETHER_NET_CHAT_LIVE=yes FOUNDRY_AGENT_SIGN=yes \
   npm run peers:demo:live
 ```
 
-`peers:demo:live` exits with a clear error if the signer is down, the flags are missing, or `OLLAMA_API_KEY` is unset. `AETHER_SCRIBE_MOCK=1` is the CI path and is refused on the live demo.
+`peers:demo:live` exits with a clear error if the signer is down, the flags are missing, or `OLLAMA_API_KEY` is unset. `AETHER_SCRIBE_MOCK=1` is the CI path and is refused on the live demo. With `--out`, the live writer includes the close frame and `close_hash` when the signer returned one.
+
+A presenter run on Testnet is archived as hashes only: [`demo/live-2026-10-06-presenter/README.md`](./demo/live-2026-10-06-presenter/README.md), session `s_85f7038788f850df`. Memo bodies and the transcript were not copied off the operator box, so `hellos.jsonl` and `sessions.jsonl` do not gain rows from that note. The desk still only reads.
 
 Ollama Cloud defaults: base `https://ollama.com`, model `glm-5.3-flash`. Other cloud models the operator can set include `gpt-oss:20b` and `kimi-k2.6`. The key stays in the operator environment. It is not a Vercel variable and it is not committed.
 

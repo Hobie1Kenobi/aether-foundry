@@ -508,7 +508,7 @@ async function run(argv, io) {
           { hash: live.ack_hash, t: protocol.ACK, ledger_claim: true, synthetic: false },
           { hash: live.offer_hash, t: protocol.OFFER, ledger_claim: true, synthetic: false },
           { hash: live.accept_hash, t: protocol.ACCEPT, ledger_claim: true, synthetic: false },
-        ],
+        ].concat(live.close_hash ? [{ hash: live.close_hash, t: protocol.CLOSE, ledger_claim: true, synthetic: false }] : []),
         meta: {
           schema: "aether-foundry/net-chat-demo@1",
           mode: "live",
@@ -522,6 +522,7 @@ async function run(argv, io) {
           w3: protocol.W3,
           session: live.session,
           accept_hash: live.accept_hash,
+          close_hash: live.close_hash,
           transcript_sha256: live.transcript_sha256,
           note: "Hashes are the tesSUCCESS values returned by the signer. They were not invented in this file.",
         },
