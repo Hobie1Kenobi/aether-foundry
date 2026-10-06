@@ -102,6 +102,22 @@ export default function DemoPage() {
         alt="Aether Foundry — Liberty ChainGuard. Hex forge and chain network mark in navy, cyan, and gold."
       />
 
+      <figure className="demo-clip">
+        <video
+          className="demo-video"
+          controls
+          playsInline
+          preload="metadata"
+          poster="/demo/aether-net-chat-demo-poster.jpg"
+          width={1280}
+          height={800}
+          aria-label="Net Chat Testnet demo"
+        >
+          <source src="/demo/aether-net-chat-demo.mp4" type="video/mp4" />
+        </video>
+        <figcaption>Net Chat Testnet demo</figcaption>
+      </figure>
+
       <section className="card" style={{ marginBottom: "1rem" }}>
         <p className="kicker">Read-only · desk does not sign</p>
         <h2 className="section-title">What you are looking at</h2>
