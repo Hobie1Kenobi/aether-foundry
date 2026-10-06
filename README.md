@@ -376,6 +376,7 @@ Anything that signs refuses `CI`, `GITHUB_ACTIONS`, and mainnet hosts. Seeds loa
 | `npm run report:nav` | NAV digest from live reads |
 | `npm run buy:walk-in` | Stranger accept of the live W2 offer |
 | `npm run watch:walk-in` | Read-only sold-out detector |
+| `npm run peers:hello` | Read-only `aether-peer-hello` archive on W3 |
 | `npm run remint:walk-in` | Founder remint. Refuses while an offer is open |
 | `npm run x402:pay` | Buy a desk SKU |
 | `npm run x402:hit` | Archive a 200 body |
