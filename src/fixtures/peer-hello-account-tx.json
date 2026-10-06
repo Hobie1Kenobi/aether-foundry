@@ -1,0 +1,86 @@
+{
+  "fixture": true,
+  "note": "Synthetic account_tx page for the local probe. Hashes and ledger indexes are not ledger claims.",
+  "transactions": [
+    {
+      "hash": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+      "ledger_index": 41,
+      "validated": true,
+      "meta": { "TransactionResult": "tesSUCCESS" },
+      "tx_json": {
+        "TransactionType": "Payment",
+        "Account": "rh4c6qMMyafccZrPFCPCN742BNMXfjKYss",
+        "Destination": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+        "Amount": "1"
+      }
+    },
+    {
+      "hash": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "ledger_index": 43,
+      "validated": true,
+      "meta": { "TransactionResult": "tesSUCCESS" },
+      "tx_json": {
+        "TransactionType": "Payment",
+        "Account": "r3JbqcVQ4Pov4MhFUMSdnro7s3VgpaqssZ",
+        "Destination": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+        "Amount": "1",
+        "Memos": [
+          {
+            "Memo": {
+              "MemoType": "707572706F7365",
+              "MemoData": "6165746865722D706565722D68656C6C6F"
+            }
+          },
+          {
+            "Memo": {
+              "MemoType": "6170706C69636174696F6E2F6A736F6E",
+              "MemoFormat": "6170706C69636174696F6E2F6A736F6E",
+              "MemoData": "7B227265706F223A2268747470733A2F2F6769746875622E636F6D2F6578616D706C652F6F74686572222C2278343032223A2268747470733A2F2F6F746865722E6578616D706C652F78343032227D"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "ledger_index": 42,
+      "validated": true,
+      "meta": { "TransactionResult": "tesSUCCESS" },
+      "tx_json": {
+        "TransactionType": "Payment",
+        "Account": "rh4c6qMMyafccZrPFCPCN742BNMXfjKYss",
+        "Destination": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+        "Amount": "1",
+        "Memos": [
+          {
+            "Memo": {
+              "MemoType": "6165746865722D706565722D68656C6C6F",
+              "MemoFormat": "6170706C69636174696F6E2F6A736F6E",
+              "MemoData": "7B227265706F223A2268747470733A2F2F6769746875622E636F6D2F6578616D706C652F70656572222C2278343032223A2268747470733A2F2F706565722E6578616D706C652F6170692F78343032227D"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "hash": "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "ledger_index": 44,
+      "validated": true,
+      "meta": { "TransactionResult": "tecUNFUNDED_PAYMENT" },
+      "tx_json": {
+        "TransactionType": "Payment",
+        "Account": "rh4c6qMMyafccZrPFCPCN742BNMXfjKYss",
+        "Destination": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+        "Amount": "1",
+        "Memos": [
+          {
+            "Memo": {
+              "MemoType": "6165746865722D706565722D68656C6C6F",
+              "MemoData": "7B226265706F223A226E6F227D"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -39,7 +39,15 @@ To announce yourself without buying anything, send a Testnet Payment of 1 drop t
 | MemoFormat | `application/json` |
 | MemoData | `{"repo":"https://github.com/<you>/<repo>","x402":"https://<your-xrpl:1-402-url>"}` |
 
-This is a convention. No desk route watches for it yet. A Foundry operator reads it from the ledger and may add a live `xrpl:1` URL to `lab/peers/xrpl-agents.json` and, after a probe, to `machines/x402-citizen/candidates.json`. You can also open a GitHub issue on this repo with the same JSON.
+This is a convention. The desk still does not answer the memo. A Foundry watcher reads validated Payments to W3 and appends each new hello to [`hellos.jsonl`](./hellos.jsonl). It does not pay or sign a reply. An operator may then add a live `xrpl:1` URL to `lab/peers/xrpl-agents.json` and, after an unpaid probe, to `machines/x402-citizen/candidates.json`. You can also open a GitHub issue on this repo with the same JSON.
+
+```bash
+npm run peers:hello -- --dry
+npm run peers:hello -- --fixture src/fixtures/peer-hello-account-tx.json --dry
+npm run peers:hello
+```
+
+`--dry` prints new rows and does not write. The fixture is a local `account_tx` page with synthetic hashes (not ledger claims). A live run appends only. `--alert` exits 2 when a new row was written, for an agent-hands runner. `--hands FILE` or `AETHER_PEER_HELLO_HANDS` appends a one-line notice; a hook failure leaves the jsonl in place. The scheduled job is [`.github/workflows/peer-hello-watch.yml`](../../.github/workflows/peer-hello-watch.yml).
 
 ## How we list your surface
 
