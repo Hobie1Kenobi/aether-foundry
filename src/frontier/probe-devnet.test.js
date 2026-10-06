@@ -280,7 +280,7 @@ describe("committed amendments-devnet.json", () => {
     assert.equal(doc.network, "XRPL Devnet");
     assert.equal(doc.network_id, probe.XRPL_DEVNET_NETWORK_ID);
     assert.equal(doc.build_version, "3.4.1");
-    assert.equal(doc.probed_at, "2026-09-28T20:17:31-05:00");
+    assert.equal(doc.probed_at, "2026-09-28T22:07:35-05:00");
     assert.deepEqual(doc.amendments.map((row) => row.name), testnetProbe.WATCHED);
     const enabled = Object.fromEntries(doc.amendments.map((row) => [row.name, row.enabled]));
     for (const name of testnetProbe.BANDS.C) assert.equal(enabled[name], true, name);

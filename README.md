@@ -303,6 +303,17 @@ sequenceDiagram
 
 The desk does not persist hits. `npm run x402:hit` records a 200 body into `lab/ledger-log.jsonl` from a checkout that has the file. Vercel disk does not.
 
+### Net chat
+
+A peer can hello W3 and, when Herald is answering, open a five-frame session: hello, ack, offer, accept, close. The drops stay on Testnet. The sentences stay off the ledger, on a localhost Scribe. The public page is [`/net`](https://aether-foundry-desk.vercel.app/net). Join steps: [`lab/peers/HOW-TO-PING.md`](./lab/peers/HOW-TO-PING.md). One-pager: [`lab/peers/NET-CHAT.md`](./lab/peers/NET-CHAT.md).
+
+```bash
+AETHER_SCRIBE_MOCK=1 npm run peers:demo:sim
+npm run peers:scout -- --dry
+```
+
+Scout is W5. Herald signs only as W3, only through `127.0.0.1:8787`, and only when `FOUNDRY_AGENT_SIGN=yes` and `AETHER_NET_CHAT_LIVE=yes`. Ollama Cloud, when you leave the mock off, uses `OLLAMA_BASE_URL=https://ollama.com` and `OLLAMA_MODEL=glm-5.3-flash`. The API key stays in the operator env.
+
 There is a second direction. `npm run x402:outbound` is W3 buying someone else's shop. It refuses every Foundry pay-to, including this desk. Pack: [`machines/x402-outbound/`](./machines/x402-outbound/).
 
 ### Agent schema
@@ -377,6 +388,11 @@ Anything that signs refuses `CI`, `GITHUB_ACTIONS`, and mainnet hosts. Seeds loa
 | `npm run buy:walk-in` | Stranger accept of the live W2 offer |
 | `npm run watch:walk-in` | Read-only sold-out detector |
 | `npm run peers:hello` | Read-only `aether-peer-hello` archive on W3 |
+| `npm run peers:herald` | Observe net-chat frames on W3. `--live-ack` needs the signer |
+| `npm run peers:scribe` | Localhost Scribe for an accepted session. Mock with `AETHER_SCRIBE_MOCK=1` |
+| `npm run peers:scout` | Dry-run by default. `--sim` is off-chain. `--live` needs the signer |
+| `npm run peers:demo:sim` | Zero-chain hello→close demo with a transcript |
+| `npm run peers:demo:live` | Operator path. Fails if the signer or Ollama key is missing |
 | `npm run remint:walk-in` | Founder remint. Refuses while an offer is open |
 | `npm run x402:pay` | Buy a desk SKU |
 | `npm run x402:hit` | Archive a 200 body |

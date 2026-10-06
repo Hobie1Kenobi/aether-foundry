@@ -133,7 +133,7 @@ describe("unique inbound", () => {
     assert.equal(extracted.inbound.includes(DAY30), true);
     assert.equal(extracted.inbound.includes(STRANGER), false);
     assert.equal(extracted.inbound.includes(FOREIGN), false);
-    assert.equal(extracted.last_heartbeat_hash, "CE97193B6EA982225DD7EDDF09C8A36C5EA7DE35E20F8344B04BC972093BC451");
+    assert.equal(extracted.last_heartbeat_hash, "3BB793FC200C811F1F4E9F535EE4D470C3896852F6D4A35CD157C7E1E6BACE35");
     assert.ok(anchors.HASH_RE.test(extracted.last_grant_hash));
     assert.ok(anchors.HASH_RE.test(extracted.last_outbound_hash));
     assert.equal(committed.last_grant_hash, extracted.last_grant_hash);

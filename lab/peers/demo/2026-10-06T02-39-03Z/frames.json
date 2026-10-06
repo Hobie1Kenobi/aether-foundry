@@ -1,0 +1,123 @@
+[
+  {
+    "network": "xrpl:1",
+    "hash": "1111111111111111111111111111111111111111111111111111111111111111",
+    "ledger": 91001,
+    "account": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+    "destination": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+    "peer": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+    "t": "aether-peer-hello",
+    "body": {
+      "v": 1,
+      "t": "aether-peer-hello",
+      "from": "aether-scout",
+      "net": "xrpl:1",
+      "nonce": "simnonce01",
+      "repo": "https://github.com/Hobie1Kenobi/aether-foundry",
+      "x402": "https://aether-foundry-desk.vercel.app/api/x402"
+    },
+    "legacy": false,
+    "synthetic": true,
+    "ledger_claim": false,
+    "seen_at": "2026-10-06T02:39:03Z"
+  },
+  {
+    "network": "xrpl:1",
+    "hash": "2222222222222222222222222222222222222222222222222222222222222222",
+    "ledger": 91002,
+    "account": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+    "destination": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+    "peer": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+    "t": "aether-peer-ack",
+    "body": {
+      "v": 1,
+      "t": "aether-peer-ack",
+      "from": "aether-herald",
+      "net": "xrpl:1",
+      "nonce": "simnonce02",
+      "session": "s_a11ce00000000001",
+      "challenge": "abcdef0123456789",
+      "ep": "http://127.0.0.1:39897",
+      "hello_hash": "1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    "legacy": false,
+    "synthetic": true,
+    "ledger_claim": false,
+    "seen_at": "2026-10-06T02:39:03Z"
+  },
+  {
+    "network": "xrpl:1",
+    "hash": "3333333333333333333333333333333333333333333333333333333333333333",
+    "ledger": 91003,
+    "account": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+    "destination": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+    "peer": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+    "t": "aether-session-offer",
+    "body": {
+      "v": 1,
+      "t": "aether-session-offer",
+      "from": "aether-scout",
+      "net": "xrpl:1",
+      "nonce": "simnonce03",
+      "session": "s_a11ce00000000001",
+      "topic": "discover-foundry",
+      "max_drops": 10,
+      "tools": [
+        "chat"
+      ],
+      "ack_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    "legacy": false,
+    "synthetic": true,
+    "ledger_claim": false,
+    "seen_at": "2026-10-06T02:39:03Z"
+  },
+  {
+    "network": "xrpl:1",
+    "hash": "4444444444444444444444444444444444444444444444444444444444444444",
+    "ledger": 91004,
+    "account": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+    "destination": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+    "peer": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+    "t": "aether-session-accept",
+    "body": {
+      "v": 1,
+      "t": "aether-session-accept",
+      "from": "aether-herald",
+      "net": "xrpl:1",
+      "nonce": "simnonce04",
+      "session": "s_a11ce00000000001",
+      "ep": "http://127.0.0.1:39897",
+      "ttl": 900,
+      "chat_nonce": "fedcba9876543210",
+      "offer_hash": "3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    "legacy": false,
+    "synthetic": true,
+    "ledger_claim": false,
+    "seen_at": "2026-10-06T02:39:03Z"
+  },
+  {
+    "network": "xrpl:1",
+    "hash": "5555555555555555555555555555555555555555555555555555555555555555",
+    "ledger": 91005,
+    "account": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+    "destination": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+    "peer": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+    "t": "aether-session-close",
+    "body": {
+      "v": 1,
+      "t": "aether-session-close",
+      "from": "aether-scout",
+      "net": "xrpl:1",
+      "nonce": "simnonce05",
+      "session": "s_a11ce00000000001",
+      "reason": "done",
+      "transcript_sha256": "728c0bc253b37df2b652f1d42e0187b1630a63a21e10906d83057b389dca9a71"
+    },
+    "legacy": false,
+    "synthetic": true,
+    "ledger_claim": false,
+    "seen_at": "2026-10-06T02:39:03Z"
+  }
+]
