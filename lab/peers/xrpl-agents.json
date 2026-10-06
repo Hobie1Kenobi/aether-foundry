@@ -1,0 +1,692 @@
+{
+  "schema": "aether-foundry/peers/xrpl-agents@1",
+  "generated": "2026-10-05",
+  "source": "GitHub hunt (xrpl_agent_repos_classified.json, 58 repos). Included: network testnet, both, mainnet (read-only), plus unclear repos that had a hosted surface worth probing.",
+  "rules": "Unpaid HTTP GET/POST probes only. No payments, no seeds, no signing. Mainnet (xrpl:0) peers are read-only references; Foundry buys only on xrpl:1.",
+  "counts": {
+    "hunt_total": 58,
+    "hunt_by_network": {
+      "unclear": 24,
+      "testnet": 7,
+      "both": 20,
+      "mainnet": 7
+    },
+    "registry_total": 37,
+    "registry_by_network": {
+      "testnet": 7,
+      "both": 20,
+      "mainnet": 7,
+      "unclear": 3
+    },
+    "live_xrpl1_402_new": 0
+  },
+  "probe_file": "lab/peers/probe-2026-10-05.json",
+  "peers": [
+    {
+      "full_name": "TLSRUF/xagent-pay-api",
+      "html_url": "https://github.com/TLSRUF/xagent-pay-api",
+      "score": 6,
+      "stars": 2,
+      "network": "testnet",
+      "role": "peer",
+      "description": "XRPL-based Payment API for AI Agents and Developers",
+      "pushed_at": "2026-07-28T11:19:29Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "no_hosted_surface_found",
+        "endpoints_probed": 0,
+        "xrpl1_402": [],
+        "note": "No hosted endpoint found in README or GitHub homepage."
+      }
+    },
+    {
+      "full_name": "DuNorth595/xrpl_agent_log",
+      "html_url": "https://github.com/DuNorth595/xrpl_agent_log",
+      "score": 6,
+      "stars": 1,
+      "network": "testnet",
+      "role": "peer",
+      "description": "Tamper-evident history log for AI agents on the XRP Ledger — append-only, hash-chained, mutually-signed, optionally XRPL-anchored",
+      "pushed_at": "2026-10-01T00:49:27Z",
+      "surface_guess": "wallet",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "no_hosted_surface_found",
+        "endpoints_probed": 0,
+        "xrpl1_402": [],
+        "note": "No hosted endpoint found in README or GitHub homepage."
+      }
+    },
+    {
+      "full_name": "METHEZONE/knot-guard",
+      "html_url": "https://github.com/METHEZONE/knot-guard",
+      "score": 6,
+      "stars": 0,
+      "network": "testnet",
+      "role": "peer",
+      "description": "knot Guard - controls and records for an AI agent that spends (GWDC 2026 x FuriosaAI/Bricksum). XRPL testnet + Kiln API",
+      "pushed_at": "2026-09-29T18:34:26Z",
+      "surface_guess": "wallet",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "http_401",
+        "endpoints_probed": 1,
+        "xrpl1_402": [],
+        "note": "api.bricksum.com needs auth (401). Not x402."
+      }
+    },
+    {
+      "full_name": "ajitkulk/xrpl-b2c-agentic-payment-example",
+      "html_url": "https://github.com/ajitkulk/xrpl-b2c-agentic-payment-example",
+      "score": 6,
+      "stars": 0,
+      "network": "testnet",
+      "role": "peer",
+      "description": "Buyer AI agent pays a seller's weather API per request over x402 on XRPL testnet (XRPL AI starter-kit wallet+payment skills, T54 facilitator)",
+      "pushed_at": "2026-08-27T07:13:14Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "no_hosted_surface_found",
+        "endpoints_probed": 0,
+        "xrpl1_402": [],
+        "note": "No hosted endpoint found in README or GitHub homepage."
+      }
+    },
+    {
+      "full_name": "ramcav/signet",
+      "html_url": "https://github.com/ramcav/signet",
+      "score": 6,
+      "stars": 0,
+      "network": "testnet",
+      "role": "peer",
+      "description": "Cryptographic pre-trade compliance for AI agents on XRPL testnet",
+      "pushed_at": "2026-10-02T15:25:14Z",
+      "surface_guess": "wallet",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "no_hosted_surface_found",
+        "endpoints_probed": 0,
+        "xrpl1_402": [],
+        "note": "No hosted endpoint found in README or GitHub homepage."
+      }
+    },
+    {
+      "full_name": "seedwordai-maeve/smartpay-agent",
+      "html_url": "https://github.com/seedwordai-maeve/smartpay-agent",
+      "score": 6,
+      "stars": 0,
+      "network": "testnet",
+      "role": "peer",
+      "description": "SmartPay Agent — autonomous AI invoice settlement on XRPL Testnet via Cloudflare Workers",
+      "pushed_at": "2026-09-28T15:14:49Z",
+      "surface_guess": "wallet",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "reachable_200",
+        "endpoints_probed": 3,
+        "xrpl1_402": [],
+        "note": "Health says network testnet (altnet wss). Invoice API, no 402 surface found."
+      }
+    },
+    {
+      "full_name": "zerotsl/AI-Agent-That-Spends",
+      "html_url": "https://github.com/zerotsl/AI-Agent-That-Spends",
+      "score": 6,
+      "stars": 0,
+      "network": "testnet",
+      "role": "peer",
+      "description": "Controls and records for an AI agent that spends: a delegated-spending wallet with the boundary enforced in code, inference on the NPU-based Kiln API (gpt-oss-120b), and settlement on XRPL Testnet.",
+      "pushed_at": "2026-09-29T22:55:29Z",
+      "surface_guess": "wallet",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "no_hosted_surface_found",
+        "endpoints_probed": 0,
+        "xrpl1_402": [],
+        "note": "No hosted endpoint found in README or GitHub homepage."
+      }
+    },
+    {
+      "full_name": "DuNorth595/xrpl_agent_id",
+      "html_url": "https://github.com/DuNorth595/xrpl_agent_id",
+      "score": 6,
+      "stars": 1,
+      "network": "both",
+      "role": "peer",
+      "description": "xrpl_agent_id is a small Python library that gives AI agents an XRPL-native identity — a did:xrpl identifier, a W3C DID Document, and a way to issue / accept / verify XLS-70 Verifiable Credentials, all stored on the XRP Ledger.",
+      "pushed_at": "2026-10-01T00:49:34Z",
+      "surface_guess": "mcp",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "no_hosted_surface_found",
+        "endpoints_probed": 0,
+        "xrpl1_402": [],
+        "note": "No hosted endpoint found in README or GitHub homepage."
+      }
+    },
+    {
+      "full_name": "polymitapay/mcp",
+      "html_url": "https://github.com/polymitapay/mcp",
+      "score": 6,
+      "stars": 1,
+      "network": "both",
+      "role": "peer",
+      "description": "MCP server that lets your AI agent search and pay for tools from the PolyPay catalog automatically, over XRPL — no code, no manual payment handling.",
+      "pushed_at": "2026-09-20T22:45:56Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "reachable_200",
+        "endpoints_probed": 4,
+        "xrpl1_402": [],
+        "note": "GET /v1/catalog on api.polymitapay.com returned an empty list; no 402 seen."
+      }
+    },
+    {
+      "full_name": "Drock91/bitbooth-docs",
+      "html_url": "https://github.com/Drock91/bitbooth-docs",
+      "score": 6,
+      "stars": 0,
+      "network": "both",
+      "role": "peer",
+      "description": "Public docs and MCP clients for PageDelta by BitBooth: a $0.01 pay-per-call public-page observation API for autonomous agents, with free discovery and an XRPL Testnet demo.",
+      "pushed_at": "2026-09-16T00:27:15Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "live_402_xrpl0_mainnet_readonly",
+        "endpoints_probed": 4,
+        "xrpl1_402": [],
+        "note": "Live x402 v2 402 offers Base USDC, Stellar and xrpl:0 RLUSD/USDC. No xrpl:1."
+      }
+    },
+    {
+      "full_name": "FlareForward/mcp-pay-xrpl",
+      "html_url": "https://github.com/FlareForward/mcp-pay-xrpl",
+      "score": 6,
+      "stars": 0,
+      "network": "both",
+      "role": "peer",
+      "description": "MCP Payment Rail — AI agent x402 payments + dispute escrow on XRPL EVM Sidechain with RLUSD settlement",
+      "pushed_at": "2026-06-25T16:33:58Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "reachable_200",
+        "endpoints_probed": 2,
+        "xrpl1_402": [],
+        "note": "No hosted seller. T54 testnet facilitator /supported confirms exact+upto on xrpl:1 (infrastructure, not a SKU)."
+      }
+    },
+    {
+      "full_name": "Hobie1Kenobi/aether-foundry",
+      "html_url": "https://github.com/Hobie1Kenobi/aether-foundry",
+      "score": 6,
+      "stars": 0,
+      "network": "both",
+      "role": "self",
+      "description": "Aether Foundry — autonomous XRPL Testnet corporation (altnets only; public addresses only, no seeds)",
+      "pushed_at": "2026-10-05T21:20:30Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "self",
+        "endpoints_probed": 0,
+        "xrpl1_402": [],
+        "note": "Own repo; not probed as a peer."
+      }
+    },
+    {
+      "full_name": "Hobie1Kenobi/agentic-crypto-swarm-prototype",
+      "html_url": "https://github.com/Hobie1Kenobi/agentic-crypto-swarm-prototype",
+      "score": 6,
+      "stars": 0,
+      "network": "both",
+      "role": "self",
+      "description": "Agentic Swarm Marketplace: MCP + x402 machine-paid SKUs — XRPL (T54) and Base USDC — for contract triage, audits, monitoring, and agent commerce. Streamable HTTP for Smithery/Glama/Cursor; public discovery on api host.",
+      "pushed_at": "2026-09-02T21:27:23Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "self",
+        "endpoints_probed": 0,
+        "xrpl1_402": [],
+        "note": "Own repo; not probed as a peer."
+      }
+    },
+    {
+      "full_name": "Micopay/micopaybridge",
+      "html_url": "https://github.com/Micopay/micopaybridge",
+      "score": 6,
+      "stars": 0,
+      "network": "both",
+      "role": "peer",
+      "description": "P2P market for AI agents, secured by escrows: two agents that have never met settle across XRPL and Stellar atomically, no custodian — and can cash out to physical pesos through the MicoPay network. Same HTLC trust model as the app, with timeouts sized for machines instead of humans.",
+      "pushed_at": "2026-10-05T05:49:11Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "live_402_non_xrpl",
+        "endpoints_probed": 2,
+        "xrpl1_402": [],
+        "note": "Live 402 on Stellar pubnet USDC, not XRPL."
+      }
+    },
+    {
+      "full_name": "Pez1980/receptum",
+      "html_url": "https://github.com/Pez1980/receptum",
+      "score": 6,
+      "stars": 0,
+      "network": "both",
+      "role": "peer",
+      "description": "Pay-per-job SDK for AI agents and services: stablecoin payments (x402), escrow, and verifiable on-chain delivery receipts.",
+      "pushed_at": "2026-10-04T06:06:50Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "no_hosted_surface_found",
+        "endpoints_probed": 0,
+        "xrpl1_402": [],
+        "note": "No hosted endpoint found in README or GitHub homepage."
+      }
+    },
+    {
+      "full_name": "RippleDevRel/agentic-mpp-demo",
+      "html_url": "https://github.com/RippleDevRel/agentic-mpp-demo",
+      "score": 6,
+      "stars": 0,
+      "network": "both",
+      "role": "peer",
+      "description": "Prototype: an autonomous AI agent that buys tokenized RWAs (XRPL MPTs) over the Machine Payments Protocol  bootstrapping its own wallet, funding, swaps and payments, with the key never leaving Open Wallet Standard. Testnet only.",
+      "pushed_at": "2026-09-09T16:29:10Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "no_hosted_surface_found",
+        "endpoints_probed": 0,
+        "xrpl1_402": [],
+        "note": "No hosted endpoint found in README or GitHub homepage."
+      }
+    },
+    {
+      "full_name": "dziuba0x/delicti",
+      "html_url": "https://github.com/dziuba0x/delicti",
+      "score": 6,
+      "stars": 0,
+      "network": "both",
+      "role": "peer",
+      "description": "Accountability for autonomous AI agents: on-chain mandates & spending limits, Flare Data Connector (FDC) as independent witness on EVM + XRPL, proportional bond slashing, paid watchers. x402 · MCP · stablecoins. SPEC v1.0, live on Coston2.",
+      "pushed_at": "2026-09-27T02:22:31Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "no_hosted_surface_found",
+        "endpoints_probed": 0,
+        "xrpl1_402": [],
+        "note": "No hosted endpoint found in README or GitHub homepage."
+      }
+    },
+    {
+      "full_name": "dziuba0x/lancea",
+      "html_url": "https://github.com/dziuba0x/lancea",
+      "score": 6,
+      "stars": 0,
+      "network": "both",
+      "role": "peer",
+      "description": "A co-signer AI agents cannot talk past: an XRP Ledger guard that will not sign past a DELICTI dollar budget, counted across XRPL and Flare. Live 24/7 on testnets.",
+      "pushed_at": "2026-09-30T04:26:45Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "reachable_200",
+        "endpoints_probed": 1,
+        "xrpl1_402": [],
+        "note": "No hosted endpoint found in README or GitHub homepage."
+      }
+    },
+    {
+      "full_name": "likalight/kirim",
+      "html_url": "https://github.com/likalight/kirim",
+      "score": 6,
+      "stars": 0,
+      "network": "both",
+      "role": "peer",
+      "description": "Trust before you build — milestone payments for construction, released by an agent that examines the evidence, settled on the XRP Ledger. SingHacks 2026 / Ripple.",
+      "pushed_at": "2026-09-05T08:55:10Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "no_hosted_surface_found",
+        "endpoints_probed": 0,
+        "xrpl1_402": [],
+        "note": "No hosted endpoint found in README or GitHub homepage."
+      }
+    },
+    {
+      "full_name": "myongrui/jpmogging",
+      "html_url": "https://github.com/myongrui/jpmogging",
+      "score": 6,
+      "stars": 0,
+      "network": "both",
+      "role": "peer",
+      "description": "MCP for evaluating yield agents on XRPL ",
+      "pushed_at": "2026-09-05T07:06:40Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "no_hosted_surface_found",
+        "endpoints_probed": 0,
+        "xrpl1_402": [],
+        "note": "No hosted endpoint found in README or GitHub homepage."
+      }
+    },
+    {
+      "full_name": "pkt-service/xrpl-transparency-toolkit",
+      "html_url": "https://github.com/pkt-service/xrpl-transparency-toolkit",
+      "score": 6,
+      "stars": 0,
+      "network": "both",
+      "role": "peer",
+      "description": "Read-only XRPL token transparency and LP-lock verification tools, plus a safe-agent reference. Unaudited prototype.",
+      "pushed_at": "2026-10-04T15:00:24Z",
+      "surface_guess": "wallet",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "no_hosted_surface_found",
+        "endpoints_probed": 0,
+        "xrpl1_402": [],
+        "note": "No hosted endpoint found in README or GitHub homepage."
+      }
+    },
+    {
+      "full_name": "zerotsl/ai-agents-and-blockchain-powered-financial-services",
+      "html_url": "https://github.com/zerotsl/ai-agents-and-blockchain-powered-financial-services",
+      "score": 6,
+      "stars": 0,
+      "network": "both",
+      "role": "peer",
+      "description": "Controls and records for an AI agent that spends: a delegated-spending wallet with the boundary enforced in code, inference on the NPU-based Kiln API (gpt-oss-120b), and settlement on XRPL Testnet.",
+      "pushed_at": "2026-09-29T23:14:48Z",
+      "surface_guess": "wallet",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "no_hosted_surface_found",
+        "endpoints_probed": 0,
+        "xrpl1_402": [],
+        "note": "No hosted endpoint found in README or GitHub homepage."
+      }
+    },
+    {
+      "full_name": "satohubai/onchain-agents",
+      "html_url": "https://github.com/satohubai/onchain-agents",
+      "score": 5,
+      "stars": 6,
+      "network": "both",
+      "role": "peer",
+      "description": "⬡ The scored, daily-updated index of the onchain agent stack — frameworks, MCPs, wallets, payment rails, live agents",
+      "pushed_at": "2026-10-05T21:15:03Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "no_hosted_surface_found",
+        "endpoints_probed": 0,
+        "xrpl1_402": [],
+        "note": "No hosted endpoint found in README or GitHub homepage."
+      }
+    },
+    {
+      "full_name": "MangroveTechnologies/mangrove-agent",
+      "html_url": "https://github.com/MangroveTechnologies/mangrove-agent",
+      "score": 5,
+      "stars": 5,
+      "network": "both",
+      "role": "peer",
+      "description": "Claude agent for use with the Mangrove Developer API & MCP Server.",
+      "pushed_at": "2026-10-05T21:52:05Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "no_hosted_surface_found",
+        "endpoints_probed": 0,
+        "xrpl1_402": [],
+        "note": "No hosted endpoint found in README or GitHub homepage."
+      }
+    },
+    {
+      "full_name": "AiFinPay/sdk",
+      "html_url": "https://github.com/AiFinPay/sdk",
+      "score": 4,
+      "stars": 3,
+      "network": "both",
+      "role": "peer",
+      "description": "",
+      "pushed_at": "2026-10-05T22:58:03Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "http_404",
+        "endpoints_probed": 1,
+        "xrpl1_402": [],
+        "note": "No hosted endpoint found in README or GitHub homepage."
+      }
+    },
+    {
+      "full_name": "ramcav/merkl-sdk",
+      "html_url": "https://github.com/ramcav/merkl-sdk",
+      "score": 4,
+      "stars": 2,
+      "network": "both",
+      "role": "peer",
+      "description": "Merkl SDK: Free your agents. Keep your money safe.",
+      "pushed_at": "2026-10-05T22:12:48Z",
+      "surface_guess": "wallet",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "http_404",
+        "endpoints_probed": 2,
+        "xrpl1_402": [],
+        "note": "No hosted endpoint found in README or GitHub homepage."
+      }
+    },
+    {
+      "full_name": "enhansome/enhansome-x402",
+      "html_url": "https://github.com/enhansome/enhansome-x402",
+      "score": 4,
+      "stars": 0,
+      "network": "both",
+      "role": "peer",
+      "description": "",
+      "pushed_at": "2026-10-05T21:27:41Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "no_hosted_surface_found",
+        "endpoints_probed": 0,
+        "xrpl1_402": [],
+        "note": "No hosted endpoint found in README or GitHub homepage."
+      }
+    },
+    {
+      "full_name": "Bubakooz22/xrpl-tollbooth",
+      "html_url": "https://github.com/Bubakooz22/xrpl-tollbooth",
+      "score": 6,
+      "stars": 0,
+      "network": "mainnet",
+      "role": "read_only_mainnet",
+      "description": "tollbooth_xrp — the pay-per-call safety layer for AI agents. Agent-native OFAC + exploit-check API on XRPL, x402-gated, XRP/RLUSD settled. Mainnet-live.",
+      "pushed_at": "2026-09-29T16:53:10Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "live_402_xrpl0_mainnet_readonly",
+        "endpoints_probed": 3,
+        "xrpl1_402": [],
+        "note": "Live x402 v2 on XRPL mainnet (xrpl:0) only. Read-only; Foundry cannot buy."
+      }
+    },
+    {
+      "full_name": "agentweather/agent-weather",
+      "html_url": "https://github.com/agentweather/agent-weather",
+      "score": 6,
+      "stars": 0,
+      "network": "mainnet",
+      "role": "read_only_mainnet",
+      "description": "Forecasts for the agent economy. Pay-per-call JSON \"weather\" for the AI-agent ecosystem (framework activity, provider outages, MCP Registry, XRPL health). AI agents buy it via x402 on XRPL: 0.01 RLUSD, no API key.",
+      "pushed_at": "2026-10-05T21:00:32Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "http_530",
+        "endpoints_probed": 2,
+        "xrpl1_402": [],
+        "note": "api.agentweather.io returned Cloudflare 530 (origin down) on probe day. README says xrpl:0 mainnet."
+      }
+    },
+    {
+      "full_name": "eamwhite1/agent-trust",
+      "html_url": "https://github.com/eamwhite1/agent-trust",
+      "score": 6,
+      "stars": 0,
+      "network": "mainnet",
+      "role": "read_only_mainnet",
+      "description": "AgentTrust XRPL is a trust-minimized verification and escrow service on the XRP Ledger that enables any AI agent to securely execute peer-to-peer tasks by locking payment in native XRP escrow, submitting proof of completion, and receiving an objective PASS/FAIL judgement from an independent AI referee.",
+      "pushed_at": "2026-10-01T15:26:59Z",
+      "surface_guess": "mcp",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "http_422",
+        "endpoints_probed": 1,
+        "xrpl1_402": [],
+        "note": "POST /audit returns 422 on empty body (validation before payment). Mainnet per agent.json."
+      }
+    },
+    {
+      "full_name": "eamwhite1/xrpl-referee",
+      "html_url": "https://github.com/eamwhite1/xrpl-referee",
+      "score": 6,
+      "stars": 0,
+      "network": "mainnet",
+      "role": "read_only_mainnet",
+      "description": "MCP server for agent-to-agent payments on XRPL — trust scoring, crypto-condition escrow, AI audit with criteria_met/criteria_failed verdicts, NFT Issuer Registry, and machine-readable fee schedule",
+      "pushed_at": "2026-09-26T21:07:46Z",
+      "surface_guess": "mcp",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "reachable_200",
+        "endpoints_probed": 3,
+        "xrpl1_402": [],
+        "note": "agent.json reachable; payment advertised as XRPL Mainnet; no x402 discovery doc."
+      }
+    },
+    {
+      "full_name": "lucasbrothersfamily/agentweather",
+      "html_url": "https://github.com/lucasbrothersfamily/agentweather",
+      "score": 6,
+      "stars": 0,
+      "network": "mainnet",
+      "role": "read_only_mainnet",
+      "description": "Conditions reports for the AI-agent economy, sold per request via x402 on the XRP Ledger",
+      "pushed_at": "2026-10-04T01:30:55Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "http_530",
+        "endpoints_probed": 1,
+        "xrpl1_402": [],
+        "note": "Same host as agentweather/agent-weather; 530 on probe day."
+      }
+    },
+    {
+      "full_name": "insumerapi/llama-index-tools-insumer",
+      "html_url": "https://github.com/insumerapi/llama-index-tools-insumer",
+      "score": 4,
+      "stars": 0,
+      "network": "mainnet",
+      "role": "read_only_mainnet",
+      "description": "LlamaIndex tool spec for InsumerAPI: wallet auth and condition-based access across 37 blockchains. ECDSA-signed booleans, JWKS-verifiable offline. Boolean, not balance.",
+      "pushed_at": "2026-10-05T13:38:30Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "live_402_non_xrpl",
+        "endpoints_probed": 1,
+        "xrpl1_402": [],
+        "note": "Live 402 on EVM + Solana USDC only."
+      }
+    },
+    {
+      "full_name": "kzmttkc/vet402-delivery",
+      "html_url": "https://github.com/kzmttkc/vet402-delivery",
+      "score": 4,
+      "stars": 0,
+      "network": "mainnet",
+      "role": "read_only_mainnet",
+      "description": "vet402 buys x402/MPP sellers with its own money on Solana, Tempo and Base and records what was delivered, with the tx",
+      "pushed_at": "2026-10-06T00:54:33Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "http_400",
+        "endpoints_probed": 1,
+        "xrpl1_402": [],
+        "note": "Buyer proxy; 400 without url param. Not XRPL."
+      }
+    },
+    {
+      "full_name": "FTHTrading/genesis402-agent-kit",
+      "html_url": "https://github.com/FTHTrading/genesis402-agent-kit",
+      "score": 6,
+      "stars": 0,
+      "network": "unclear",
+      "role": "peer",
+      "description": "360 pay-per-call APIs for AI agents over x402. DeFi yields and market data; SEC filings and financials; wallet and token checks with sanctions-list signals; web and domain intelligence; AI text tools; reads across Base, Ethereum, Solana, Stellar, XRPL and Bitcoin. USDC on Base, $0.001-$0.25 per call, no API key.",
+      "pushed_at": "2026-10-02T21:07:45Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "live_402_non_xrpl",
+        "endpoints_probed": 2,
+        "xrpl1_402": [],
+        "note": "Live 402 on Base/Polygon/Solana. Not XRPL."
+      }
+    },
+    {
+      "full_name": "ToolOracle/xrploracle",
+      "html_url": "https://github.com/ToolOracle/xrploracle",
+      "score": 6,
+      "stars": 0,
+      "network": "unclear",
+      "role": "peer",
+      "description": "XRPLOracle MCP Server — XRP Ledger intelligence for AI agents",
+      "pushed_at": "2026-04-08T06:53:49Z",
+      "surface_guess": "mcp",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "reachable_200",
+        "endpoints_probed": 1,
+        "xrpl1_402": [],
+        "note": "MCP server health 200 (31 tools). Not x402."
+      }
+    },
+    {
+      "full_name": "api-evangelist/evebrief-org",
+      "html_url": "https://github.com/api-evangelist/evebrief-org",
+      "score": 6,
+      "stars": 0,
+      "network": "unclear",
+      "role": "peer",
+      "description": "openclaw / evm-lab is the operator name on an A2A agent card served from oracle.evebrief.org, a subdomain of evebrief.org. The apex site is EveBrief, a waitlist-stage market and competitor intelligence briefing product for boutique agencies and independent consultants (indicative tiers Free / $19 / $39 a month; no API of its own).",
+      "pushed_at": "2026-10-05T15:56:42Z",
+      "surface_guess": "x402",
+      "last_probe": {
+        "date": "2026-10-05",
+        "status": "live_402_xrpl0_mainnet_readonly",
+        "endpoints_probed": 2,
+        "xrpl1_402": [],
+        "note": "Live x402 v2 402 on xrpl:0 (mainnet). Read-only."
+      }
+    }
+  ]
+}

@@ -1,0 +1,673 @@
+{
+  "date": "2026-10-05",
+  "probed_at_utc": "2026-10-06T01:27Z",
+  "method": "Unpaid HTTPS GET/POST (JSON body {} or candidate body). Read status, PAYMENT-REQUIRED (base64 x402 v2), WWW-Authenticate, accepts[].network. No payment, no signature, no seed.",
+  "extra_sources": [
+    "https://xrpl-ai.org/directory (t54 XRPL x402 directory) - 4 xrpl:1 listings: 2 already in candidates.json, 2 dead."
+  ],
+  "summary": {
+    "endpoints_probed": 45,
+    "live_402_xrpl1": [
+      "https://verify.sciphr.io/v1/credential/verify",
+      "https://x402.cryptobuddy.com.au/crypto/australia/best?asset=XRP&amount=5000&side=buy"
+    ],
+    "live_402_xrpl1_new": [],
+    "live_402_xrpl0_mainnet_readonly": [
+      "https://api.txnguardian.com/tx-simulate-risk",
+      "https://app.heinrichstech.com/v1/cdp/render-pro",
+      "https://oracle.evebrief.org/"
+    ],
+    "live_402_non_xrpl": [
+      "https://api-production-9ec74.up.railway.app/api/v1/bazaar/feed",
+      "https://api.insumermodel.com/v1/attest",
+      "https://twin.unykorn.org/price/bitcoin"
+    ],
+    "false_or_dead": [
+      "https://agent-rail.polymitapay.com/v1/catalog",
+      "https://aifinpay.io/.well-known/x402",
+      "https://api.agentweather.io",
+      "https://api.agentweather.io/.well-known/x402",
+      "https://api.agentweather.io/v1/agent-weather/current",
+      "https://api.merkl.ai",
+      "https://api.merkl.ai/.well-known/x402",
+      "https://api.polymitapay.com",
+      "https://api.polymitapay.com/.well-known/x402",
+      "https://mcp.cryptovault.co.uk/.well-known/x402",
+      "https://published-zeta.vercel.app/",
+      "https://published-zeta.vercel.app/.well-known/x402",
+      "https://published-zeta.vercel.app/deliverables/briefing-cycle-2079.json",
+      "https://smartpay-api.seedwordai.workers.dev/",
+      "https://smartpay-api.seedwordai.workers.dev/.well-known/x402",
+      "https://web-production-fb721.up.railway.app/",
+      "https://web-production-fb721.up.railway.app/.well-known/x402",
+      "https://web-production-fb721.up.railway.app/v1/xrp-context"
+    ]
+  },
+  "notes": {
+    "xrpl-ai.org directory: RSI-EAF Factory": "Listed as xrpl:1 in xrpl-ai.org/directory. HTTP 402 is Vercel DEPLOYMENT_DISABLED (x-vercel-error), not x402. Dead.",
+    "xrpl-ai.org directory: xrp-context": "Listed as xrpl:1 in xrpl-ai.org/directory. 404 on every path. Dead.",
+    "existing: sciphr": "Already in candidates.json. Re-confirmed live xrpl:1 402.",
+    "existing: cryptobuddy": "Already in candidates.json. Re-confirmed live xrpl:1 402."
+  },
+  "results": [
+    {
+      "url": "https://api.polymitapay.com",
+      "method": "GET",
+      "status": 404,
+      "content_type": "application/json; charset=utf-8",
+      "network_tags": [],
+      "verdict": "http_404",
+      "peer": "polymitapay/mcp"
+    },
+    {
+      "url": "https://api.polymitapay.com/v1/catalog",
+      "method": "GET",
+      "status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "network_tags": [],
+      "verdict": "reachable_200",
+      "peer": "polymitapay/mcp"
+    },
+    {
+      "url": "https://api.polymitapay.com/.well-known/x402",
+      "method": "GET",
+      "status": 404,
+      "content_type": "application/json; charset=utf-8",
+      "network_tags": [],
+      "verdict": "http_404",
+      "peer": "polymitapay/mcp"
+    },
+    {
+      "url": "https://agent-rail.polymitapay.com/v1/catalog",
+      "method": "GET",
+      "status": null,
+      "error": "URLError: <urlopen error [Errno -2] Name or service not known>",
+      "verdict": "unreachable",
+      "peer": "polymitapay/mcp"
+    },
+    {
+      "url": "https://api.txnguardian.com/.well-known/x402",
+      "method": "GET",
+      "status": 200,
+      "content_type": "application/json",
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "xrpl:0",
+          "asset": "XRP",
+          "amount": "5000",
+          "payTo": "rK1C1DPzJo9gSjK2LSdhV5J5veFB84zHer"
+        },
+        {
+          "scheme": "exact",
+          "network": "xrpl:0",
+          "asset": "524C555344000000000000000000000000000000",
+          "amount": "0.002",
+          "payTo": "rK1C1DPzJo9gSjK2LSdhV5J5veFB84zHer"
+        }
+      ],
+      "network_tags": [
+        "xrpl:0"
+      ],
+      "verdict": "reachable_200",
+      "peer": "Bubakooz22/xrpl-tollbooth"
+    },
+    {
+      "url": "https://api.txnguardian.com/.well-known/agent.json",
+      "method": "GET",
+      "status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "network_tags": [
+        "xrpl:0"
+      ],
+      "verdict": "reachable_200",
+      "peer": "Bubakooz22/xrpl-tollbooth"
+    },
+    {
+      "url": "https://api.txnguardian.com/tx-simulate-risk",
+      "method": "POST",
+      "body": {},
+      "status": 402,
+      "content_type": "application/json",
+      "payment_required_header": true,
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "xrpl:0",
+          "asset": "XRP",
+          "amount": "5000",
+          "payTo": "rK1C1DPzJo9gSjK2LSdhV5J5veFB84zHer"
+        },
+        {
+          "scheme": "exact",
+          "network": "xrpl:0",
+          "asset": "524C555344000000000000000000000000000000",
+          "amount": "0.002",
+          "payTo": "rK1C1DPzJo9gSjK2LSdhV5J5veFB84zHer"
+        }
+      ],
+      "network_tags": [
+        "xrpl:0"
+      ],
+      "verdict": "live_402_xrpl0_mainnet_readonly",
+      "peer": "Bubakooz22/xrpl-tollbooth"
+    },
+    {
+      "url": "https://app.heinrichstech.com/bazaar.json",
+      "method": "GET",
+      "status": 200,
+      "content_type": "application/json",
+      "network_tags": [
+        "xrpl:0"
+      ],
+      "verdict": "reachable_200",
+      "peer": "Drock91/bitbooth-docs"
+    },
+    {
+      "url": "https://app.heinrichstech.com/openapi.json",
+      "method": "GET",
+      "status": 200,
+      "content_type": "application/json",
+      "network_tags": [],
+      "verdict": "reachable_200",
+      "peer": "Drock91/bitbooth-docs"
+    },
+    {
+      "url": "https://app.heinrichstech.com/.well-known/x402",
+      "method": "GET",
+      "status": 200,
+      "content_type": "application/json",
+      "network_tags": [
+        "xrpl:0"
+      ],
+      "verdict": "reachable_200",
+      "peer": "Drock91/bitbooth-docs"
+    },
+    {
+      "url": "https://app.heinrichstech.com/v1/cdp/render-pro",
+      "method": "POST",
+      "body": {
+        "url": "https://example.com"
+      },
+      "status": 402,
+      "content_type": "application/json",
+      "payment_required_header": true,
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "eip155:8453",
+          "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          "amount": "10000",
+          "payTo": "0xDa2F35d283c42dd60B965322394bc658a5c1769F"
+        },
+        {
+          "scheme": "exact",
+          "network": "xrpl:0",
+          "asset": "524C555344000000000000000000000000000000",
+          "amount": "0.010000",
+          "payTo": "rfryheo6yzFdLWj8qUQtZc7zG9MKkBkUEy"
+        },
+        {
+          "scheme": "exact",
+          "network": "xrpl:0",
+          "asset": "5553444300000000000000000000000000000000",
+          "amount": "0.010000",
+          "payTo": "rfryheo6yzFdLWj8qUQtZc7zG9MKkBkUEy"
+        },
+        {
+          "scheme": "exact",
+          "network": "stellar:pubnet",
+          "asset": "USDC",
+          "amount": "100000",
+          "payTo": "GCB5WZT5VCBBATGMQMTB6TLUXD6KQC6N5ITRWK3CCP4J3YOCE45FA2GO"
+        }
+      ],
+      "network_tags": [
+        "eip155:8453",
+        "stellar:pubnet",
+        "xrpl:0"
+      ],
+      "verdict": "live_402_xrpl0_mainnet_readonly",
+      "peer": "Drock91/bitbooth-docs"
+    },
+    {
+      "url": "https://xrpl-x402.t54.ai",
+      "method": "GET",
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "network_tags": [
+        "xrpl:0"
+      ],
+      "verdict": "reachable_200",
+      "peer": "FlareForward/mcp-pay-xrpl"
+    },
+    {
+      "url": "https://xrpl-facilitator-testnet.t54.ai/supported",
+      "method": "GET",
+      "status": 200,
+      "content_type": "application/json",
+      "network_tags": [
+        "xrpl:1"
+      ],
+      "verdict": "reachable_200",
+      "peer": "FlareForward/mcp-pay-xrpl"
+    },
+    {
+      "url": "https://api.bricksum.com/v1/models",
+      "method": "GET",
+      "status": 401,
+      "content_type": "application/json",
+      "network_tags": [],
+      "verdict": "http_401",
+      "peer": "METHEZONE/knot-guard"
+    },
+    {
+      "url": "https://api-production-9ec74.up.railway.app/health",
+      "method": "GET",
+      "status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "network_tags": [],
+      "verdict": "reachable_200",
+      "peer": "Micopay/micopaybridge"
+    },
+    {
+      "url": "https://api-production-9ec74.up.railway.app/api/v1/bazaar/feed",
+      "method": "GET",
+      "status": 402,
+      "content_type": "application/json; charset=utf-8",
+      "accepts": [
+        {
+          "scheme": "stellar-usdc",
+          "network": "public",
+          "asset": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+          "maxAmountRequired": "0.001",
+          "payTo": "GCOLK5RHOZQAHOUDZPPOQKKHBERDOKHXGQLOAMRH3UOVBJO6TNIA54NY"
+        }
+      ],
+      "network_tags": [
+        "public"
+      ],
+      "verdict": "live_402_non_xrpl",
+      "peer": "Micopay/micopaybridge"
+    },
+    {
+      "url": "https://api.agentweather.io/.well-known/x402",
+      "method": "GET",
+      "status": 530,
+      "content_type": "application/json; charset=utf-8",
+      "network_tags": [],
+      "verdict": "http_530",
+      "peer": "agentweather/agent-weather"
+    },
+    {
+      "url": "https://api.agentweather.io/v1/agent-weather/current",
+      "method": "GET",
+      "status": 530,
+      "content_type": "application/json; charset=utf-8",
+      "network_tags": [],
+      "verdict": "http_530",
+      "peer": "agentweather/agent-weather"
+    },
+    {
+      "url": "https://mcp.cryptovault.co.uk/.well-known/agent.json",
+      "method": "GET",
+      "status": 200,
+      "content_type": "application/json",
+      "network_tags": [],
+      "verdict": "reachable_200",
+      "peer": "eamwhite1/xrpl-referee"
+    },
+    {
+      "url": "https://mcp.cryptovault.co.uk/.well-known/x402",
+      "method": "GET",
+      "status": 404,
+      "content_type": "application/json",
+      "network_tags": [],
+      "verdict": "http_404",
+      "peer": "eamwhite1/xrpl-referee"
+    },
+    {
+      "url": "https://mcp.cryptovault.co.uk/status",
+      "method": "GET",
+      "status": 200,
+      "content_type": "application/json",
+      "network_tags": [],
+      "verdict": "reachable_200",
+      "peer": "eamwhite1/xrpl-referee"
+    },
+    {
+      "url": "https://smartpay-api.seedwordai.workers.dev/health",
+      "method": "GET",
+      "status": 200,
+      "content_type": "application/json",
+      "network_tags": [],
+      "verdict": "reachable_200",
+      "peer": "seedwordai-maeve/smartpay-agent"
+    },
+    {
+      "url": "https://smartpay-api.seedwordai.workers.dev/.well-known/x402",
+      "method": "GET",
+      "status": 404,
+      "content_type": "application/json",
+      "network_tags": [],
+      "verdict": "http_404",
+      "peer": "seedwordai-maeve/smartpay-agent"
+    },
+    {
+      "url": "https://smartpay-api.seedwordai.workers.dev/",
+      "method": "GET",
+      "status": 404,
+      "content_type": "application/json",
+      "network_tags": [],
+      "verdict": "http_404",
+      "peer": "seedwordai-maeve/smartpay-agent"
+    },
+    {
+      "url": "https://aifinpay.io/.well-known/x402",
+      "method": "GET",
+      "status": 404,
+      "content_type": "text/html; charset=utf-8",
+      "network_tags": [],
+      "verdict": "http_404",
+      "peer": "AiFinPay/sdk"
+    },
+    {
+      "url": "https://api.merkl.ai",
+      "method": "GET",
+      "status": 404,
+      "content_type": "application/json",
+      "network_tags": [],
+      "verdict": "http_404",
+      "peer": "ramcav/merkl-sdk"
+    },
+    {
+      "url": "https://api.merkl.ai/.well-known/x402",
+      "method": "GET",
+      "status": 404,
+      "content_type": "application/json",
+      "network_tags": [],
+      "verdict": "http_404",
+      "peer": "ramcav/merkl-sdk"
+    },
+    {
+      "url": "https://api.insumermodel.com/v1/attest",
+      "method": "POST",
+      "body": {},
+      "status": 402,
+      "content_type": "application/json; charset=utf-8",
+      "payment_required_header": true,
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "eip155:8453",
+          "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          "amount": "50000",
+          "payTo": "0xAd982CB19aCCa2923Df8F687C0614a7700255a23"
+        },
+        {
+          "scheme": "exact",
+          "network": "eip155:137",
+          "asset": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+          "amount": "50000",
+          "payTo": "0xAd982CB19aCCa2923Df8F687C0614a7700255a23"
+        },
+        {
+          "scheme": "exact",
+          "network": "eip155:42161",
+          "asset": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+          "amount": "50000",
+          "payTo": "0xAd982CB19aCCa2923Df8F687C0614a7700255a23"
+        },
+        {
+          "scheme": "exact",
+          "network": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+          "asset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          "amount": "50000",
+          "payTo": "6a1mLjefhvSJX1sEX8PTnionbE9DqoYjU6F6bNkT4Ydr"
+        },
+        {
+          "scheme": "exact",
+          "network": "eip155:5042",
+          "asset": "0x3600000000000000000000000000000000000000",
+          "amount": "50000",
+          "payTo": "0xAd982CB19aCCa2923Df8F687C0614a7700255a23"
+        }
+      ],
+      "network_tags": [
+        "eip155:137",
+        "eip155:42161",
+        "eip155:5042",
+        "eip155:8453",
+        "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"
+      ],
+      "verdict": "live_402_non_xrpl",
+      "peer": "insumerapi/llama-index-tools-insumer"
+    },
+    {
+      "url": "https://vet402-delivery.vercel.app/v1/buy",
+      "method": "GET",
+      "status": 400,
+      "content_type": "application/json",
+      "network_tags": [],
+      "verdict": "http_400",
+      "peer": "kzmttkc/vet402-delivery"
+    },
+    {
+      "url": "https://dziuba0x.github.io/lancea/",
+      "method": "GET",
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "network_tags": [],
+      "verdict": "reachable_200",
+      "peer": "dziuba0x/lancea"
+    },
+    {
+      "url": "https://api.agentweather.io",
+      "method": "GET",
+      "status": 530,
+      "content_type": "application/json; charset=utf-8",
+      "network_tags": [],
+      "verdict": "http_530",
+      "peer": "lucasbrothersfamily/agentweather"
+    },
+    {
+      "url": "https://published-zeta.vercel.app/deliverables/briefing-cycle-2079.json",
+      "method": "GET",
+      "status": 402,
+      "content_type": "application/json",
+      "network_tags": [],
+      "verdict": "false_402_vercel_deployment_disabled",
+      "peer": "xrpl-ai.org directory: RSI-EAF Factory"
+    },
+    {
+      "url": "https://published-zeta.vercel.app/.well-known/x402",
+      "method": "GET",
+      "status": 402,
+      "content_type": "application/json",
+      "network_tags": [],
+      "verdict": "false_402_vercel_deployment_disabled",
+      "peer": "xrpl-ai.org directory: RSI-EAF Factory"
+    },
+    {
+      "url": "https://published-zeta.vercel.app/",
+      "method": "GET",
+      "status": 402,
+      "content_type": "application/json",
+      "network_tags": [],
+      "verdict": "false_402_vercel_deployment_disabled",
+      "peer": "xrpl-ai.org directory: RSI-EAF Factory"
+    },
+    {
+      "url": "https://web-production-fb721.up.railway.app/v1/xrp-context",
+      "method": "GET",
+      "status": 404,
+      "content_type": "application/json",
+      "network_tags": [],
+      "verdict": "http_404",
+      "peer": "xrpl-ai.org directory: xrp-context"
+    },
+    {
+      "url": "https://web-production-fb721.up.railway.app/.well-known/x402",
+      "method": "GET",
+      "status": 404,
+      "content_type": "application/json",
+      "network_tags": [],
+      "verdict": "http_404",
+      "peer": "xrpl-ai.org directory: xrp-context"
+    },
+    {
+      "url": "https://web-production-fb721.up.railway.app/",
+      "method": "GET",
+      "status": 404,
+      "content_type": "application/json",
+      "network_tags": [],
+      "verdict": "http_404",
+      "peer": "xrpl-ai.org directory: xrp-context"
+    },
+    {
+      "url": "https://verify.sciphr.io/v1/credential/verify",
+      "method": "POST",
+      "body": {
+        "subject": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw"
+      },
+      "status": 402,
+      "content_type": "application/json; charset=utf-8",
+      "payment_required_header": true,
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "xrpl:1",
+          "asset": "XRP",
+          "amount": "2000",
+          "payTo": "rUjBK34fKyMstVePdZwhfJhoQuz4U6wLDL"
+        }
+      ],
+      "network_tags": [
+        "xrpl:1"
+      ],
+      "verdict": "live_402_xrpl1",
+      "peer": "existing: sciphr"
+    },
+    {
+      "url": "https://x402.cryptobuddy.com.au/crypto/australia/best?asset=XRP&amount=5000&side=buy",
+      "method": "GET",
+      "status": 402,
+      "content_type": "application/json",
+      "payment_required_header": true,
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "xrpl:1",
+          "asset": "XRP",
+          "amount": "1000",
+          "payTo": "rKPnjKibwmuajYXFVonUNwrMN4hEJaz3M6"
+        }
+      ],
+      "network_tags": [
+        "xrpl:1"
+      ],
+      "verdict": "live_402_xrpl1",
+      "peer": "existing: cryptobuddy"
+    },
+    {
+      "url": "https://tooloracle.io/xrpl/health",
+      "method": "GET",
+      "status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "network_tags": [],
+      "verdict": "reachable_200",
+      "peer": "ToolOracle/xrploracle"
+    },
+    {
+      "url": "https://twin.unykorn.org/price/bitcoin",
+      "method": "GET",
+      "status": 402,
+      "content_type": "application/json",
+      "payment_required_header": true,
+      "www_authenticate": "Payment id=\"T_6M4YZB_nRf4V0u_GVRI8LQ\", realm=\"twin.unykorn.org\", method=\"usdc\", intent=\"charge\", request=\"eyJhbW91bnQiOiIxMDAwIiwiY3VycmVuY3kiOiIweDgzMzU4OWZDRDZlRGI2RTA4ZjRjN0MzMkQ0ZjcxYjU0YmRBMDI5MTMiLCJkZXNjcmlwdGlvbiI6IkJpdGNvaW4gKEJUQykgcHJpY2UgaW4gVVNEIG5vdywgd2l0aCAyNGggYW5kIDdkIGNoYW5nZSIsIm",
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "eip155:8453",
+          "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          "amount": "1000",
+          "payTo": "0x7d9a65d06dcc435a52D5880C6310Bd6E96c156DB"
+        },
+        {
+          "scheme": "exact",
+          "network": "eip155:137",
+          "asset": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+          "amount": "1000",
+          "maxAmountRequired": "1000",
+          "payTo": "0x7d9a65d06dcc435a52D5880C6310Bd6E96c156DB"
+        },
+        {
+          "scheme": "exact",
+          "network": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+          "asset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          "amount": "1000",
+          "maxAmountRequired": "1000",
+          "payTo": "52EqTZigRAnBphuYAuREjQJx5H5ryyc1RETpDR2dZFQp"
+        }
+      ],
+      "network_tags": [
+        "eip155:137",
+        "eip155:8453",
+        "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"
+      ],
+      "verdict": "live_402_non_xrpl",
+      "peer": "FTHTrading/genesis402-agent-kit"
+    },
+    {
+      "url": "https://twin.unykorn.org/.well-known/x402",
+      "method": "GET",
+      "status": 200,
+      "content_type": "application/json",
+      "network_tags": [],
+      "verdict": "reachable_200",
+      "peer": "FTHTrading/genesis402-agent-kit"
+    },
+    {
+      "url": "https://oracle.evebrief.org/",
+      "method": "GET",
+      "status": 402,
+      "content_type": "application/json",
+      "payment_required_header": true,
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "xrpl:0",
+          "asset": "524C555344000000000000000000000000000000",
+          "amount": "0.01",
+          "payTo": "rH2tcNh56xoLUssRubra7DSDCgrReSZodW"
+        }
+      ],
+      "network_tags": [
+        "xrpl:0"
+      ],
+      "verdict": "live_402_xrpl0_mainnet_readonly",
+      "peer": "api-evangelist/evebrief-org"
+    },
+    {
+      "url": "https://oracle.evebrief.org/.well-known/x402",
+      "method": "GET",
+      "status": 200,
+      "content_type": "application/json",
+      "network_tags": [
+        "xrpl:0"
+      ],
+      "verdict": "reachable_200",
+      "peer": "api-evangelist/evebrief-org"
+    },
+    {
+      "url": "https://mcp.cryptovault.co.uk/audit",
+      "method": "POST",
+      "body": {},
+      "status": 422,
+      "content_type": "application/json",
+      "network_tags": [],
+      "verdict": "http_422",
+      "peer": "eamwhite1/agent-trust"
+    }
+  ]
+}
