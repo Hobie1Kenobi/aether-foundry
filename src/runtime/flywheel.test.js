@@ -25,6 +25,24 @@ const STRANGER = "rh4c6qMMyafccZrPFCPCN742BNMXfjKYss";
 const FOREIGN = "r3JbqcVQ4Pov4MhFUMSdnro7s3VgpaqssZ";
 const HASH = "C8044902172E6803154E144815A6B8D19FBD1067B71BF511DF35346DF8BC43C1";
 
+function heartbeatHashes(text) {
+  const found = [];
+  for (const line of String(text).split("\n")) {
+    if (!line.trim()) continue;
+    let row;
+    try {
+      row = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!row || (row.action !== "heartbeat" && row.event !== "heartbeat")) continue;
+    const hash = String(row.hash || "").toUpperCase();
+    if (!anchors.HASH_RE.test(hash)) continue;
+    found.push(hash);
+  }
+  return found;
+}
+
 function labeled() {
   return guard.foundryIndex();
 }
@@ -130,10 +148,13 @@ describe("unique inbound", () => {
     const extracted = metrics.extract(ledger);
     const committed = JSON.parse(fs.readFileSync(path.join(ROOT, "lab", "metrics.json"), "utf8"));
     const pnl = metrics.parsePnlCounts(fs.readFileSync(path.join(ROOT, "market", "pnl.md"), "utf8"));
+    const beats = heartbeatHashes(ledger);
     assert.equal(extracted.inbound.includes(DAY30), true);
     assert.equal(extracted.inbound.includes(STRANGER), false);
     assert.equal(extracted.inbound.includes(FOREIGN), false);
-    assert.equal(extracted.last_heartbeat_hash, "3BB793FC200C811F1F4E9F535EE4D470C3896852F6D4A35CD157C7E1E6BACE35");
+    assert.ok(beats.length > 1);
+    assert.notEqual(beats[0], beats[beats.length - 1]);
+    assert.equal(extracted.last_heartbeat_hash, beats[beats.length - 1]);
     assert.ok(anchors.HASH_RE.test(extracted.last_grant_hash));
     assert.ok(anchors.HASH_RE.test(extracted.last_outbound_hash));
     assert.equal(committed.last_grant_hash, extracted.last_grant_hash);

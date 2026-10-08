@@ -238,6 +238,180 @@ describe("machine spec", () => {
   });
 });
 
+const REGEX_PREFIX = new Set([
+  "return",
+  "throw",
+  "case",
+  "else",
+  "typeof",
+  "void",
+  "delete",
+  "in",
+  "of",
+  "await",
+  "yield",
+  "do",
+]);
+
+function lastCodeChar(out) {
+  for (let j = out.length - 1; j >= 0; j -= 1) {
+    if (!/\s/.test(out[j])) return { ch: out[j], index: j };
+  }
+  return { ch: "", index: -1 };
+}
+
+function regexLikely(out) {
+  const prev = lastCodeChar(out);
+  if (!prev.ch) return true;
+  if ("([{=,:;!&|?+-*%^~<>".includes(prev.ch)) return true;
+  if (!/[A-Za-z0-9_$]/.test(prev.ch)) return false;
+  let k = prev.index;
+  while (k >= 0 && /[A-Za-z0-9_$]/.test(out[k])) k -= 1;
+  return REGEX_PREFIX.has(out.slice(k + 1, prev.index + 1).join(""));
+}
+
+function endsJsxTag(source, gt) {
+  if (gt > 0 && source[gt - 1] === "=") return false;
+  for (let j = gt - 1; j >= 0; j -= 1) {
+    const c = source[j];
+    if (c === "<") return true;
+    if ("\n;()[]{}&|+-*,?:".includes(c)) return false;
+  }
+  return false;
+}
+
+function maskJsxText(source) {
+  let out = "";
+  let i = 0;
+  while (i < source.length) {
+    if (source[i] === ">" && endsJsxTag(source, i)) {
+      let j = i + 1;
+      let plain = true;
+      while (j < source.length && source[j] !== "<") {
+        if ("(){};=".includes(source[j])) {
+          plain = false;
+          break;
+        }
+        j += 1;
+      }
+      if (plain && j < source.length && source[j] === "<") {
+        out += `>${" ".repeat(j - i - 1)}`;
+        i = j;
+        continue;
+      }
+    }
+    out += source[i];
+    i += 1;
+  }
+  return out;
+}
+
+function codeForSigningScan(source) {
+  const out = [];
+  let i = 0;
+  const n = source.length;
+
+  function blank(ch) {
+    out.push(ch === "\n" ? "\n" : " ");
+  }
+
+  function scanCode(stopAtInterpClose) {
+    let depth = 0;
+    while (i < n) {
+      const c = source[i];
+      const next = i + 1 < n ? source[i + 1] : "";
+      if (c === "/" && next === "/") {
+        blank(c);
+        blank(next);
+        i += 2;
+        while (i < n && source[i] !== "\n") {
+          blank(source[i]);
+          i += 1;
+        }
+        continue;
+      }
+      if (c === "/" && next === "*") {
+        blank(c);
+        blank(next);
+        i += 2;
+        while (i < n && !(source[i] === "*" && source[i + 1] === "/")) {
+          blank(source[i]);
+          i += 1;
+        }
+        if (i < n) {
+          blank("*");
+          blank("/");
+          i += 2;
+        }
+        continue;
+      }
+      if (c === "'" || c === '"' || c === "`") {
+        const quote = c;
+        blank(c);
+        i += 1;
+        while (i < n) {
+          const s = source[i];
+          if (s === "\\") {
+            blank(s);
+            i += 1;
+            if (i < n) {
+              blank(source[i]);
+              i += 1;
+            }
+            continue;
+          }
+          if (quote === "`" && s === "$" && source[i + 1] === "{") {
+            out.push("$", "{");
+            i += 2;
+            scanCode(true);
+            continue;
+          }
+          blank(s);
+          i += 1;
+          if (s === quote) break;
+          if (quote !== "`" && s === "\n") break;
+        }
+        continue;
+      }
+      if (c === "/" && regexLikely(out)) {
+        blank(c);
+        i += 1;
+        let inClass = false;
+        while (i < n && source[i] !== "\n") {
+          const r = source[i];
+          if (r === "\\") {
+            blank(r);
+            i += 1;
+            if (i < n) {
+              blank(source[i]);
+              i += 1;
+            }
+            continue;
+          }
+          if (r === "[") inClass = true;
+          else if (r === "]" && inClass) inClass = false;
+          blank(r);
+          i += 1;
+          if (r === "/" && !inClass) break;
+        }
+        continue;
+      }
+      if (stopAtInterpClose && c === "}" && depth === 0) {
+        out.push("}");
+        i += 1;
+        return;
+      }
+      if (c === "{") depth += 1;
+      else if (c === "}") depth = Math.max(0, depth - 1);
+      out.push(c);
+      i += 1;
+    }
+  }
+
+  scanCode(false);
+  return maskJsxText(out.join(""));
+}
+
 describe("desk signing ban", () => {
   it("does not call Wallet.sign or fromSeed under web/", () => {
     const root = path.join(__dirname, "..", "web");
@@ -252,9 +426,27 @@ describe("desk signing ban", () => {
     };
     walk(root);
     const banned = /Wallet\.sign|fromSeed\s*\(/;
+    const samples = [
+      ["const signed = Wallet.sign(tx);", true],
+      ["const sign = Wallet.sign;", true],
+      ["xrpl.Wallet.fromSeed(seed)", true],
+      ["fromSeed (seed)", true],
+      ["const signed = `${Wallet.sign(tx)}`;", true],
+      ['value.replace(/-/g, "+"); const signed = Wallet.sign(tx);', true],
+      ['<span className="mono">Wallet.sign</span>', false],
+      ['const note = "does not call Wallet.sign";', false],
+      ["const note = 'fromSeed(seed)';", false],
+      ["// Wallet.sign(tx)", false],
+      ["/* fromSeed(seed) */", false],
+      ["const label = `Wallet.sign`;", false],
+    ];
+    for (const [sample, hit] of samples) {
+      assert.equal(banned.test(codeForSigningScan(sample)), hit, sample);
+    }
+    assert.ok(files.some((file) => file.endsWith(path.join("app", "demo", "page.tsx"))));
     for (const file of files) {
       const text = fs.readFileSync(file, "utf8");
-      assert.equal(banned.test(text), false, file);
+      assert.equal(banned.test(codeForSigningScan(text)), false, file);
     }
   });
 });
