@@ -13,7 +13,25 @@ const policy = require("./policy");
 
 const ROOT = anchors.repoRoot();
 const HASH = "AB".repeat(32);
-const LIVE_HEARTBEAT = "3BB793FC200C811F1F4E9F535EE4D470C3896852F6D4A35CD157C7E1E6BACE35";
+const FIXTURE_HEARTBEAT = "3BB793FC200C811F1F4E9F535EE4D470C3896852F6D4A35CD157C7E1E6BACE35";
+
+function heartbeatHashes(text) {
+  const found = [];
+  for (const line of String(text).split("\n")) {
+    if (!line.trim()) continue;
+    let row;
+    try {
+      row = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!row || (row.action !== "heartbeat" && row.event !== "heartbeat")) continue;
+    const hash = String(row.hash || "").toUpperCase();
+    if (!anchors.HASH_RE.test(hash)) continue;
+    found.push(hash);
+  }
+  return found;
+}
 
 function freshState(now) {
   return {
@@ -208,9 +226,14 @@ test("metrics skeleton copies pnl counts and refuses a missing hash", () => {
   assert.equal(doc.last_grant_hash, null);
   assert.equal(doc.last_outbound_hash, null);
   assert.equal(doc.last_heartbeat.hash, null);
-  const committed = JSON.parse(fs.readFileSync(path.join(ROOT, "lab", "metrics.json"), "utf8"));
-  assert.equal(committed.last_heartbeat_hash, LIVE_HEARTBEAT);
-  assert.equal(committed.last_heartbeat.hash, LIVE_HEARTBEAT);
+  const metricsPath = path.join(ROOT, "lab", "metrics.json");
+  const committedText = fs.readFileSync(metricsPath, "utf8");
+  const committed = JSON.parse(committedText);
+  const beats = heartbeatHashes(fs.readFileSync(path.join(ROOT, "lab", "ledger-log.jsonl"), "utf8"));
+  assert.ok(beats.length > 1);
+  assert.notEqual(beats[0], beats[beats.length - 1]);
+  assert.equal(committed.last_heartbeat_hash, beats[beats.length - 1]);
+  assert.equal(committed.last_heartbeat.hash, beats[beats.length - 1]);
   assert.equal(committed.x402_hits, parsed.counts.x402_hits);
   assert.equal(committed.grants_paid, parsed.counts.grants_paid);
   assert.throws(
@@ -230,7 +253,7 @@ test("metrics skeleton copies pnl counts and refuses a missing hash", () => {
   assert.equal(written.last_heartbeat.ledger_index, 21103000);
   assert.equal(written.last_grant_hash, null);
   assert.equal(written.grants_paid, parsed.counts.grants_paid);
-  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, "lab", "metrics.json"), "utf8")).last_heartbeat.hash, LIVE_HEARTBEAT);
+  assert.equal(fs.readFileSync(metricsPath, "utf8"), committedText);
 });
 
 test("live execute archives heartbeat and does not invent a hash when submit fails", async () => {
@@ -320,7 +343,7 @@ function seedFrontier(dir) {
   fs.writeFileSync(path.join(dir, "market", "pnl.md"), fs.readFileSync(path.join(ROOT, "market", "pnl.md")));
   fs.writeFileSync(
     path.join(dir, "lab", "metrics.json"),
-    `${JSON.stringify(frontierDoc(LIVE_HEARTBEAT), null, 2)}\n`
+    `${JSON.stringify(frontierDoc(FIXTURE_HEARTBEAT), null, 2)}\n`
   );
 }
 
