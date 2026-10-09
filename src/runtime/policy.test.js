@@ -92,6 +92,10 @@ describe("refusals", () => {
       throwsCode(() => policy.assertAltnet({ url, signing: false }), "MAINNET");
     }
     assert.equal(policy.assertAltnet({ networkId: 1, url: anchors.XRPL_HTTP }), undefined);
+    assert.equal(policy.assertAltnet({ networkId: 1, url: "https://testnet.xrpl-labs.com" }), undefined);
+    assert.equal(policy.assertAltnet({ networkId: 1, url: "wss://testnet.xrpl-labs.com" }), undefined);
+    throwsCode(() => policy.assertAltnet({ networkId: 1, url: "https://backup.testnet.xrpl-labs.com" }), "MAINNET");
+    throwsCode(() => policy.assertAltnet({ networkId: 0, url: "https://testnet.xrpl-labs.com" }), "MAINNET");
   });
 
   it("validates Xahau with the Xahau assert and refuses the wrong kind", () => {
@@ -331,7 +335,7 @@ describe("daemon dry-run", () => {
     const code = await daemon.pass({
       argv: ["--dry-run", "--once"],
       env: { CI: "true", W5_REGULAR_SEED: "present-not-used", AETHER_SECRETS: path.join(os.tmpdir(), "missing-secrets.env") },
-      now: new Date("2026-10-06T04:00:00.000Z"),
+      now: new Date("2026-10-09T06:00:00.000Z"),
       loadSeed: () => {
         reads += 1;
         return "present-not-used";

@@ -10,13 +10,14 @@
  */
 
 const xrpl = require("xrpl");
+const hosts = require("../xrpl-hosts");
 
 const HUNCH = "H1";
 const QUORUM = 3;
 const NETWORK = "XRPL Testnet";
 const NETWORK_ID = 1;
-const XRPL_WS = "wss://s.altnet.rippletest.net:51233";
-const XRPL_HTTP = "https://s.altnet.rippletest.net:51234";
+const XRPL_WS = hosts.PRIMARY_WS;
+const XRPL_HTTP = hosts.PRIMARY_HTTP;
 const SECRETS_PATH = "/workspace/aether-foundry-secrets/.env";
 const MOTION_XRP = 50;
 const MOTION_DROPS = 50000000n;
@@ -130,7 +131,7 @@ function assertTestnetUrl(raw) {
   if (isMainnetUrl(raw)) {
     throw Object.assign(new Error("refusing mainnet XRPL url"), { code: "MAINNET" });
   }
-  if (!host.endsWith(".rippletest.net") && host !== "rippletest.net") {
+  if (!hosts.isApprovedXrplTestnetHost(host)) {
     throw Object.assign(new Error("refusing non-testnet XRPL url"), { code: "MAINNET" });
   }
   return raw;

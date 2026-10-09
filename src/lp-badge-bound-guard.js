@@ -8,9 +8,10 @@
 
 const crypto = require("crypto");
 const xrpl = require("xrpl");
+const hosts = require("./xrpl-hosts");
 
-const XRPL_WS = "wss://s.altnet.rippletest.net:51233";
-const XRPL_HTTP = "https://s.altnet.rippletest.net:51234";
+const XRPL_WS = hosts.PRIMARY_WS;
+const XRPL_HTTP = hosts.PRIMARY_HTTP;
 const FAUCET_URL = "https://faucet.altnet.rippletest.net/accounts";
 const NETWORK_ID = 1;
 const SECRETS_PATH = "/workspace/aether-foundry-secrets/.env";
@@ -93,9 +94,7 @@ function assertXrplTestnetUrl(raw) {
       { code: "HOST" }
     );
   }
-  const rippleTest = host === "rippletest.net" || host.endsWith(".rippletest.net");
-  const labsTest = host === "testnet.xrpl-labs.com";
-  if (!rippleTest && !labsTest) {
+  if (!hosts.isApprovedXrplTestnetHost(host)) {
     throw Object.assign(new Error("refusing non-testnet XRPL url"), { code: "HOST" });
   }
   return raw;

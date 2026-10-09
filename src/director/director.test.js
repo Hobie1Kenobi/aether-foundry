@@ -7,6 +7,7 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 const anchors = require("./anchors");
+const hosts = require("../xrpl-hosts");
 const schema = require("./schema");
 const snapshot = require("./snapshot");
 const wake = require("./wake");
@@ -202,7 +203,11 @@ describe("director anchors", () => {
     }
     assert.equal(anchors.WALLETS.W2.address, walkIn.W2);
     assert.throws(() => anchors.assertXrplTestnetUrl("https://s1.ripple.com:51234"), /mainnet/);
+    assert.throws(() => anchors.assertXrplTestnetUrl("https://s2.ripple.com:51234"), /mainnet/);
     assert.throws(() => anchors.assertXrplTestnetUrl("https://xrplcluster.com"), /mainnet|non-testnet|refusing/);
+    assert.throws(() => anchors.assertXrplTestnetUrl("wss://xrpl.ws"), /mainnet|non-testnet|refusing/);
+    assert.throws(() => anchors.assertXrplTestnetUrl("https://backup.testnet.xrpl-labs.com"), /non-testnet/);
+    assert.equal(anchors.assertXrplTestnetUrl("https://testnet.xrpl-labs.com"), "https://testnet.xrpl-labs.com");
     assert.throws(() => anchors.assertXahauTestnetUrl("https://xahau.network"), /Xahau/);
     assert.throws(() => anchors.assertNetworkId(0, 1), /mainnet network id 0/);
     assert.throws(() => anchors.assertNetworkId(21337, 21338), /21337/);
@@ -244,6 +249,21 @@ describe("director schema", () => {
     const mainnet = schema.fixtureState();
     mainnet.networks.xrpl_testnet.http = "https://s1.ripple.com:51234";
     assert.throws(() => schema.validateState(mainnet), /mainnet/);
+    const cluster = schema.fixtureState();
+    cluster.networks.xrpl_testnet.http = "https://xrplcluster.com";
+    cluster.networks.xrpl_testnet.ws = "wss://xrpl.ws";
+    assert.throws(() => schema.validateState(cluster), /mainnet|refusing host/);
+    const suffix = schema.fixtureState();
+    suffix.networks.xrpl_testnet.http = "https://backup.testnet.xrpl-labs.com";
+    suffix.networks.xrpl_testnet.ws = "wss://backup.testnet.xrpl-labs.com";
+    assert.throws(() => schema.validateState(suffix), /refusing host/);
+    const labs = schema.fixtureState();
+    labs.networks.xrpl_testnet.http = hosts.LABS_HTTP;
+    labs.networks.xrpl_testnet.ws = hosts.LABS_WS;
+    assert.equal(schema.validateState(labs, { root: ROOT }).networks.xrpl_testnet.http, hosts.LABS_HTTP);
+    const mixed = schema.fixtureState();
+    mixed.networks.xrpl_testnet.http = hosts.LABS_HTTP;
+    assert.throws(() => schema.validateState(mixed), /endpoint drifted/);
     const ident = schema.fixtureState();
     ident.networks.xrpl_testnet.network_id = 0;
     assert.throws(() => schema.validateState(ident), /network id 0/);
@@ -464,6 +484,66 @@ describe("director snapshot", () => {
       /failed/
     );
     assert.equal(fs.existsSync(missing), false);
+  });
+
+  it("retries XRPL Labs when rippletest times out and still refuses a wrong network id", async () => {
+    const file = tempFile();
+    const seen = [];
+    const code = await snapshot.run(["node", "snapshot", "--root", ROOT, "--state", file], {
+      env: {},
+      fetchImpl: async (url, init) => {
+        seen.push(String(url));
+        if (String(url).includes("s.altnet.rippletest.net")) {
+          throw new Error("The operation was aborted due to timeout");
+        }
+        return mockFetch()(url, init);
+      },
+      silent: true,
+      now: new Date("2026-09-27T21:33:00Z"),
+    });
+    assert.equal(code, 0);
+    const written = JSON.parse(fs.readFileSync(file, "utf8"));
+    assert.equal(written.networks.xrpl_testnet.http, hosts.LABS_HTTP);
+    assert.equal(written.networks.xrpl_testnet.ws, hosts.LABS_WS);
+    assert.equal(written.networks.xrpl_testnet.network_id, 1);
+    assert.equal(seen.includes(hosts.PRIMARY_HTTP), true);
+    assert.equal(seen.includes(hosts.LABS_HTTP), true);
+    assert.equal(seen.filter((url) => url === hosts.LABS_HTTP).length > 0, true);
+
+    const selected = tempFile();
+    const selectedSeen = [];
+    await snapshot.run(["node", "snapshot", "--root", ROOT, "--state", selected], {
+      env: { XRPL_HTTP: hosts.LABS_HTTP },
+      fetchImpl: async (url, init) => {
+        selectedSeen.push(String(url));
+        if (String(url).includes("rippletest.net")) throw new Error("primary must not be called");
+        return mockFetch()(url, init);
+      },
+      silent: true,
+      now: new Date("2026-09-27T21:33:00Z"),
+    });
+    assert.equal(selectedSeen.includes(hosts.LABS_HTTP), true);
+    assert.equal(selectedSeen.some((url) => url.includes("rippletest.net")), false);
+
+    const wrong = tempFile();
+    let labsCalls = 0;
+    await assert.rejects(
+      () => snapshot.run(["node", "snapshot", "--root", ROOT, "--state", wrong], {
+        env: {},
+        fetchImpl: async (url, init) => {
+          if (String(url).includes("xrpl-labs")) labsCalls += 1;
+          const base = mockFetch();
+          if (init && init.method === "POST" && JSON.parse(init.body).method === "server_info" && !String(url).includes("xahau")) {
+            return jsonResponse({ info: { network_id: 0, build_version: "3.4.1" } });
+          }
+          return base(url, init);
+        },
+        silent: true,
+      }),
+      /network id 0/
+    );
+    assert.equal(labsCalls, 0);
+    assert.equal(fs.existsSync(wrong), false);
   });
 });
 

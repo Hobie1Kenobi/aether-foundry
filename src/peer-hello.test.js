@@ -287,7 +287,11 @@ describe("peer-hello archive", () => {
 describe("peer-hello testnet gate", () => {
   it("refuses mainnet, Xahau, and any network id other than 1", () => {
     assert.throws(() => hello.assertTestnetUrl("https://s1.ripple.com:51234"), /mainnet/);
+    assert.throws(() => hello.assertTestnetUrl("https://s2.ripple.com:51234"), /mainnet/);
     assert.throws(() => hello.assertTestnetUrl("https://xrplcluster.com"), /mainnet/);
+    assert.throws(() => hello.assertTestnetUrl("https://xrpl.ws"), /mainnet/);
+    assert.throws(() => hello.assertTestnetUrl("https://backup.testnet.xrpl-labs.com"), /non-testnet/);
+    assert.equal(hello.assertTestnetUrl("https://testnet.xrpl-labs.com"), "https://testnet.xrpl-labs.com");
     assert.throws(() => hello.assertTestnetUrl("wss://s.altnet.rippletest.net:51233"), /non-HTTP/);
     assert.throws(() => hello.assertTestnetUrl("https://xahau.testnet.example"), /Xahau|non-testnet/);
     assert.throws(() => hello.assertTestnetUrl("https://s.altnet.rippletest.net.evil.com"), /non-testnet/);

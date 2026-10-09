@@ -11,6 +11,7 @@
 const fs = require("fs");
 const path = require("path");
 const anchors = require("./anchors");
+const hosts = require("../xrpl-hosts");
 const schema = require("./schema");
 const walkIn = require("../walk-in-public");
 
@@ -18,13 +19,16 @@ const HELP = `Usage: node src/director/snapshot.js [--root DIR] [--state FILE] [
 
 Reads balances and watched ledger objects into lab/director-state.json.
 Preserves next_actions, blockers, and last_session_id when the current file is valid.
-Does not sign, read seeds, or invent a ledger index when RPC fails.`;
+Does not sign, read seeds, or invent a ledger index when RPC fails.
+XRPL_HTTP may select https://testnet.xrpl-labs.com. If s.altnet.rippletest.net
+times out, the XRPL reads retry that host. The card still records network id 1.`;
 
 function parseArgs(argv) {
   const out = {
     root: anchors.repoRoot(),
     state: null,
-    xrplHttp: anchors.XRPL_HTTP,
+    xrplHttp: null,
+    xrplHttpSet: false,
     xahauHttp: anchors.XAHAU_HTTP,
     help: false,
   };
@@ -38,13 +42,23 @@ function parseArgs(argv) {
       i += 1;
       if (arg === "--root") out.root = path.resolve(value);
       else if (arg === "--state") out.state = path.resolve(value);
-      else if (arg === "--xrpl-http") out.xrplHttp = value;
+      else if (arg === "--xrpl-http") {
+        out.xrplHttp = value;
+        out.xrplHttpSet = true;
+      }
       else out.xahauHttp = value;
     } else {
       throw new Error(`unknown arg ${arg}`);
     }
   }
   return out;
+}
+
+function resolveSnapshotHttp(raw) {
+  const checked = anchors.assertXrplTestnetUrl(raw || anchors.XRPL_HTTP);
+  const host = new URL(checked).hostname.toLowerCase();
+  if (hosts.isLabsTestnetHost(host)) return canonicalRpc(checked, hosts.LABS_HTTP, "XRPL Labs Testnet");
+  return canonicalRpc(checked, anchors.XRPL_HTTP, "XRPL Testnet");
 }
 
 function canonicalRpc(actual, expected, label) {
@@ -330,9 +344,7 @@ async function probeGet(url, fetchImpl) {
   }
 }
 
-async function collect(opts) {
-  const fetchImpl = opts.fetchImpl || globalThis.fetch;
-  const xrplHttp = canonicalRpc(anchors.assertXrplTestnetUrl(opts.xrplHttp || anchors.XRPL_HTTP), anchors.XRPL_HTTP, "XRPL Testnet");
+async function collectAt(xrplHttp, opts, fetchImpl) {
   const xahauHttp = canonicalRpc(anchors.assertXahauTestnetUrl(opts.xahauHttp || anchors.XAHAU_HTTP), anchors.XAHAU_HTTP, "Xahau Testnet");
   const xrplInfo = await rpcCall(xrplHttp, "server_info", {}, fetchImpl);
   anchors.assertNetworkId(xrplInfo.info && xrplInfo.info.network_id, anchors.XRPL_NETWORK_ID);
@@ -414,7 +426,22 @@ async function collect(opts) {
     hookObjects,
     desk,
     toml,
+    xrplEndpoints: hosts.isLabsTestnetHost(new URL(xrplHttp).hostname)
+      ? { http: hosts.LABS_HTTP, ws: hosts.LABS_WS }
+      : null,
   };
+}
+
+async function collect(opts) {
+  const fetchImpl = opts.fetchImpl || globalThis.fetch;
+  const requested = resolveSnapshotHttp(opts.xrplHttp || anchors.XRPL_HTTP);
+  try {
+    return await collectAt(requested, opts, fetchImpl);
+  } catch (error) {
+    const next = hosts.fallbackUrl(requested);
+    if (!next || !hosts.isTransportFailure(error)) throw error;
+    return collectAt(next, opts, fetchImpl);
+  }
 }
 
 function assemble(bundle, opts) {
@@ -486,8 +513,8 @@ function assemble(bundle, opts) {
       xrpl_testnet: {
         label: "XRPL Testnet",
         network_id: anchors.XRPL_NETWORK_ID,
-        http: anchors.XRPL_HTTP,
-        ws: anchors.XRPL_WS,
+        http: bundle.xrplEndpoints ? bundle.xrplEndpoints.http : anchors.XRPL_HTTP,
+        ws: bundle.xrplEndpoints ? bundle.xrplEndpoints.ws : anchors.XRPL_WS,
         explorer: "https://testnet.xrpl.org",
         validated_ledger_index: xrplLedger.validated_ledger_index,
         reserve_base_drops: xrplLedger.reserve_base_drops,
@@ -600,8 +627,12 @@ async function run(argv, deps = {}) {
   }
   const statePath = args.state || path.join(args.root, anchors.STATE_REL);
   const previous = readPrevious(statePath);
+  const env = deps && Object.prototype.hasOwnProperty.call(deps, "env") ? (deps.env || {}) : process.env;
+  const xrplHttp = args.xrplHttpSet
+    ? args.xrplHttp
+    : (env.XRPL_HTTP || env.XRPL_RPC_URL || anchors.XRPL_HTTP);
   const bundle = await collect({
-    xrplHttp: args.xrplHttp,
+    xrplHttp,
     xahauHttp: args.xahauHttp,
     fetchImpl: deps.fetchImpl,
   });

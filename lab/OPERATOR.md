@@ -22,6 +22,8 @@ Agent-run ops for the XRPL **Testnet** corporation. Read this before any session
 | AMM | `r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w` |
 | HTTP JSON-RPC | https://s.altnet.rippletest.net:51234 |
 | WebSocket | wss://s.altnet.rippletest.net:51233 |
+| Backup HTTP JSON-RPC | https://testnet.xrpl-labs.com |
+| Backup WebSocket | wss://testnet.xrpl-labs.com |
 | Explorer | https://testnet.xrpl.org |
 | Founder GitHub | Hobie1Kenobi |
 
@@ -226,7 +228,9 @@ FOUNDRY_DAEMON_LIVE=yes FOUNDRY_AGENT_SIGN=yes npm run signer
 FOUNDRY_DAEMON_LIVE=yes npm run runtime:watch
 ```
 
-`GET /health` must be up before an agent submits. `POST /sign` checks network id on every transaction (`1` or `21338`), refuses W0, refuses mainnet hosts, refuses `Batch` while `watched.batch.atomic_enabled` is false, and refuses finish or cancel of the Unix-epoch BUYER escrow. Caps live in `src/runtime/allowlist.json` (`mode` `agent-sign`). A `tesSUCCESS` line is appended to `lab/ledger-log.jsonl`. Do not type a hash.
+`GET /health` must be up before an agent submits. `POST /sign` checks network id on every transaction (`1` or `21338`), refuses W0, refuses mainnet hosts (`s1.ripple.com`, `s2.ripple.com`, `xrplcluster.com`, `xrpl.ws`), refuses `Batch` while `watched.batch.atomic_enabled` is false, and refuses finish or cancel of the Unix-epoch BUYER escrow. Caps live in `src/runtime/allowlist.json` (`mode` `agent-sign`). A `tesSUCCESS` line is appended to `lab/ledger-log.jsonl`. Do not type a hash.
+
+If `s.altnet.rippletest.net` times out, the signer, `director:snapshot`, and the walk-in remint watch retry `testnet.xrpl-labs.com` (exact host, not `*.xrpl-labs.com`). The signer reads `server_info` on that backup and refuses to sign unless the network id is `1`. `XRPL_HTTP` and `XRPL_WS_URL` may select the backup directly. Xahau stays on `xahau-test.net` (network id `21338`). GitHub Actions stays detect-only.
 
 systemd unit stubs are `machines/foundry-runtime/foundry-signer.service` and `foundry-daemon.service`. Enable both so they restart on reboot. Edit the checkout path and `ExecStart` first. Details: `machines/foundry-runtime/RUNBOOK.md`.
 

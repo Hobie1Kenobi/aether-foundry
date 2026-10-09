@@ -7,6 +7,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const anchors = require("../director/anchors");
+const hosts = require("../xrpl-hosts");
 const policy = require("./policy");
 const signer = require("./signer");
 
@@ -339,6 +340,171 @@ describe("signer archive", () => {
     assert.equal(saved.last_oracle.hash, "B11B0B87A7C40AFA98540D2F40FF234384466729F90E259E60162714DC4DDE85");
     assert.equal(saved.mpt_issuance_id, mptId);
     assert.equal(saved.domain_id, domainId);
+  });
+});
+
+function rpcResult(result, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    async json() {
+      return { result };
+    },
+  };
+}
+
+describe("signer RPC fallback", () => {
+  it("proves network id 1 on the labs host when rippletest times out", async () => {
+    const seen = [];
+    const out = await signer.health({
+      env: { FOUNDRY_AGENT_SIGN: "yes" },
+      fetchImpl: async (url) => {
+        seen.push(String(url));
+        if (String(url).includes("rippletest.net")) throw new Error("fetch failed");
+        return rpcResult({ status: "success", info: { network_id: 1 } });
+      },
+    });
+    assert.equal(out.status, 200);
+    assert.equal(out.body.network_id, 1);
+    assert.deepEqual(seen, [hosts.PRIMARY_HTTP, hosts.LABS_HTTP]);
+  });
+
+  it("uses XRPL_HTTP and XRPL_WS_URL when they name the labs host", async () => {
+    const seen = [];
+    const out = await signer.health({
+      env: {
+        FOUNDRY_AGENT_SIGN: "yes",
+        XRPL_HTTP: hosts.LABS_HTTP,
+        XRPL_WS_URL: hosts.LABS_WS,
+      },
+      fetchImpl: async (url) => {
+        seen.push(String(url));
+        return rpcResult({ status: "success", info: { network_id: 1 } });
+      },
+    });
+    assert.equal(out.body.network_id, 1);
+    assert.deepEqual(seen, [hosts.LABS_HTTP]);
+  });
+
+  it("refuses a mainnet override without calling it, and refuses a fallback that is not network id 1", async () => {
+    let called = 0;
+    await assert.rejects(
+      () => signer.health({
+        env: { XRPL_HTTP: "https://s1.ripple.com:51234" },
+        fetchImpl: async () => {
+          called += 1;
+          return rpcResult({ status: "success", info: { network_id: 0 } });
+        },
+      }),
+      (error) => error.code === "MAINNET"
+    );
+    await assert.rejects(
+      () => signer.health({
+        env: { XRPL_HTTP: "https://s2.ripple.com" },
+        fetchImpl: async () => {
+          called += 1;
+          return rpcResult({});
+        },
+      }),
+      (error) => error.code === "MAINNET"
+    );
+    await assert.rejects(
+      () => signer.health({
+        env: { XRPL_HTTP: "https://xrplcluster.com" },
+        fetchImpl: async () => {
+          called += 1;
+          return rpcResult({});
+        },
+      }),
+      (error) => error.code === "MAINNET"
+    );
+    await assert.rejects(
+      () => signer.health({
+        env: {},
+        fetchImpl: async (url) => {
+          called += 1;
+          if (String(url).includes("rippletest.net")) throw new Error("fetch failed");
+          return rpcResult({ status: "success", info: { network_id: 0 } });
+        },
+      }),
+      (error) => error.code === "MAINNET"
+    );
+    assert.equal(called, 2);
+  });
+
+  it("does not sign through a fallback socket until it reports network id 1", async () => {
+    const wallet = policy.agentWallet("W5");
+    let signed = 0;
+    await assert.rejects(
+      () => signer.connectForSign(hosts.PRIMARY_WS, wallet, (url) => ({
+        async connect() {
+          if (String(url).includes("rippletest.net")) throw new Error("fetch failed");
+        },
+        async request() {
+          return { result: { info: { network_id: 0 } } };
+        },
+        async disconnect() {},
+        sign() {
+          signed += 1;
+        },
+      })),
+      (error) => error.code === "MAINNET"
+    );
+    assert.equal(signed, 0);
+
+    const opened = await signer.connectForSign(hosts.PRIMARY_WS, wallet, (url) => ({
+      async connect() {
+        if (String(url).includes("rippletest.net")) throw new Error("timed out");
+      },
+      async request() {
+        return { result: { info: { network_id: 1, validated_ledger: { reserve_base_xrp: "1", reserve_inc_xrp: "0.2" } } } };
+      },
+      async disconnect() {},
+    }));
+    assert.equal(opened.url, hosts.LABS_WS);
+    assert.equal(opened.networkId, 1);
+    await opened.client.disconnect();
+
+    const xahauSeen = [];
+    await assert.rejects(
+      () => signer.connectForSign(anchors.XAHAU_WS, policy.agentWallet("W7"), (url) => {
+        xahauSeen.push(url);
+        return {
+          async connect() {
+            throw new Error("fetch failed");
+          },
+          async disconnect() {},
+        };
+      }),
+      (error) => /fetch failed/.test(error.message)
+    );
+    assert.deepEqual(xahauSeen, [anchors.XAHAU_WS]);
+
+    let loads = 0;
+    await assert.rejects(
+      () => signer.evaluate({
+        wallet: "W5",
+        tx: payment(),
+      }, ctx({
+        skipRpc: false,
+        dry: false,
+        networkId: null,
+        account: null,
+        fetchImpl: async (url) => {
+          if (String(url).includes("rippletest.net")) throw new Error("fetch failed");
+          return rpcResult({ status: "success", info: { network_id: 21337 } });
+        },
+        clientFactory() {
+          throw new Error("socket opened before network id was refused");
+        },
+        loadSeed() {
+          loads += 1;
+          throw new Error("key loaded");
+        },
+      })),
+      (error) => error.code === "MAINNET"
+    );
+    assert.equal(loads, 0);
   });
 });
 

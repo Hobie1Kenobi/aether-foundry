@@ -198,12 +198,16 @@ describe("week-2 guards", () => {
     assert.throws(() => policy.assertNotCi({ CI: "true" }), /CI/);
     assert.throws(() => policy.assertTestnetUrl("wss://xrplcluster.com"), /mainnet/);
     assert.throws(() => policy.assertTestnetUrl("wss://s1.ripple.com"), /mainnet/);
+    assert.throws(() => policy.assertTestnetUrl("wss://s2.ripple.com"), /mainnet/);
+    assert.throws(() => policy.assertTestnetUrl("wss://xrpl.ws"), /mainnet/);
     assert.throws(() => policy.assertTestnetUrl("wss://xahau-test.net"), /Xahau/);
-    assert.throws(() => policy.assertTestnetUrl("wss://testnet.xrpl-labs.com"), /non-testnet/);
+    assert.throws(() => policy.assertTestnetUrl("wss://backup.testnet.xrpl-labs.com"), /non-testnet/);
+    assert.throws(() => policy.assertTestnetUrl("wss://xrpl-labs.com"), /non-testnet/);
     assert.equal(
       policy.assertTestnetUrl("wss://s.altnet.rippletest.net:51233"),
       "wss://s.altnet.rippletest.net:51233"
     );
+    assert.equal(policy.assertTestnetUrl("wss://testnet.xrpl-labs.com"), "wss://testnet.xrpl-labs.com");
     assert.throws(() => policy.assertNetworkId(0), /NetworkID 0/);
     assert.throws(() => policy.assertNetworkId(21338), /NetworkID 21338/);
     assert.doesNotThrow(() => policy.assertNetworkId(1));

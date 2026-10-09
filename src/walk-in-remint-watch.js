@@ -251,9 +251,11 @@ async function run(argv, io = {}) {
   }
 
   const root = path.resolve(args.root || repoRoot());
+  const env = io.env || process.env;
   let rpc = pub.XRPL_HTTP;
   try {
-    if (args.rpc) rpc = pub.assertTestnetUrl(args.rpc);
+    const selected = args.rpc || (env && env.XRPL_HTTP) || pub.XRPL_HTTP;
+    rpc = pub.assertTestnetUrl(selected);
   } catch (e) {
     error(e.message || String(e));
     return 1;
