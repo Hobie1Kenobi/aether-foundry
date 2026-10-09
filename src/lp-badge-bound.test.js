@@ -134,7 +134,12 @@ describe("amendment gate and signing refusals", () => {
     assert.equal(guard.envIsCi({ CI: "true" }), true);
     assert.throws(() => guard.assertCanSign({ GITHUB_ACTIONS: "true", CI: "" }), /CI/);
     assert.throws(() => guard.assertXrplTestnetUrl("wss://xrplcluster.com"), /non-XRPL-Testnet/);
+    assert.throws(() => guard.assertXrplTestnetUrl("wss://xrpl.ws"), /non-XRPL-Testnet/);
     assert.throws(() => guard.assertXrplTestnetUrl("wss://s1.ripple.com"), /non-XRPL-Testnet/);
+    assert.throws(() => guard.assertXrplTestnetUrl("wss://s2.ripple.com"), /non-XRPL-Testnet/);
+    assert.throws(() => guard.assertXrplTestnetUrl("https://backup.testnet.xrpl-labs.com"), /non-testnet/);
+    assert.equal(guard.assertXrplTestnetUrl("https://testnet.xrpl-labs.com"), "https://testnet.xrpl-labs.com");
+    assert.equal(guard.assertXrplTestnetUrl("wss://testnet.xrpl-labs.com"), "wss://testnet.xrpl-labs.com");
     assert.throws(() => guard.assertXrplTestnetUrl("wss://xahau-test.net"), /non-XRPL-Testnet/);
     assert.throws(() => guard.assertXrplTestnetUrl("https://xahau.network"), /non-XRPL-Testnet/);
     assert.equal(

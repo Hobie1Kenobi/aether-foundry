@@ -12,12 +12,13 @@
 
 const fs = require("fs");
 const path = require("path");
+const hosts = require("./xrpl-hosts");
 
 const HELLO_TYPE = "aether-peer-hello";
 const NETWORK = "xrpl:1";
 const NETWORK_ID = 1;
 const W3 = "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw";
-const XRPL_HTTP = "https://s.altnet.rippletest.net:51234";
+const XRPL_HTTP = hosts.PRIMARY_HTTP;
 const TX_LIMIT = 100;
 const TX_LIMIT_MAX = 200;
 const ADDRESS_RE = /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/;
@@ -108,7 +109,7 @@ function assertTestnetUrl(raw) {
   const host = url.hostname.toLowerCase();
   if (host.includes("xahau")) throw new Error("refusing Xahau host");
   if (isMainnetUrl(raw)) throw new Error("refusing mainnet XRPL url");
-  if (!host.endsWith(".rippletest.net") && host !== "rippletest.net") {
+  if (!hosts.isApprovedXrplTestnetHost(host)) {
     throw new Error("refusing non-testnet XRPL url");
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") {

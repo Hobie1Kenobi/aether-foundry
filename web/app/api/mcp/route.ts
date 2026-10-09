@@ -117,7 +117,10 @@ async function getJson(url: string): Promise<{ status: number; body: Record<stri
 
 async function rpc(method: string, params: Record<string, unknown>): Promise<Record<string, unknown> | null> {
   const endpoint = new URL(XRPL_HTTP);
-  if (isMainnetHost(endpoint.hostname) || !endpoint.hostname.endsWith("rippletest.net")) {
+  const host = endpoint.hostname.toLowerCase();
+  const rippletest = host === "rippletest.net" || host.endsWith(".rippletest.net");
+  const labsTestnet = host === "testnet.xrpl-labs.com";
+  if (isMainnetHost(host) || (!rippletest && !labsTestnet)) {
     throw new Error("refusing non-testnet XRPL url");
   }
   const res = await fetch(endpoint, {

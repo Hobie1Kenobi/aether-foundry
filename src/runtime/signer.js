@@ -15,6 +15,7 @@ const http = require("http");
 const path = require("path");
 const anchors = require("../director/anchors");
 const grants = require("../grants/policy");
+const hosts = require("../xrpl-hosts");
 const daemon = require("./daemon");
 const metrics = require("./metrics");
 const policy = require("./policy");
@@ -72,9 +73,22 @@ function rpcFor(wallet, env) {
     };
   }
   return {
-    http: source.XRPL_HTTP || anchors.XRPL_HTTP,
-    ws: source.XRPL_WS || anchors.XRPL_WS,
+    http: source.XRPL_HTTP || source.XRPL_RPC_URL || anchors.XRPL_HTTP,
+    ws: source.XRPL_WS_URL || source.XRPL_WS || anchors.XRPL_WS,
   };
+}
+
+async function tryCandidates(urls, fn) {
+  let last;
+  for (let i = 0; i < urls.length; i += 1) {
+    try {
+      return await fn(urls[i]);
+    } catch (error) {
+      last = error;
+      if (i === urls.length - 1 || !hosts.isTransportFailure(error)) throw error;
+    }
+  }
+  throw last;
 }
 
 function loadDirector(root) {
@@ -171,9 +185,9 @@ function publicArchive(root, row, secrets) {
   return clean;
 }
 
-async function rpcPost(httpUrl, wallet, method, params) {
+async function rpcPost(httpUrl, wallet, method, params, fetchImpl) {
   policy.assertAgentRpc(httpUrl, wallet);
-  const response = await fetch(httpUrl, {
+  const response = await (fetchImpl || globalThis.fetch)(httpUrl, {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify({ method, params: [params || {}] }),
@@ -209,8 +223,8 @@ function accountFrom(infoResult, serverInfo) {
   };
 }
 
-async function proveHttp(httpUrl, wallet) {
-  const info = await rpcPost(httpUrl, wallet, "server_info", {});
+async function proveHttp(httpUrl, wallet, fetchImpl) {
+  const info = await rpcPost(httpUrl, wallet, "server_info", {}, fetchImpl);
   const networkId = info.info && info.info.network_id;
   if (networkId == null || networkId === "") throw policy.coded("RPC did not prove network id", "RPC");
   policy.assertAltnet({
@@ -222,8 +236,8 @@ async function proveHttp(httpUrl, wallet) {
   return { networkId: Number(networkId), info };
 }
 
-async function fetchAccount(httpUrl, wallet) {
-  const proved = await proveHttp(httpUrl, wallet);
+async function fetchAccount(httpUrl, wallet, fetchImpl) {
+  const proved = await proveHttp(httpUrl, wallet, fetchImpl);
   const info = await rpcPost(httpUrl, wallet, "account_info", {
     account: wallet.address,
     ledger_index: "validated",
@@ -239,7 +253,7 @@ async function health(ctx) {
   if (networkId == null && options.proveNetwork) networkId = await options.proveNetwork();
   if (networkId == null && options.skipRpc !== true) {
     const probe = policy.agentWallet("W1");
-    const proved = await proveHttp(rpcFor(probe, env).http, probe);
+    const proved = await tryCandidates(hosts.candidates(rpcFor(probe, env).http), (url) => proveHttp(url, probe, options.fetchImpl));
     networkId = proved.networkId;
   }
   if (networkId == null) throw policy.coded("RPC did not prove network id", "RPC");
@@ -333,26 +347,51 @@ function finishSuccess(body, prepared, submitted, fields, seed, env, options) {
   };
 }
 
-async function autofillLive(tx, wallet, env) {
+async function connectForSign(wsUrl, wallet, clientFactory) {
+  const xahau = wallet && wallet.network === "xahau_testnet";
+  const list = xahau ? [wsUrl] : hosts.candidates(wsUrl);
+  const expectId = xahau ? anchors.XAHAU_NETWORK_ID : anchors.XRPL_NETWORK_ID;
+  let last;
+  for (let i = 0; i < list.length; i += 1) {
+    const url = list[i];
+    policy.assertAgentRpc(url, wallet);
+    const xrpl = require("xrpl");
+    const client = clientFactory ? clientFactory(url) : new xrpl.Client(url);
+    try {
+      await client.connect();
+      const info = await client.request({ command: "server_info" });
+      const networkId = info.result && info.result.info && info.result.info.network_id;
+      if (networkId == null || networkId === "") throw policy.coded("RPC did not prove network id", "RPC");
+      policy.assertAltnet({
+        networkId,
+        kind: xahau ? "xahau" : undefined,
+      });
+      if (Number(networkId) !== expectId) throw policy.coded(`refusing network id ${networkId}`, "MAINNET");
+      return { client, networkId: Number(networkId), url, info: info.result };
+    } catch (error) {
+      try {
+        await client.disconnect();
+      } catch {
+        /* already closed */
+      }
+      last = error;
+      if (i === list.length - 1 || !hosts.isTransportFailure(error)) throw error;
+    }
+  }
+  throw last;
+}
+
+async function autofillLive(tx, wallet, env, extra) {
+  const options = extra || {};
   const urls = rpcFor(wallet, env);
-  policy.assertAgentRpc(urls.ws, wallet);
-  const xrpl = require("xrpl");
-  const client = new xrpl.Client(urls.ws);
-  await client.connect();
+  const opened = await connectForSign(options.ws || urls.ws, wallet, options.clientFactory);
   try {
-    const info = await client.request({ command: "server_info" });
-    const networkId = info.result && info.result.info && info.result.info.network_id;
-    if (networkId == null || networkId === "") throw policy.coded("RPC did not prove network id", "RPC");
-    policy.assertAltnet({
-      networkId,
-      kind: wallet.network === "xahau_testnet" ? "xahau" : undefined,
-    });
-    const prepared = await client.autofill(tx);
+    const prepared = await opened.client.autofill(tx);
     if (Number(prepared.NetworkID) === 0) throw policy.coded("refusing NetworkID 0", "MAINNET");
-    return { prepared, networkId: Number(networkId) };
+    return { prepared, networkId: opened.networkId, url: opened.url };
   } finally {
     try {
-      await client.disconnect();
+      await opened.client.disconnect();
     } catch {
       /* already closed */
     }
@@ -360,37 +399,28 @@ async function autofillLive(tx, wallet, env) {
 }
 
 async function submitLive(tx, wallet, env, ctx, loadSeed) {
-  const urls = rpcFor(wallet, env);
-  policy.assertAgentRpc(urls.ws, wallet);
   const xrpl = require("xrpl");
-  const client = new xrpl.Client(urls.ws);
-  await client.connect();
+  const context = ctx || {};
+  const urls = rpcFor(wallet, env);
+  const opened = await connectForSign(context.ws || urls.ws, wallet, context.clientFactory);
+  const client = opened.client;
   let seed = "";
   try {
-    const info = await client.request({ command: "server_info" });
-    const networkId = info.result && info.result.info && info.result.info.network_id;
-    if (networkId == null || networkId === "") throw policy.coded("RPC did not prove network id", "RPC");
-    policy.assertAltnet({
-      networkId,
-      kind: wallet.network === "xahau_testnet" ? "xahau" : undefined,
-    });
-    const expectId = wallet.network === "xahau_testnet" ? anchors.XAHAU_NETWORK_ID : anchors.XRPL_NETWORK_ID;
-    if (Number(networkId) !== expectId) throw policy.coded(`refusing network id ${networkId}`, "MAINNET");
     const accountRpc = await client.request({
       command: "account_info",
       account: wallet.address,
       ledger_index: "validated",
     });
-    const account = accountFrom(accountRpc.result, info.result);
+    const account = accountFrom(accountRpc.result, opened.info);
     const filled = await client.autofill(tx);
     if (Number(filled.NetworkID) === 0) throw policy.coded("refusing NetworkID 0", "MAINNET");
-    policy.assertAgentRequest(Object.assign({}, ctx.fields, {
+    policy.assertAgentRequest(Object.assign({}, context.fields, {
       tx: filled,
-      networkId: Number(networkId),
+      networkId: opened.networkId,
       account,
       requireAccount: true,
       feeDrops: filled.Fee,
-      url: urls.ws,
+      url: opened.url,
     }));
     seed = loadSeed(wallet.key_env);
     if (!seed) throw policy.coded(`${wallet.key_env} is not loaded. Refusing to sign.`, "NO_SEED");
@@ -403,7 +433,7 @@ async function submitLive(tx, wallet, env, ctx, loadSeed) {
     assertRegularKey(wallet.id, key.classicAddress || key.address, ctx.root);
     const signed = key.sign(filled);
     const submitted = await client.submitAndWait(signed.tx_blob);
-    return { submitted, networkId: Number(networkId), prepared: filled, seed };
+    return { submitted, networkId: opened.networkId, prepared: filled, seed };
   } catch (error) {
     if (error && error.code && error.message && !String(error.message).includes(seed || "\0")) throw error;
     throw policy.coded(
@@ -433,9 +463,13 @@ async function evaluate(body, ctx) {
     const early = policy.agentWallet(body.wallet);
     const urls = rpcFor(early, env);
     if (pre.networkId == null || pre.account == null) {
-      const fetched = await fetchAccount(urls.http, early);
+      const fetched = await tryCandidates(hosts.candidates(urls.http), async (url) => {
+        const row = await fetchAccount(url, early, options.fetchImpl);
+        return Object.assign({ url }, row);
+      });
       if (pre.networkId == null) pre.networkId = fetched.networkId;
       if (pre.account == null) pre.account = fetched.account;
+      pre.ws = hosts.matchingWs(fetched.url, urls.ws);
     }
   }
   const fields = requestFields(body, pre, dry);
@@ -443,7 +477,10 @@ async function evaluate(body, ctx) {
   let prepared = checked.tx;
   if (options.autofill) prepared = await options.autofill(prepared, checked.wallet);
   else if (!options.skipRpc) {
-    const filled = await autofillLive(prepared, checked.wallet, env);
+    const filled = await autofillLive(prepared, checked.wallet, env, {
+      ws: pre.ws,
+      clientFactory: options.clientFactory,
+    });
     prepared = filled.prepared;
     fields.networkId = filled.networkId;
   }
@@ -466,7 +503,12 @@ async function evaluate(body, ctx) {
   }
   const loadSeed = options.loadSeed || ((name) => daemon.readSeed(name, env, options.io, policy.AGENT_KEY_ENVS));
   if (!options.submit) {
-    const live = await submitLive(prepared, checked.wallet, env, { fields, root: fields.root }, loadSeed);
+    const live = await submitLive(prepared, checked.wallet, env, {
+      fields,
+      root: fields.root,
+      ws: pre.ws,
+      clientFactory: options.clientFactory,
+    }, loadSeed);
     prepared = live.prepared;
     fields.networkId = live.networkId;
     const submitted = live.submitted;
@@ -662,6 +704,7 @@ module.exports = {
   assertRegularKey,
   evaluate,
   health,
+  connectForSign,
   handleNodeRequest,
   startServer,
   selfTestDry,

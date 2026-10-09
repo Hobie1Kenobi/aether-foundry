@@ -8,6 +8,7 @@
 const fs = require("fs");
 const path = require("path");
 const anchors = require("./anchors");
+const hosts = require("../xrpl-hosts");
 const walkIn = require("../walk-in-public");
 
 const PRESERVED = ["next_actions", "blockers", "last_session_id"];
@@ -62,8 +63,9 @@ function assertDocumentUrl(raw, at) {
     "github.com",
   ];
   const rippletest = host === "rippletest.net" || host.endsWith(".rippletest.net");
+  const labsExact = host === hosts.LABS_HOST;
   const named = allowed.some((item) => host === item || host.endsWith(`.${item}`));
-  if (!rippletest && !named) {
+  if (!rippletest && !labsExact && !named) {
     throw fail(`refusing host ${host} at ${at}`);
   }
 }
@@ -178,10 +180,18 @@ function assertWallet(id, row, network) {
   }
 }
 
+function approvedXrplEndpoints(http, ws) {
+  if (http === anchors.XRPL_HTTP && ws === anchors.XRPL_WS) return true;
+  return http === hosts.LABS_HTTP && ws === hosts.LABS_WS;
+}
+
 function assertNetwork(net, id, http, ws) {
   if (!net || typeof net !== "object") throw fail(`${id} network missing`);
   if (net.network_id !== id) throw fail(`${id} network_id`);
-  if (net.http !== http || net.ws !== ws) throw fail(`${id} endpoint drifted`);
+  const pairOk = id === anchors.XRPL_NETWORK_ID
+    ? approvedXrplEndpoints(net.http, net.ws)
+    : net.http === http && net.ws === ws;
+  if (!pairOk) throw fail(`${id} endpoint drifted`);
   if (!Number.isInteger(net.validated_ledger_index) || net.validated_ledger_index < 1) {
     throw fail(`${id} validated_ledger_index`);
   }

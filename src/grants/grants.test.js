@@ -181,8 +181,12 @@ describe("grant cooldown", () => {
 describe("grant payment policy", () => {
   it("refuses mainnet hosts and NetworkID 0", () => {
     assert.throws(() => policy.assertTestnetUrl("https://s1.ripple.com:51234"), /mainnet/);
+    assert.throws(() => policy.assertTestnetUrl("https://s2.ripple.com:51234"), /mainnet/);
     assert.throws(() => policy.assertTestnetUrl("https://xrplcluster.com"), /mainnet|non-testnet/);
     assert.throws(() => policy.assertWsUrl("wss://xrpl.ws"), /mainnet/);
+    assert.throws(() => policy.assertTestnetUrl("https://backup.testnet.xrpl-labs.com"), /non-testnet/);
+    assert.equal(policy.assertTestnetUrl("https://testnet.xrpl-labs.com"), "https://testnet.xrpl-labs.com");
+    assert.equal(policy.assertWsUrl("wss://testnet.xrpl-labs.com"), "wss://testnet.xrpl-labs.com");
     assert.throws(() => policy.assertNetworkId(0), /NetworkID 0/);
     assert.throws(() => policy.assertNetworkId(21337), /NetworkID/);
     assert.equal(policy.assertTestnetUrl(policy.XRPL_HTTP), policy.XRPL_HTTP);

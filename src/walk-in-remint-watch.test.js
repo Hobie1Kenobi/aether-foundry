@@ -51,12 +51,17 @@ describe('walk-in public anchors', () => {
 
   it('refuses mainnet and non-testnet RPC urls', () => {
     assert.throws(() => pub.assertTestnetUrl('https://s1.ripple.com:51234'));
+    assert.throws(() => pub.assertTestnetUrl('https://s2.ripple.com:51234'));
     assert.throws(() => pub.assertTestnetUrl('https://xrplcluster.com'));
+    assert.throws(() => pub.assertTestnetUrl('wss://xrpl.ws'));
     assert.throws(() => pub.assertTestnetUrl('https://s.altnet.rippletest.net.evil.com'));
+    assert.throws(() => pub.assertTestnetUrl('https://backup.testnet.xrpl-labs.com'));
+    assert.throws(() => pub.assertTestnetUrl('https://xrpl-labs.com'));
     assert.equal(
       pub.assertTestnetUrl('https://s.altnet.rippletest.net:51234'),
       'https://s.altnet.rippletest.net:51234'
     );
+    assert.equal(pub.assertTestnetUrl('https://testnet.xrpl-labs.com'), 'https://testnet.xrpl-labs.com');
   });
 
   it('keeps only Flags bit 1 sell offers', () => {
@@ -118,6 +123,59 @@ describe('walk-in watcher', () => {
     assert.equal(called, 1);
     assert.equal(fs.existsSync(path.join(root, 'lab', 'remint-plans')), false);
     assert.equal(fs.existsSync(path.join(root, 'lab', 'ledger-log.jsonl')), false);
+  });
+
+  it('retries the XRPL Labs testnet host when the primary RPC times out', async () => {
+    const root = tempRoot();
+    writeResults(root);
+    const seen = [];
+    const code = await watch.run(['node', 'watch', '--root', root, '--quiet'], {
+      env: {},
+      fetchImpl: async (url) => {
+        seen.push(String(url));
+        if (String(url).includes('rippletest.net')) {
+          throw new Error('fetch failed');
+        }
+        return jsonResponse({
+          status: 'success',
+          validated: true,
+          ledger_index: 21098641,
+          account_objects: [
+            {
+              index: pub.KNOWN_OFFER_ID,
+              NFTokenID: pub.KNOWN_NFTOKEN_ID,
+              Flags: 1,
+              Amount: '10000000',
+              Owner: pub.W2,
+            },
+          ],
+        });
+      },
+    });
+    assert.equal(code, 0);
+    assert.deepEqual(seen, [pub.XRPL_HTTP, 'https://testnet.xrpl-labs.com']);
+    assert.equal(fs.existsSync(path.join(root, 'lab', 'ledger-log.jsonl')), false);
+  });
+
+  it('selects the labs host from XRPL_HTTP and does not call rippletest', async () => {
+    const root = tempRoot();
+    writeResults(root);
+    const seen = [];
+    const code = await watch.run(['node', 'watch', '--root', root, '--quiet'], {
+      env: { XRPL_HTTP: 'https://testnet.xrpl-labs.com' },
+      fetchImpl: async (url) => {
+        seen.push(String(url));
+        return jsonResponse({
+          status: 'success',
+          validated: true,
+          ledger_index: 1,
+          account_objects: [],
+        });
+      },
+      log() {},
+    });
+    assert.equal(code, 0);
+    assert.deepEqual(seen, ['https://testnet.xrpl-labs.com']);
   });
 
   it('does not treat an RPC error as sold out', async () => {

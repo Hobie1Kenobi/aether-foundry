@@ -8,6 +8,7 @@
 const fs = require("fs");
 const path = require("path");
 const rules = require("../web/lib/x402-rules");
+const hosts = require("./xrpl-hosts");
 
 const ROOT = path.resolve(__dirname, "..");
 const WALLETS_FILE = path.join(ROOT, "web", "lib", "xrpl-public.ts");
@@ -15,7 +16,7 @@ const ACTIVATED_FILE = path.join(ROOT, "machines", "governance-board", "activate
 const CANDIDATES_FILE = path.join(ROOT, "machines", "x402-citizen", "candidates.json");
 const SECRETS_PATH = "/workspace/aether-foundry-secrets/.env";
 const W3_ADDRESS = "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw";
-const XRPL_WS = "wss://s.altnet.rippletest.net:51233";
+const XRPL_WS = hosts.PRIMARY_WS;
 const ADDRESS_RE = /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/;
 
 function envIsCi(env) {
@@ -44,7 +45,7 @@ function assertTestnetUrl(raw) {
     throw Object.assign(new Error("refusing mainnet XRPL url"), { code: "MAINNET" });
   }
   const host = url.hostname.toLowerCase();
-  if (!host.endsWith(".rippletest.net") && host !== "rippletest.net") {
+  if (!hosts.isApprovedXrplTestnetHost(host)) {
     throw Object.assign(new Error("refusing non-testnet XRPL url"), { code: "MAINNET" });
   }
   return raw;

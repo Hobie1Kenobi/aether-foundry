@@ -5,9 +5,11 @@
  * No seeds, no Wallet, no signing.
  */
 
+const hosts = require('./xrpl-hosts');
+
 const W2 = 'rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw';
-const XRPL_HTTP = 'https://s.altnet.rippletest.net:51234';
-const XRPL_WS = 'wss://s.altnet.rippletest.net:51233';
+const XRPL_HTTP = hosts.PRIMARY_HTTP;
+const XRPL_WS = hosts.PRIMARY_WS;
 const TAXON = 20260927;
 const TF_TRANSFERABLE = 0x00000008;
 const TF_SELL_NFTOKEN = 0x00000001;
@@ -51,7 +53,7 @@ function assertTestnetUrl(raw) {
     throw new Error('refusing mainnet XRPL url');
   }
   const host = url.hostname.toLowerCase();
-  if (!host.endsWith('.rippletest.net') && host !== 'rippletest.net') {
+  if (!hosts.isApprovedXrplTestnetHost(host)) {
     throw new Error('refusing non-testnet XRPL url');
   }
   return raw;
@@ -75,8 +77,7 @@ function sellOffersFromObjects(objects) {
   return offers;
 }
 
-async function pollSellOffers(opts = {}) {
-  const rpc = assertTestnetUrl(opts.rpc || XRPL_HTTP);
+async function pollSellOffersAt(rpc, opts) {
   const fetchImpl = opts.fetchImpl || globalThis.fetch;
   const objects = [];
   let marker;
@@ -155,6 +156,16 @@ async function pollSellOffers(opts = {}) {
       rpc,
     };
   }
+}
+
+async function pollSellOffers(opts = {}) {
+  const rpc = assertTestnetUrl(opts.rpc || XRPL_HTTP);
+  const first = await pollSellOffersAt(rpc, opts);
+  if (first.ok) return first;
+  const next = hosts.fallbackUrl(rpc);
+  if (!next || !hosts.isTransportFailure({ message: first.error || '' })) return first;
+  const second = await pollSellOffersAt(next, opts);
+  return second.ok ? second : first;
 }
 
 module.exports = {

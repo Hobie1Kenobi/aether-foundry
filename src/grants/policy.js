@@ -6,13 +6,14 @@
  */
 
 const xrpl = require("xrpl");
+const hosts = require("../xrpl-hosts");
 
 const EXPERIMENT = "grants-flywheel";
 const PURPOSE = "aether-grant";
 const NETWORK = "XRPL Testnet";
 const NETWORK_ID = 1;
-const XRPL_HTTP = "https://s.altnet.rippletest.net:51234";
-const XRPL_WS = "wss://s.altnet.rippletest.net:51233";
+const XRPL_HTTP = hosts.PRIMARY_HTTP;
+const XRPL_WS = hosts.PRIMARY_WS;
 const SECRETS_PATH = "/workspace/aether-foundry-secrets/.env";
 
 const W0 = "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs";
@@ -77,7 +78,7 @@ function assertTestnetUrl(raw) {
   const host = url.hostname.toLowerCase();
   if (host.includes("xahau")) throw coded("refusing Xahau host for W6 XRPL grants", "MAINNET");
   if (isMainnetUrl(raw)) throw coded("refusing mainnet XRPL url", "MAINNET");
-  if (!host.endsWith(".rippletest.net") && host !== "rippletest.net") {
+  if (!hosts.isApprovedXrplTestnetHost(host)) {
     throw coded("refusing non-testnet XRPL url", "MAINNET");
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") {
@@ -96,7 +97,7 @@ function assertWsUrl(raw) {
   const host = url.hostname.toLowerCase();
   if (host.includes("xahau")) throw coded("refusing Xahau host for W6 XRPL grants", "MAINNET");
   if (isMainnetUrl(raw)) throw coded("refusing mainnet XRPL url", "MAINNET");
-  if (!host.endsWith(".rippletest.net") && host !== "rippletest.net") {
+  if (!hosts.isApprovedXrplTestnetHost(host)) {
     throw coded("refusing non-testnet XRPL url", "MAINNET");
   }
   if (url.protocol !== "wss:" && url.protocol !== "ws:") {
