@@ -1,7 +1,7 @@
 # Governance board — SignerList on W0, regular keys on W1–W6
 
 **Status:** policy in force (hunch H1). Ledger set is Foundry-box gated until `RESULTS.md` records a `SignerListSet` hash.  
-**Network:** XRPL Testnet only (`wss://s.altnet.rippletest.net:51233`, network id 1). Not Xahau. Not mainnet.  
+**Network:** XRPL Testnet only (`wss://testnet.xrpl-labs.com`, network id 1). Not Xahau. Not mainnet.  
 **Account:** W0 TREASURY `rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs`
 
 Week 1 said the Director signs from W0 and that W1–W6 would grow regular keys. This cut is that board.

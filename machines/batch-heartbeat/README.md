@@ -1,7 +1,7 @@
 # Machine — Batch Heartbeat (Foundry Night C)
 
 **Status:** spec only — Testnet Batch still disabled (Day 7 re-probe 2026-09-28 20:17 CDT, network id 1). Devnet id 2 reports Batch enabled; this pack still does not submit it.  
-**Network:** XRPL Testnet only (`wss://s.altnet.rippletest.net:51233`)  
+**Network:** XRPL Testnet only (`wss://testnet.xrpl-labs.com`)  
 **Thesis:** One atomic **Batch** corporate heartbeat: accept an NFT buy offer + AMMDeposit + DIDUpdate in a single transaction so inventory, liquidity, and public identity move together or not at all.
 
 ## Blocking question (answered first)

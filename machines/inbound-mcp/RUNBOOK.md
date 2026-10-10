@@ -39,7 +39,7 @@ Run that command yourself, on the operator machine, if you want a dry-run. A liv
 | `x402_catalog` | no | `GET /api/x402` |
 | `director_status` | no | Read `lab/director-state.json`. `GET /api/status`. HTTP 404 is `{ available: false, status: 404 }` until that route exists |
 | `grant_eligibility` | no | `grants:scan` via `executeScan` (dry-run). No `grants:pay` |
-| `amm_quote` | no | `server_info` then `amm_info` on `https://s.altnet.rippletest.net:51234`. Unpaid `GET /api/x402/composition-quote`. No `PAYMENT-SIGNATURE` |
+| `amm_quote` | no | `server_info` then `amm_info` on `https://testnet.xrpl-labs.com`. Unpaid `GET /api/x402/composition-quote`. No `PAYMENT-SIGNATURE` |
 | `walk_in_buy` | delegated, or POST `/sign` | Default: the dry-run command above. `MCP_SIGN=on` without `FOUNDRY_AGENT_SIGN=yes` still only returns argv. When `MCP_SIGN=on`, `FOUNDRY_AGENT_SIGN=yes`, and signer `/health` is 200, a `sold_out` shop POSTs a W2 `NFTokenMint` to `/sign`. An open offer is not reminted |
 | `x402_buy` | delegated, or POST `/sign` | Default: `argv` for `npm run x402:pay -- <sku>`. Not executed. Armed the same way, it POSTs a W3 Payment to the foreign shop for the SKU amount. It does not pay W3 |
 | `sign_tx` | POST `/sign` | Wallet `W1`–`W7` plus a transaction object. Refuses W0. Requires the three gates above |

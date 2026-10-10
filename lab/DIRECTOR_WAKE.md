@@ -14,7 +14,7 @@ npm run director:wake
 npm run director:wake -- --check --quiet --routine morning-health
 ```
 
-`director:snapshot` is a read-only refresh of XRPL Testnet (`https://s.altnet.rippletest.net:51234`, network id 1) and Xahau Testnet (`https://xahau-test.net`, network id 21338). It also GETs the desk and the toml. Canonical hosts only.
+`director:snapshot` is a read-only refresh of XRPL Testnet (`https://testnet.xrpl-labs.com`, network id 1) and Xahau Testnet (`https://xahau-test.net`, network id 21338). It also GETs the desk and the toml. Canonical hosts only.
 
 `director:wake` prints a continuation card (human text, then `--- JSON ---`). It does not hit RPC. `--json` prints the card JSON only.
 

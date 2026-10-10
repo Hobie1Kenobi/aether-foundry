@@ -1,6 +1,6 @@
 # PRIMITIVES — governance board
 
-**Network:** XRPL Testnet. Network id **1**. WebSocket `wss://s.altnet.rippletest.net:51233`.
+**Network:** XRPL Testnet. Network id **1**. WebSocket `wss://testnet.xrpl-labs.com`.
 
 ## SignerListSet
 

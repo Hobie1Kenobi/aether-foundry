@@ -20,6 +20,7 @@
 const fs = require("fs");
 const path = require("path");
 const xrpl = require("xrpl");
+const hosts = require("./xrpl-hosts");
 const guard = require("./x402-outbound-guard");
 const record = require("./x402-outbound-record");
 const runtimePolicy = require("./runtime/policy");
@@ -315,33 +316,39 @@ async function run(opts) {
     const signed = await options.sign(tx);
     return finishLive(signed, options.submit, "");
   }
-  const loaded = loadSignerSeed(env, options.io);
-  if (!loaded.seed) {
-    throw Object.assign(
-      new Error("W3_REGULAR_SEED or W3_SEED is not loaded. Refusing to sign."),
-      { code: "SEED" }
-    );
-  }
-  const walletFromSeed = options.walletFromSeed || ((seed) => xrpl.Wallet.fromSeed(seed));
-  let wallet;
-  try {
-    wallet = walletFromSeed(loaded.seed);
-  } catch (error) {
-    if (error && error.code === "ACCOUNT") throw error;
-    throw Object.assign(new Error("W3 signer seed is not usable"), { code: "SEED" });
-  }
-  guard.assertW3Signer(wallet, loaded, env, options.io);
-  const ws = guard.assertTestnetUrl(env.XRPL_WS_URL || guard.XRPL_WS);
+  const ws = guard.assertTestnetUrl(hosts.resolveWs(env));
   const connect = options.connect || (async (url) => {
     const client = new xrpl.Client(url);
     await client.connect();
     return client;
   });
-  const client = await connect(ws);
-  try {
-    if (client.networkID !== 1) {
-      throw Object.assign(new Error(`refusing NetworkID ${client.networkID}`), { code: "invalid_network" });
+  const client = await hosts.withFailover(ws, async (url) => {
+    const opened = await connect(guard.assertTestnetUrl(url));
+    if (opened.networkID !== 1) {
+      if (opened.disconnect) {
+        try { await opened.disconnect(); } catch { /* already closed */ }
+      }
+      throw Object.assign(new Error(`refusing NetworkID ${opened.networkID}`), { code: "invalid_network" });
     }
+    return opened;
+  });
+  try {
+    const loaded = loadSignerSeed(env, options.io);
+    if (!loaded.seed) {
+      throw Object.assign(
+        new Error("W3_REGULAR_SEED or W3_SEED is not loaded. Refusing to sign."),
+        { code: "SEED" }
+      );
+    }
+    const walletFromSeed = options.walletFromSeed || ((seed) => xrpl.Wallet.fromSeed(seed));
+    let wallet;
+    try {
+      wallet = walletFromSeed(loaded.seed);
+    } catch (error) {
+      if (error && error.code === "ACCOUNT") throw error;
+      throw Object.assign(new Error("W3 signer seed is not usable"), { code: "SEED" });
+    }
+    guard.assertW3Signer(wallet, loaded, env, options.io);
     const prepared = await client.autofill(tx);
     if (prepared.NetworkID != null && Number(prepared.NetworkID) !== 1) {
       throw Object.assign(new Error("refusing NetworkID other than 1"), { code: "invalid_network" });

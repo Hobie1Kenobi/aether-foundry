@@ -5,10 +5,10 @@
  * Never prints seeds.
  */
 const xrpl = require('xrpl');
+const hosts = require('./xrpl-hosts');
 const fs = require('fs');
 
 const SECRETS = '/workspace/aether-foundry-secrets/.env';
-const WS = 'wss://s.altnet.rippletest.net:51233';
 const RIPPLE_EPOCH_OFFSET = 946684800; // unix - ripple = this
 
 function loadEnv(p) {
@@ -39,8 +39,7 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 (async () => {
   const env = loadEnv(SECRETS);
   if (!env.BUYER_SEED) throw new Error('BUYER_SEED missing');
-  const client = new xrpl.Client(WS);
-  await client.connect();
+  const client = await hosts.openClient(hosts.resolveWs(process.env));
   const buyer = xrpl.Wallet.fromSeed(env.BUYER_SEED);
   const w4 = xrpl.Wallet.fromSeed(env.W4_SEED);
 
@@ -50,7 +49,7 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   console.log('BUYER bal', bal, 'OC', ai.result.account_data.OwnerCount);
   if (bal < 30) {
     console.log('Topping up BUYER via faucet...');
-    const funded = await client.fundWallet(buyer);
+    const funded = await hosts.fundFromRippleFaucet(buyer);
     console.log('Faucet bal≈', funded.balance);
   }
 

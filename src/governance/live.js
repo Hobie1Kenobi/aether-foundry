@@ -15,6 +15,7 @@
 const fs = require("fs");
 const path = require("path");
 const xrpl = require("xrpl");
+const hosts = require("../xrpl-hosts");
 const policy = require("./policy");
 const keyfile = require("./keyfile");
 
@@ -241,7 +242,13 @@ function printBoard(signers, regulars) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   policy.assertNotCi(process.env);
-  const ws = policy.assertTestnetUrl(process.env.XRPL_WS_URL || policy.XRPL_WS);
+  const ws = policy.assertTestnetUrl(hosts.resolveWs(process.env));
+  const client = args.dryRun
+    ? null
+    : await hosts.openClient(ws, {
+        networkId: policy.NETWORK_ID,
+        assertUrl: (url) => policy.assertTestnetUrl(url),
+      });
   const secretsFile = process.env.AETHER_SECRETS || policy.SECRETS_PATH;
   const fileEnv = keyfile.readKeyFile(secretsFile);
   const env = Object.assign({}, fileEnv);
@@ -284,8 +291,6 @@ async function main() {
   printBoard(board.signers, board.regulars);
   const planned = plannedSignerTx(board.signers);
 
-  const client = new xrpl.Client(ws);
-  await client.connect();
   const txs = [];
   try {
     policy.assertNetworkId(client.networkID);

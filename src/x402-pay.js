@@ -11,6 +11,7 @@
  */
 
 const xrpl = require("xrpl");
+const hosts = require("./xrpl-hosts");
 const rules = require("../web/lib/x402-rules");
 const guard = require("./x402-outbound-guard");
 const hits = require("./x402-hits");
@@ -60,7 +61,7 @@ async function main() {
   if (!row) die(`unknown sku ${sku}`);
 
   const desk = (process.env.DESK_URL || "http://127.0.0.1:3000").replace(/\/$/, "");
-  const ws = process.env.XRPL_WS_URL || "wss://s.altnet.rippletest.net:51233";
+  const ws = hosts.resolveWs(process.env);
   if (isMainnetUrl(ws)) die("refusing mainnet WebSocket");
   const url = new URL(desk + row.path);
   if (prompt) url.searchParams.set("prompt", prompt);
@@ -82,6 +83,11 @@ async function main() {
   }
   const invoiceId = accept.extra.invoiceId;
 
+  const client = await hosts.openClient(ws, {
+    assertUrl: (url) => {
+      if (isMainnetUrl(url)) die("refusing mainnet WebSocket");
+    },
+  });
   let wallet;
   try {
     wallet = xrpl.Wallet.fromSeed(seed);
@@ -91,13 +97,12 @@ async function main() {
   try {
     assertNotCircularBuyer(wallet.classicAddress, rules.PAY_TO);
   } catch (err) {
+    try { await client.disconnect(); } catch { /* already closed */ }
     die(err.message || String(err));
   }
   console.log("payer", wallet.classicAddress);
   console.log("sku", row.id, "drops", row.drops, "invoice", invoiceId);
 
-  const client = new xrpl.Client(ws);
-  await client.connect();
   try {
     const prepared = await client.autofill({
       TransactionType: "Payment",

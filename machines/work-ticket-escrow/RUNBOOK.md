@@ -9,7 +9,7 @@ cd /workspace/aether-foundry
 npm install   # xrpl, dotenv
 ```
 
-WS: `wss://s.altnet.rippletest.net:51233`
+WS: `wss://testnet.xrpl-labs.com`
 
 ## Ripple Epoch helper
 

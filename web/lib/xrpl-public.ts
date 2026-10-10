@@ -7,8 +7,10 @@
 export const NETWORK_LABEL =
   process.env.NEXT_PUBLIC_NETWORK_LABEL ?? "XRPL Testnet";
 
-const DEFAULT_XRPL_WS = "wss://s.altnet.rippletest.net:51233";
-const DEFAULT_XRPL_HTTP = "https://s.altnet.rippletest.net:51234";
+const DEFAULT_XRPL_WS = "wss://testnet.xrpl-labs.com";
+const DEFAULT_XRPL_HTTP = "https://testnet.xrpl-labs.com";
+const FALLBACK_XRPL_HTTP = "https://s.altnet.rippletest.net:51234";
+const FALLBACK_XRPL_WS = "wss://s.altnet.rippletest.net:51233";
 
 export const XRPL_WS = process.env.NEXT_PUBLIC_XRPL_WS ?? DEFAULT_XRPL_WS;
 
@@ -48,6 +50,9 @@ function resolveXrplHttp(): string {
 
 /** HTTPS JSON-RPC. Prefers NEXT_PUBLIC_XRPL_HTTP, else maps XRPL_WS :51233 → :51234. */
 export const XRPL_HTTP = resolveXrplHttp();
+
+/** Ripple altnet, used once when the Labs primary fails on transport. Labs has no faucet. */
+export { FALLBACK_XRPL_HTTP, FALLBACK_XRPL_WS };
 
 /** AETH currency hex (ASCII "AETH" padded) */
 export const AETH_HEX = "4145544800000000000000000000000000000000";

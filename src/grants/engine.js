@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const xrpl = require("xrpl");
+const hosts = require("../xrpl-hosts");
 const guard = require("../x402-outbound-guard");
 const gov = require("../governance/policy");
 const policy = require("./policy");
@@ -184,7 +185,7 @@ async function prepare(args, io) {
   const files = io.paths || pathsFor(root);
   const readFile = io.readFileSync || fs.readFileSync;
   const exists = io.existsSync || fs.existsSync;
-  const http = policy.assertTestnetUrl(env.XRPL_HTTP || env.XRPL_RPC_URL || policy.XRPL_HTTP);
+  const http = policy.assertTestnetUrl(hosts.resolveHttp(env));
   const labeled = io.labeled || guard.foundryIndex();
   if (args.destination && labeled.get(args.destination)) {
     throw policy.coded(
@@ -304,42 +305,40 @@ async function execute(argv, io) {
   if (grantPaidThisUtcDay(plan.report.paid, hooks.now == null ? Date.now() : hooks.now)) {
     throw policy.coded("refusing a second grant on this UTC day", "DAY");
   }
-  const loader = hooks.loadSeed || loadSignerSeed;
-  const loaded = loader(env, hooks);
-  if (!loaded || !loaded.seed) {
-    throw policy.coded(
-      "W6_REGULAR_SEED or W6_SEED is not loaded. Put it in AETHER_SECRETS or /workspace/aether-foundry-secrets/.env. Refusing to sign.",
-      "NO_SEED"
-    );
-  }
-  const walletFromSeed = hooks.walletFromSeed || ((seed) => xrpl.Wallet.fromSeed(seed));
-  let wallet;
-  try {
-    wallet = walletFromSeed(loaded.seed);
-  } catch {
-    throw policy.coded(`${loaded.name} is not a usable seed`, "NO_SEED");
-  }
-  const signerAddress = wallet.classicAddress || wallet.address;
-  if (loaded.mode === "regular") {
-    const expected = hooks.regularKey || expectedRegular(plan.files.activated, hooks);
-    if (signerAddress !== expected) {
-      throw policy.coded("W6_REGULAR_SEED address is not the W6 regular key", "SIGNER");
-    }
-  } else if (signerAddress !== policy.W6) {
-    throw policy.coded(`${loaded.name} address is not W6`, "SIGNER");
-  }
   if (plan.tx.Account !== policy.W6) throw policy.coded("grant Account must be W6", "PAYER");
-  const ws = policy.assertWsUrl(env.XRPL_WS_URL || env.XRPL_WS || policy.XRPL_WS);
-  const connect = hooks.connect || (async (url) => {
-    const client = new xrpl.Client(url);
-    await client.connect();
-    return client;
-  });
-  const client = await connect(ws);
-  const seeds = [loaded.seed];
+  const ws = policy.assertWsUrl(hosts.resolveWs(env));
+  const client = hooks.connect
+    ? await hosts.withFailover(ws, async (url) => hooks.connect(policy.assertWsUrl(url)))
+    : await hosts.openClient(ws, { networkId: policy.NETWORK_ID, assertUrl: (url) => policy.assertWsUrl(url) });
+  let seeds = [];
   try {
     if (client.networkID === 0) throw policy.coded("refusing NetworkID 0", "MAINNET");
     policy.assertNetworkId(client.networkID);
+    const loader = hooks.loadSeed || loadSignerSeed;
+    const loaded = loader(env, hooks);
+    if (!loaded || !loaded.seed) {
+      throw policy.coded(
+        "W6_REGULAR_SEED or W6_SEED is not loaded. Put it in AETHER_SECRETS or /workspace/aether-foundry-secrets/.env. Refusing to sign.",
+        "NO_SEED"
+      );
+    }
+    const walletFromSeed = hooks.walletFromSeed || ((seed) => xrpl.Wallet.fromSeed(seed));
+    let wallet;
+    try {
+      wallet = walletFromSeed(loaded.seed);
+    } catch {
+      throw policy.coded(`${loaded.name} is not a usable seed`, "NO_SEED");
+    }
+    const signerAddress = wallet.classicAddress || wallet.address;
+    if (loaded.mode === "regular") {
+      const expected = hooks.regularKey || expectedRegular(plan.files.activated, hooks);
+      if (signerAddress !== expected) {
+        throw policy.coded("W6_REGULAR_SEED address is not the W6 regular key", "SIGNER");
+      }
+    } else if (signerAddress !== policy.W6) {
+      throw policy.coded(`${loaded.name} address is not W6`, "SIGNER");
+    }
+    seeds = [loaded.seed];
     const info = hooks.accountInfo
       ? await hooks.accountInfo(client)
       : await client.request({ command: "account_info", account: policy.W6, ledger_index: "validated" });

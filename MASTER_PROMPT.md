@@ -14,9 +14,10 @@ FOUNDER_GITHUB:           Hobie1Kenobi
 REPO:                     https://github.com/Hobie1Kenobi/aether-foundry
 PRIMARY_NETWORK:          XRPL Testnet
 EXPLORER_TESTNET:         https://testnet.xrpl.org
-WS_TESTNET:               wss://s.altnet.rippletest.net:51233
-RPC_TESTNET:              https://s.altnet.rippletest.net:51234
-WS_TESTNET_ALT:           wss://testnet.xrpl-labs.com
+WS_TESTNET:               wss://testnet.xrpl-labs.com
+RPC_TESTNET:              https://testnet.xrpl-labs.com
+WS_TESTNET_FALLBACK:      wss://s.altnet.rippletest.net:51233
+RPC_TESTNET_FALLBACK:     https://s.altnet.rippletest.net:51234
 WS_DEVNET:                wss://s.devnet.rippletest.net:51233
 RPC_DEVNET:               https://s.devnet.rippletest.net:51234
 WS_XAHAU_TESTNET:         wss://xahau-test.net

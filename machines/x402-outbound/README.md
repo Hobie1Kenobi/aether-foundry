@@ -29,7 +29,7 @@ Unpaid `GET` returns **402** and a base64 `PAYMENT-REQUIRED` header (x402 v2, `x
 { "ok": true, "work": "foreign-oracle-ping", "ledger_index": 0 }
 ```
 
-`ledger_index` is the validated ledger from `https://s.altnet.rippletest.net:51234`. It is not a hard-coded stub. `diyCostDrops` is `0` because that same RPC read is free. The 5000 drops buy the counterparty, not hidden data.
+`ledger_index` is the validated ledger from `https://testnet.xrpl-labs.com`. It is not a hard-coded stub. `diyCostDrops` is `0` because that same RPC read is free. The 5000 drops buy the counterparty, not hidden data.
 
 ## Payer
 
@@ -69,7 +69,7 @@ npm run x402:outbound -- --url http://127.0.0.1:8787/foreign-oracle-ping --max-d
 
 `FOREIGN_SEED` may live in that same secrets file so the throwaway account can be swept later. The payer never uses it. It is not in git.
 
-WebSocket default: `wss://s.altnet.rippletest.net:51233`. Override only with another `*.rippletest.net` URL (`XRPL_WS_URL`).
+WebSocket default: `wss://testnet.xrpl-labs.com`. `XRPL_WS_URL` may select that host or `wss://s.altnet.rippletest.net:51233`. A transport failure tries the other approved host once, before any submit. `*.xrpl-labs.com`, `xrpl.ws`, and mainnet hosts stay refused.
 
 ## What this VM archived
 

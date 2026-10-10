@@ -15,6 +15,7 @@
 const fs = require("fs");
 const path = require("path");
 const xrpl = require("xrpl");
+const hosts = require("./xrpl-hosts");
 const pub = require("./walk-in-public");
 const guard = require("./x402-outbound-guard");
 
@@ -212,10 +213,8 @@ function assertPrepared(prepared) {
 }
 
 async function openClient(ws, io) {
-  if (io.connectClient) return io.connectClient(ws);
-  const client = new xrpl.Client(ws);
-  await client.connect();
-  return client;
+  if (io.connectClient) return hosts.withFailover(ws, async (url) => io.connectClient(url));
+  return hosts.openClient(ws, { assertUrl: (url) => pub.assertTestnetUrl(url) });
 }
 
 async function submitSigned(client, wallet, tx) {
@@ -352,7 +351,7 @@ async function resolveBuyer({ args, env, io, ws, index, seeds }) {
 
   const client = await openClient(ws, io);
   await assertAltnet(client);
-  const funded = io.fundWallet ? await io.fundWallet(client) : await client.fundWallet();
+  const funded = io.fundWallet ? await io.fundWallet(client) : await hosts.fundFromRippleFaucet();
   const wallet = funded.wallet;
   const address = wallet.classicAddress || wallet.address;
   wallet.classicAddress = address;
@@ -370,8 +369,8 @@ async function run(argv, io = {}) {
   let client = null;
   try {
     const args = parseArgs(argv);
-    const http = pub.assertTestnetUrl(env.XRPL_HTTP || pub.XRPL_HTTP);
-    const ws = pub.assertTestnetUrl(env.XRPL_WS_URL || env.XRPL_WS || pub.XRPL_WS);
+    const http = pub.assertTestnetUrl(hosts.resolveHttp(env));
+    const ws = pub.assertTestnetUrl(hosts.resolveWs(env));
     const polled = await poll({ rpc: http, fetchImpl: io.fetchImpl });
     if (!polled.ok) throw new Error(polled.error || "could not read W2 sell offers");
     const offer = selectOffer(polled.offers, args.offer);

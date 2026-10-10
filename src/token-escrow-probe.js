@@ -5,11 +5,11 @@
  */
 'use strict';
 const xrpl = require('xrpl');
+const hosts = require('./xrpl-hosts');
 const fs = require('fs');
 const { rippleNow } = require('./time/rippleEpoch.js');
 
 const SECRETS = '/workspace/aether-foundry-secrets/.env';
-const WS = 'wss://s.altnet.rippletest.net:51233';
 const AETH = '4145544800000000000000000000000000000000';
 const TOKEN_ESCROW_ID = '138B968F25822EFBF54C00F97031221C47B1EAB8321D93C7C2AEAF85F04EC5DF';
 const asfAllowTrustLineLocking = 17;
@@ -37,8 +37,7 @@ function extractEscrow(meta) {
 
 (async () => {
   const env = loadEnv(SECRETS);
-  const client = new xrpl.Client(WS);
-  await client.connect();
+  const client = await hosts.openClient(hosts.resolveWs(process.env));
   const log = { network: 'XRPL Testnet', probed_at: new Date().toISOString() };
 
   // --- Feature determination ---

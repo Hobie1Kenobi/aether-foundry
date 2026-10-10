@@ -20,8 +20,10 @@ const HELP = `Usage: node src/director/snapshot.js [--root DIR] [--state FILE] [
 Reads balances and watched ledger objects into lab/director-state.json.
 Preserves next_actions, blockers, and last_session_id when the current file is valid.
 Does not sign, read seeds, or invent a ledger index when RPC fails.
-XRPL_HTTP may select https://testnet.xrpl-labs.com. If s.altnet.rippletest.net
-times out, the XRPL reads retry that host. The card still records network id 1.`;
+Primary HTTP is https://testnet.xrpl-labs.com. FOUNDRY_XRPL_HTTP, XRPL_HTTP, or
+XRPL_RPC_URL may select that host or https://s.altnet.rippletest.net:51234.
+If the labs host times out, the XRPL reads retry altnet once. The card still
+records network id 1 and the host that answered.`;
 
 function parseArgs(argv) {
   const out = {
@@ -58,7 +60,8 @@ function resolveSnapshotHttp(raw) {
   const checked = anchors.assertXrplTestnetUrl(raw || anchors.XRPL_HTTP);
   const host = new URL(checked).hostname.toLowerCase();
   if (hosts.isLabsTestnetHost(host)) return canonicalRpc(checked, hosts.LABS_HTTP, "XRPL Labs Testnet");
-  return canonicalRpc(checked, anchors.XRPL_HTTP, "XRPL Testnet");
+  if (hosts.isAltnetHost(host)) return canonicalRpc(checked, hosts.ALTNET_HTTP, "XRPL Testnet");
+  throw Object.assign(new Error("refusing non-canonical XRPL Testnet url"), { code: "MAINNET" });
 }
 
 function canonicalRpc(actual, expected, label) {
@@ -426,9 +429,7 @@ async function collectAt(xrplHttp, opts, fetchImpl) {
     hookObjects,
     desk,
     toml,
-    xrplEndpoints: hosts.isLabsTestnetHost(new URL(xrplHttp).hostname)
-      ? { http: hosts.LABS_HTTP, ws: hosts.LABS_WS }
-      : null,
+    xrplEndpoints: hosts.endpointPair(xrplHttp),
   };
 }
 
@@ -628,9 +629,7 @@ async function run(argv, deps = {}) {
   const statePath = args.state || path.join(args.root, anchors.STATE_REL);
   const previous = readPrevious(statePath);
   const env = deps && Object.prototype.hasOwnProperty.call(deps, "env") ? (deps.env || {}) : process.env;
-  const xrplHttp = args.xrplHttpSet
-    ? args.xrplHttp
-    : (env.XRPL_HTTP || env.XRPL_RPC_URL || anchors.XRPL_HTTP);
+  const xrplHttp = args.xrplHttpSet ? args.xrplHttp : hosts.resolveHttp(env);
   const bundle = await collect({
     xrplHttp,
     xahauHttp: args.xahauHttp,

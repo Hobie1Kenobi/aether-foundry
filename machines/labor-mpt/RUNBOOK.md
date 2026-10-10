@@ -70,7 +70,7 @@ If `--issuance-id` is omitted, the script reads `lab/metrics.json`. While that f
 After a live create, fetch the issuance with the 48-hex id (not a guessed ledger index):
 
 ```bash
-curl -sS https://s.altnet.rippletest.net:51234 \
+curl -sS https://testnet.xrpl-labs.com \
   -H 'content-type: application/json' \
   -d '{"method":"ledger_entry","params":[{"mpt_issuance":"<48 hex>","ledger_index":"validated"}]}'
 ```

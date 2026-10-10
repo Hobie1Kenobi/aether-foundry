@@ -73,8 +73,8 @@ function rpcFor(wallet, env) {
     };
   }
   return {
-    http: source.XRPL_HTTP || source.XRPL_RPC_URL || anchors.XRPL_HTTP,
-    ws: source.XRPL_WS_URL || source.XRPL_WS || anchors.XRPL_WS,
+    http: hosts.resolveHttp(source),
+    ws: hosts.resolveWs(source),
   };
 }
 

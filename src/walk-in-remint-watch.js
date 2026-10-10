@@ -12,6 +12,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const hosts = require('./xrpl-hosts');
 const pub = require('./walk-in-public');
 
 const HELP = `Usage: node src/walk-in-remint-watch.js [--quiet] [--rpc URL] [--simulate-sold-out --root DIR]
@@ -254,7 +255,7 @@ async function run(argv, io = {}) {
   const env = io.env || process.env;
   let rpc = pub.XRPL_HTTP;
   try {
-    const selected = args.rpc || (env && env.XRPL_HTTP) || pub.XRPL_HTTP;
+    const selected = args.rpc || hosts.resolveHttp(env);
     rpc = pub.assertTestnetUrl(selected);
   } catch (e) {
     error(e.message || String(e));

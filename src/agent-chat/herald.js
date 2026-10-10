@@ -13,6 +13,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const hosts = require("../xrpl-hosts");
 const peerHello = require("../peer-hello");
 const protocol = require("./protocol");
 const signerPost = require("./signer-post");
@@ -314,15 +315,18 @@ async function run(argv, io) {
       entries = page.transactions;
       synthetic = true;
     } else {
-      const rpc = peerHello.assertTestnetUrl(args.rpc || env.FOUNDRY_XRPL_HTTP || peerHello.XRPL_HTTP);
+      const preferred = peerHello.assertTestnetUrl(args.rpc || hosts.resolveHttp(env));
       const fetchImpl = (io && io.fetchImpl) || globalThis.fetch;
       if (typeof fetchImpl !== "function") throw new Error("no fetch implementation");
-      const info = await peerHelloRpc(rpc, "server_info", {}, fetchImpl);
-      const networkId = info.info && info.info.network_id;
-      peerHello.assertNetworkId(networkId);
-      const page = await peerHelloRpc(rpc, "account_tx", peerHello.accountTxParams(args.limit), fetchImpl);
-      if (page.validated === false) throw new Error("account_tx was not validated");
-      entries = Array.isArray(page.transactions) ? page.transactions : [];
+      entries = await hosts.withFailover(preferred, async (url) => {
+        const rpc = peerHello.assertTestnetUrl(url);
+        const info = await peerHelloRpc(rpc, "server_info", {}, fetchImpl);
+        const networkId = info.info && info.info.network_id;
+        peerHello.assertNetworkId(networkId);
+        const page = await peerHelloRpc(rpc, "account_tx", peerHello.accountTxParams(args.limit), fetchImpl);
+        if (page.validated === false) throw new Error("account_tx was not validated");
+        return Array.isArray(page.transactions) ? page.transactions : [];
+      });
     }
   } catch (err) {
     error(err.message || String(err));

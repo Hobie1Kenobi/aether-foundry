@@ -14,6 +14,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const hosts = require("../xrpl-hosts");
 const protocol = require("./protocol");
 const herald = require("./herald");
 const scribe = require("./scribe-server");
@@ -364,15 +365,18 @@ async function runSim(opts) {
 
 async function pollFrame(opts) {
   const fetchImpl = opts.fetchImpl || globalThis.fetch;
-  const rpc = peerHello.assertTestnetUrl(opts.rpc || peerHello.XRPL_HTTP);
+  const preferred = peerHello.assertTestnetUrl(opts.rpc || peerHello.XRPL_HTTP);
   const deadline = Date.now() + (opts.timeoutMs || 90000);
   const interval = opts.intervalMs || 4000;
   while (Date.now() < deadline) {
-    const info = await rpcCall(rpc, "server_info", {}, fetchImpl);
-    peerHello.assertNetworkId(info.info && info.info.network_id);
-    const page = await rpcCall(rpc, "account_tx", peerHello.accountTxParams(opts.limit || 50), fetchImpl);
-    const frames = protocol.collectFrames(page.transactions || [], { synthetic: false });
-    const hit = frames.find(opts.match);
+    const hit = await hosts.withFailover(preferred, async (url) => {
+      const rpc = peerHello.assertTestnetUrl(url);
+      const info = await rpcCall(rpc, "server_info", {}, fetchImpl);
+      peerHello.assertNetworkId(info.info && info.info.network_id);
+      const page = await rpcCall(rpc, "account_tx", peerHello.accountTxParams(opts.limit || 50), fetchImpl);
+      const frames = protocol.collectFrames(page.transactions || [], { synthetic: false });
+      return frames.find(opts.match) || null;
+    });
     if (hit) return hit;
     await new Promise((resolve) => setTimeout(resolve, interval));
   }
@@ -402,7 +406,7 @@ async function runLive(opts) {
   const poll = options.poll || ((match) => pollFrame({
     match,
     fetchImpl,
-    rpc: options.rpc || env.FOUNDRY_XRPL_HTTP,
+    rpc: options.rpc || hosts.resolveHttp(env),
     timeoutMs: options.timeoutMs,
     intervalMs: options.intervalMs,
   }));

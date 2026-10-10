@@ -101,7 +101,7 @@ describe("herald archive", () => {
     const fetchImpl = async (url, init) => {
       calls.push(String(url));
       const target = String(url);
-      if (target.includes("rippletest")) {
+      if (target.includes("xrpl-labs.com") || target.includes("rippletest")) {
         const body = JSON.parse(init.body);
         if (body.method === "server_info") return jsonResponse({ result: { info: { network_id: 1 } } });
         return jsonResponse({ result: { validated: true, transactions: [entry] } });

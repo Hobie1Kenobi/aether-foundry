@@ -5,6 +5,7 @@
 import {
   AETH_HEX,
   AETH_IOU,
+  FALLBACK_XRPL_HTTP,
   NFT_TAXON,
   WALLETS,
   XRPL_HTTP,
@@ -58,11 +59,28 @@ type AccountNftsResult = RpcErrorBody & {
   account_nfts?: AccountNft[];
 };
 
-async function rpc<T extends RpcErrorBody>(
+function isLabsUrl(raw: string): boolean {
+  try {
+    return new URL(raw).hostname.toLowerCase() === "testnet.xrpl-labs.com";
+  } catch {
+    return false;
+  }
+}
+
+function isTransportError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/refusing|network id/i.test(message)) return false;
+  return /fetch failed|timed out|timeout|aborted|ECONNREFUSED|ENOTFOUND|ECONNRESET|ETIMEDOUT|socket hang up|HTTP 5\d\d|non-JSON/i.test(
+    message
+  );
+}
+
+async function postRpc<T extends RpcErrorBody>(
+  url: string,
   method: string,
   params: Record<string, unknown>
 ): Promise<T> {
-  const res = await fetch(XRPL_HTTP, {
+  const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -93,6 +111,18 @@ async function rpc<T extends RpcErrorBody>(
     );
   }
   return result;
+}
+
+async function rpc<T extends RpcErrorBody>(
+  method: string,
+  params: Record<string, unknown>
+): Promise<T> {
+  try {
+    return await postRpc<T>(XRPL_HTTP, method, params);
+  } catch (error) {
+    if (!isLabsUrl(XRPL_HTTP) || !isTransportError(error)) throw error;
+    return await postRpc<T>(FALLBACK_XRPL_HTTP, method, params);
+  }
 }
 
 export type AccountSnapshot = {
@@ -504,8 +534,8 @@ export async function fetchValidatedTransaction(hash: string): Promise<
   | { found: false; code: "txnNotFound" | "rpc_error"; error: string }
 > {
   let result: (RpcErrorBody & Record<string, unknown>) | undefined;
-  try {
-    const res = await fetch(XRPL_HTTP, {
+  const readTx = async (url: string) => {
+    const res = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -518,25 +548,53 @@ export async function fetchValidatedTransaction(hash: string): Promise<
       cache: "no-store",
       signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
     });
+    let bodyResult: (RpcErrorBody & Record<string, unknown>) | undefined;
     try {
       const body = (await res.json()) as { result?: RpcErrorBody & Record<string, unknown> };
-      result = body.result;
+      bodyResult = body.result;
     } catch {
-      result = undefined;
+      bodyResult = undefined;
     }
-    if (!res.ok && !result) {
+    if (!res.ok && res.status >= 500) {
+      throw new Error(`rpc tx: HTTP ${res.status}`);
+    }
+    if (!res.ok && !bodyResult) {
       return {
-        found: false,
-        code: "rpc_error",
+        transport: false as const,
+        result: undefined,
         error: `rpc tx: HTTP ${res.status}`,
       };
     }
+    return { transport: false as const, result: bodyResult, error: "" };
+  };
+  try {
+    let read = await readTx(XRPL_HTTP);
+    result = read.result;
+    if (read.error) {
+      return { found: false, code: "rpc_error", error: read.error };
+    }
   } catch (e) {
-    return {
-      found: false,
-      code: "rpc_error",
-      error: e instanceof Error ? e.message : String(e),
-    };
+    if (isLabsUrl(XRPL_HTTP) && isTransportError(e)) {
+      try {
+        const read = await readTx(FALLBACK_XRPL_HTTP);
+        result = read.result;
+        if (read.error) {
+          return { found: false, code: "rpc_error", error: read.error };
+        }
+      } catch (fallbackError) {
+        return {
+          found: false,
+          code: "rpc_error",
+          error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+        };
+      }
+    } else {
+      return {
+        found: false,
+        code: "rpc_error",
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
   }
   if (!result || result.status === "error" || result.error) {
     const code = result?.error === "txnNotFound" ? "txnNotFound" : "rpc_error";

@@ -9,7 +9,7 @@ npm run frontier:probe
 npm run frontier:probe-devnet
 ```
 
-`npm run frontier:probe` (same entry as `npm run director:probe-amendments`) calls `server_info` and `feature` on `FOUNDRY_XRPL_HTTP`, then `XRPL_HTTP`, then `XRPL_RPC_URL`, then `https://s.altnet.rippletest.net:51234`. It refuses a network id other than `1` and refuses mainnet hosts. The `rpc` field stored in the file is that public URL with no userinfo, query, or secret.
+`npm run frontier:probe` (same entry as `npm run director:probe-amendments`) calls `server_info` and `feature` on `FOUNDRY_XRPL_HTTP`, then `XRPL_HTTP`, then `XRPL_RPC_URL`, then `https://testnet.xrpl-labs.com`. A transport failure retries `https://s.altnet.rippletest.net:51234` once. It refuses a network id other than `1` and refuses mainnet hosts. The `rpc` field stored in the file is that public URL with no userinfo, query, or secret.
 
 If RPC fails, or a watched name is missing from `feature`, the process exits non-zero and does not replace `amendments.json`. A missing name is not written as `enabled: false`. Hashes are the feature-map keys the server returned.
 

@@ -122,7 +122,7 @@ function howToPay(sku, invoiceId, env) {
       MemoData: Buffer.from(invoiceId, "utf8").toString("hex").toUpperCase(),
     },
     invoiceIdSha256: sha256Hex(invoiceId),
-    rpc: "https://s.altnet.rippletest.net:51234",
+    rpc: "https://testnet.xrpl-labs.com",
     retryHeader: "PAYMENT-SIGNATURE",
     facilitator,
     tradeoff:

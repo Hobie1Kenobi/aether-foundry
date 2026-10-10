@@ -1,6 +1,6 @@
 # RUNBOOK — Walk-In Window
 
-**Network:** XRPL Testnet `wss://s.altnet.rippletest.net:51233` / HTTPS `https://s.altnet.rippletest.net:51234`  
+**Network:** XRPL Testnet `wss://testnet.xrpl-labs.com` / HTTPS `https://testnet.xrpl-labs.com`  
 **Buyer doc:** `machines/walk-in-window/INBOUND.md`  
 **Desk:** read-only. This runbook is operator-side. Never commit or print seeds.
 
@@ -53,7 +53,7 @@ npm run watch:walk-in
 # node src/walk-in-remint-watch.js [--quiet]
 ```
 
-Polls `https://s.altnet.rippletest.net:51234` `account_objects` on W2 with `type: nft_offer` and `ledger_index: validated`.
+Polls `https://testnet.xrpl-labs.com` `account_objects` on W2 with `type: nft_offer` and `ledger_index: validated`.
 
 | Result | Behavior |
 |--------|----------|

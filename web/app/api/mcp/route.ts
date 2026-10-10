@@ -1,4 +1,4 @@
-import { AETH_HEX, WALLETS, XRPL_HTTP } from "@/lib/xrpl-public";
+import { AETH_HEX, FALLBACK_XRPL_HTTP, WALLETS, XRPL_HTTP } from "@/lib/xrpl-public";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -115,24 +115,52 @@ async function getJson(url: string): Promise<{ status: number; body: Record<stri
   }
 }
 
-async function rpc(method: string, params: Record<string, unknown>): Promise<Record<string, unknown> | null> {
-  const endpoint = new URL(XRPL_HTTP);
+function assertTestnetEndpoint(raw: string): URL {
+  const endpoint = new URL(raw);
   const host = endpoint.hostname.toLowerCase();
   const rippletest = host === "rippletest.net" || host.endsWith(".rippletest.net");
   const labsTestnet = host === "testnet.xrpl-labs.com";
   if (isMainnetHost(host) || (!rippletest && !labsTestnet)) {
     throw new Error("refusing non-testnet XRPL url");
   }
+  return endpoint;
+}
+
+function isTransportFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/refusing|network id/i.test(message)) return false;
+  return /fetch failed|timed out|timeout|aborted|ECONNREFUSED|ENOTFOUND|ECONNRESET|ETIMEDOUT|socket hang up|HTTP 5\d\d|non-JSON/i.test(message);
+}
+
+async function rpcOnce(raw: string, method: string, params: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+  const endpoint = assertTestnetEndpoint(raw);
   const res = await fetch(endpoint, {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify({ method, params: [params] }),
     redirect: "error",
   });
+  if (res.status >= 500) throw new Error(`rpc HTTP ${res.status}`);
   const text = await res.text();
   if (/sEd[1-9A-HJ-NP-Za-km-z]{20,}/.test(text)) throw new Error("refusing seed-shaped output");
   const parsed = JSON.parse(text) as { result?: Record<string, unknown> | null };
   return parsed.result ?? null;
+}
+
+async function rpc(method: string, params: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+  try {
+    return await rpcOnce(XRPL_HTTP, method, params);
+  } catch (error) {
+    const labs = (() => {
+      try {
+        return new URL(XRPL_HTTP).hostname.toLowerCase() === "testnet.xrpl-labs.com";
+      } catch {
+        return false;
+      }
+    })();
+    if (!labs || !isTransportFailure(error)) throw error;
+    return await rpcOnce(FALLBACK_XRPL_HTTP, method, params);
+  }
 }
 
 async function walkInStatus() {

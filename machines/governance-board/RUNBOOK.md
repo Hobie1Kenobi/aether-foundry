@@ -10,7 +10,7 @@ From the repo root:
 npm run gov:dry
 ```
 
-This connects to `wss://s.altnet.rippletest.net:51233`, reads `server_state` and `account_info` (with `signer_lists`) for W0–W6, and prints balances, owner counts, current `RegularKey`, and whether a signer list exists. It ends with `no tx hash (not submitted)`. It does not read the secrets file.
+This connects to `wss://testnet.xrpl-labs.com`, reads `server_state` and `account_info` (with `signer_lists`) for W0–W6, and prints balances, owner counts, current `RegularKey`, and whether a signer list exists. It ends with `no tx hash (not submitted)`. It does not read the secrets file.
 
 Override the socket only with another `*.rippletest.net` URL (`XRPL_WS_URL`).
 

@@ -8,6 +8,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const hosts = require("../xrpl-hosts");
 const anchors = require("../director/anchors");
 const grants = require("../grants/policy");
 const runtimePolicy = require("../runtime/policy");
@@ -121,7 +122,7 @@ function resolveIo(io) {
     env,
     fetch: input.fetch || globalThis.fetch,
     deskUrl: String(input.deskUrl || env.DESK_URL || DESK_URL).replace(/\/$/, ""),
-    xrplHttp: String(input.xrplHttp || env.XRPL_HTTP || env.XRPL_RPC_URL || XRPL_HTTP).replace(/\/$/, ""),
+    xrplHttp: String(hosts.resolveHttp(env, input.xrplHttp)).replace(/\/$/, ""),
     statePath: input.statePath || path.join(anchors.repoRoot(), "lab", "director-state.json"),
     readFileSync: input.readFileSync || fs.readFileSync,
     existsSync: input.existsSync || fs.existsSync,
@@ -410,17 +411,23 @@ async function rpcCall(io, method, params) {
 }
 
 async function ammQuote(io) {
-  const info = await rpcCall(io, "server_info", {});
-  const networkId = info.info && info.info.network_id;
-  if (networkId == null || networkId === "") {
-    throw runtimePolicy.coded("RPC did not prove network id", "RPC");
-  }
-  runtimePolicy.assertAltnet({ networkId, url: io.xrplHttp });
-  const amm = readPool(await rpcCall(io, "amm_info", {
-    asset: { currency: "XRP" },
-    asset2: { currency: anchors.AETH_HEX, issuer: anchors.WALLETS.W0.address },
-    ledger_index: "validated",
-  }));
+  const read = await hosts.withFailover(io.xrplHttp, async (url) => {
+    const next = Object.assign({}, io, { xrplHttp: runtimePolicy.assertSigningRpc(url) });
+    const info = await rpcCall(next, "server_info", {});
+    const networkId = info.info && info.info.network_id;
+    if (networkId == null || networkId === "") {
+      throw runtimePolicy.coded("RPC did not prove network id", "RPC");
+    }
+    runtimePolicy.assertAltnet({ networkId, url: next.xrplHttp });
+    const amm = readPool(await rpcCall(next, "amm_info", {
+      asset: { currency: "XRP" },
+      asset2: { currency: anchors.AETH_HEX, issuer: anchors.WALLETS.W0.address },
+      ledger_index: "validated",
+    }));
+    return { networkId, amm };
+  });
+  const networkId = read.networkId;
+  const amm = read.amm;
   const quoteUrl = `${io.deskUrl}/api/x402/composition-quote`;
   let deskComposition = { url: quoteUrl, unpaid: null, paid: false, httpStatus: null };
   try {

@@ -8,7 +8,7 @@ Foundry box. Secrets in `AETHER_SECRETS` or `/workspace/aether-foundry-secrets/.
 npm run lp-badge:bound -- --dry-run
 ```
 
-Connects to `wss://s.altnet.rippletest.net:51233`, prints whether `Credentials` is enabled, and exits. No faucet. No sign.
+Connects to `wss://testnet.xrpl-labs.com`, prints whether `Credentials` is enabled, and exits. No faucet. No sign.
 
 If `Credentials` is not enabled, stop. Do not submit. Do not point this script at Xahau or at a mainnet host. Hooks are out of scope on this server.
 

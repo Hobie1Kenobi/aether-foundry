@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 const xrpl = require('xrpl');
+const hosts = require('./xrpl-hosts');
 const fs = require('fs');
 const SECRETS = '/workspace/aether-foundry-secrets/.env';
-const WS = 'wss://s.altnet.rippletest.net:51233';
 const AETH = '4145544800000000000000000000000000000000';
 function loadEnv(p) {
   const out = {};
@@ -14,8 +14,7 @@ function loadEnv(p) {
 }
 (async () => {
   const env = loadEnv(SECRETS);
-  const client = new xrpl.Client(WS);
-  await client.connect();
+  const client = await hosts.openClient(hosts.resolveWs(process.env));
   const issuer = env.W0_ADDRESS;
   const amm = await client.request({
     command: 'amm_info',

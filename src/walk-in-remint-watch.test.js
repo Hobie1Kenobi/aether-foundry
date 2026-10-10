@@ -125,7 +125,7 @@ describe('walk-in watcher', () => {
     assert.equal(fs.existsSync(path.join(root, 'lab', 'ledger-log.jsonl')), false);
   });
 
-  it('retries the XRPL Labs testnet host when the primary RPC times out', async () => {
+  it('retries Ripple altnet once when the XRPL Labs primary times out', async () => {
     const root = tempRoot();
     writeResults(root);
     const seen = [];
@@ -133,7 +133,7 @@ describe('walk-in watcher', () => {
       env: {},
       fetchImpl: async (url) => {
         seen.push(String(url));
-        if (String(url).includes('rippletest.net')) {
+        if (String(url).includes('xrpl-labs.com')) {
           throw new Error('fetch failed');
         }
         return jsonResponse({
@@ -153,7 +153,7 @@ describe('walk-in watcher', () => {
       },
     });
     assert.equal(code, 0);
-    assert.deepEqual(seen, [pub.XRPL_HTTP, 'https://testnet.xrpl-labs.com']);
+    assert.deepEqual(seen, [pub.XRPL_HTTP, 'https://s.altnet.rippletest.net:51234']);
     assert.equal(fs.existsSync(path.join(root, 'lab', 'ledger-log.jsonl')), false);
   });
 

@@ -37,13 +37,15 @@ export const MAINNET_NOTE =
   "Mainnet dots are read-only server_info and feature on xrplcluster.com (network id 0). Allowlisted mainnet-live accounts are read with account_info on that same host. This route does not submit.";
 
 const FRESH_MS = 36 * 60 * 60 * 1000;
-const TESTNET_HTTP = "https://s.altnet.rippletest.net:51234";
+const TESTNET_HTTP = "https://testnet.xrpl-labs.com";
+const TESTNET_HTTP_FALLBACK = "https://s.altnet.rippletest.net:51234";
 const DEVNET_HTTP = "https://s.devnet.rippletest.net:51234";
 const MAINNET_HTTP = "https://xrplcluster.com/";
 const MAINNET_NETWORK_ID = 0;
 const READ_METHODS = new Set(["server_info", "feature", "account_info"]);
 const CLASSIC_ACCOUNT_RE = /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/;
 const ALLOWED_HOSTS = new Set([
+  "testnet.xrpl-labs.com",
   "s.altnet.rippletest.net:51234",
   "s.devnet.rippletest.net:51234",
   "xrplcluster.com",
@@ -225,6 +227,32 @@ async function probeNetwork(fetchImpl: FetchLike, url: string, expected: number)
     ledger_index: server.ledger,
     amendments: featureRows(feature),
   };
+}
+
+function isTransportFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/refusing|network id/i.test(message)) return false;
+  return /fetch failed|timed out|timeout|aborted|ECONNREFUSED|ENOTFOUND|ECONNRESET|ETIMEDOUT|socket hang up|HTTP 5\d\d|non-JSON/i.test(
+    message
+  );
+}
+
+async function rpcTestnet(fetchImpl: FetchLike, method: string): Promise<Record<string, unknown>> {
+  try {
+    return await rpc(fetchImpl, TESTNET_HTTP, method);
+  } catch (error) {
+    if (!isTransportFailure(error)) throw error;
+    return await rpc(fetchImpl, TESTNET_HTTP_FALLBACK, method);
+  }
+}
+
+async function probeTestnet(fetchImpl: FetchLike): Promise<AmendmentFile & { ledger_index: number | null }> {
+  try {
+    return await probeNetwork(fetchImpl, TESTNET_HTTP, 1);
+  } catch (error) {
+    if (!isTransportFailure(error)) throw error;
+    return await probeNetwork(fetchImpl, TESTNET_HTTP_FALLBACK, 1);
+  }
 }
 
 function indexRows(file: AmendmentFile | null): Map<string, AmendmentRow> {
@@ -664,7 +692,7 @@ export async function buildWall(opts: BuildWallOptions = {}): Promise<WallPayloa
 
   if (testnetMode === "file") {
     try {
-      const info = await rpc(fetchImpl, TESTNET_HTTP, "server_info");
+      const info = await rpcTestnet(fetchImpl, "server_info");
       const server = readServer(info, 1);
       ledger = server.ledger;
       build = server.build;
@@ -674,7 +702,7 @@ export async function buildWall(opts: BuildWallOptions = {}): Promise<WallPayloa
     }
   } else {
     try {
-      const probed = await probeNetwork(fetchImpl, TESTNET_HTTP, 1);
+      const probed = await probeTestnet(fetchImpl);
       testnetProbe = probed;
       testnetMode = "probe";
       ledger = probed.ledger_index;
