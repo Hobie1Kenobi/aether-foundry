@@ -4,10 +4,10 @@
  * Seeds never printed. BUYER_SEED appended to secrets .env only.
  */
 const xrpl = require('xrpl');
+const hosts = require('./xrpl-hosts');
 const fs = require('fs');
 
 const SECRETS = '/workspace/aether-foundry-secrets/.env';
-const WS = 'wss://s.altnet.rippletest.net:51233';
 const TAXON = 20260927;
 const README_URI = 'https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/work-ticket-escrow/README.md';
 const tfTransferable = 0x00000008;
@@ -88,15 +88,14 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 (async () => {
   const env = loadEnv(SECRETS);
-  const client = new xrpl.Client(WS);
-  await client.connect();
+  const client = await hosts.openClient(hosts.resolveWs(process.env));
   const w2 = xrpl.Wallet.fromSeed(env.W2_SEED);
   const w4 = xrpl.Wallet.fromSeed(env.W4_SEED);
   const log = { network: 'XRPL Testnet', trials: {}, nft: {}, offers: {} };
 
   // --- BUYER ---
   console.log('Funding BUYER via faucet...');
-  const funded = await client.fundWallet();
+  const funded = await hosts.fundFromRippleFaucet();
   const buyer = funded.wallet;
   appendSecret('BUYER_SEED', buyer.seed);
   appendSecret('BUYER_ADDRESS', buyer.classicAddress);

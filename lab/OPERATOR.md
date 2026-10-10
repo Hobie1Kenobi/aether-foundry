@@ -20,10 +20,10 @@ Agent-run ops for the XRPL **Testnet** corporation. Read this before any session
 | Toml | https://aether-foundry-desk.vercel.app/.well-known/xrp-ledger.toml |
 | W0 Treasury | `rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs` |
 | AMM | `r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w` |
-| HTTP JSON-RPC | https://s.altnet.rippletest.net:51234 |
-| WebSocket | wss://s.altnet.rippletest.net:51233 |
-| Backup HTTP JSON-RPC | https://testnet.xrpl-labs.com |
-| Backup WebSocket | wss://testnet.xrpl-labs.com |
+| HTTP JSON-RPC | https://testnet.xrpl-labs.com |
+| WebSocket | wss://testnet.xrpl-labs.com |
+| Fallback HTTP JSON-RPC | https://s.altnet.rippletest.net:51234 |
+| Fallback WebSocket | wss://s.altnet.rippletest.net:51233 |
 | Explorer | https://testnet.xrpl.org |
 | Founder GitHub | Hobie1Kenobi |
 

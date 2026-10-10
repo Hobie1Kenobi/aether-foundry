@@ -6,11 +6,13 @@
  * FOREIGN_SEED stays outside git (AETHER_SECRETS or /workspace/aether-foundry-secrets/.env).
  */
 
+const hosts = require("../../src/xrpl-hosts");
+
 const FOREIGN_ADDRESS = "r3JbqcVQ4Pov4MhFUMSdnro7s3VgpaqssZ";
 const NETWORK = "xrpl:1";
 const MAINNET = "xrpl:0";
-const XRPL_HTTP = "https://s.altnet.rippletest.net:51234";
-const XRPL_WS = "wss://s.altnet.rippletest.net:51233";
+const XRPL_HTTP = hosts.PRIMARY_HTTP;
+const XRPL_WS = hosts.PRIMARY_WS;
 const DEFAULT_PORT = 8787;
 
 const SKU = {

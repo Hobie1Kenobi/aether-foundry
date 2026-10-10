@@ -7,7 +7,7 @@
  *   npm run gov:dry
  */
 
-const xrpl = require("xrpl");
+const hosts = require("../xrpl-hosts");
 const policy = require("./policy");
 
 function die(message) {
@@ -60,9 +60,11 @@ async function readState(client) {
 }
 
 async function main() {
-  const ws = policy.assertTestnetUrl(process.env.XRPL_WS_URL || policy.XRPL_WS);
-  const client = new xrpl.Client(ws);
-  await client.connect();
+  const ws = policy.assertTestnetUrl(hosts.resolveWs(process.env));
+  const client = await hosts.openClient(ws, {
+    networkId: policy.NETWORK_ID,
+    assertUrl: (url) => policy.assertTestnetUrl(url),
+  });
   try {
     if (client.networkID === 0) die("refusing NetworkID 0");
     const state = await readState(client);

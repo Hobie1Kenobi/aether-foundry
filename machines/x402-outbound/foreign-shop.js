@@ -9,6 +9,7 @@
  */
 
 const http = require("http");
+const hosts = require("../../src/xrpl-hosts");
 const guard = require("../../src/x402-outbound-guard");
 const rules = require("../../web/lib/x402-rules");
 const pub = require("./foreign-public");
@@ -106,11 +107,10 @@ function catalog() {
 }
 
 function rpcUrl() {
-  const configured = process.env.XRPL_HTTP && process.env.XRPL_HTTP.trim();
-  return guard.assertTestnetUrl(configured || pub.XRPL_HTTP);
+  return guard.assertTestnetUrl(hosts.resolveHttp(process.env));
 }
 
-async function lookupTx(hash, fetchImpl, rpc) {
+async function lookupTxAt(hash, fetchImpl, rpc) {
   const res = await fetchImpl(rpc, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -119,6 +119,7 @@ async function lookupTx(hash, fetchImpl, rpc) {
       params: [{ transaction: hash, binary: false }],
     }),
   });
+  if (!res.ok && res.status >= 500) throw new Error(`tx lookup failed: HTTP ${res.status}`);
   const json = await res.json();
   const result = (json && json.result) || {};
   if (result.error === "txnNotFound" || result.error === "txnNotValidated") {
@@ -133,7 +134,11 @@ async function lookupTx(hash, fetchImpl, rpc) {
   return { found: true, tx: result };
 }
 
-async function readValidatedLedgerIndex(fetchImpl, rpc) {
+async function lookupTx(hash, fetchImpl, rpc) {
+  return hosts.withFailover(rpc, async (url) => lookupTxAt(hash, fetchImpl, guard.assertTestnetUrl(url)));
+}
+
+async function readValidatedLedgerIndexAt(fetchImpl, rpc) {
   const res = await fetchImpl(rpc, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -142,12 +147,17 @@ async function readValidatedLedgerIndex(fetchImpl, rpc) {
       params: [{ ledger_index: "validated" }],
     }),
   });
+  if (!res.ok && res.status >= 500) throw new Error(`ledger failed: HTTP ${res.status}`);
   const json = await res.json();
   const index = json && json.result && json.result.ledger_index;
   if (typeof index !== "number") {
     throw new Error("validated ledger_index missing");
   }
   return index;
+}
+
+async function readValidatedLedgerIndex(fetchImpl, rpc) {
+  return hosts.withFailover(rpc, async (url) => readValidatedLedgerIndexAt(fetchImpl, guard.assertTestnetUrl(url)));
 }
 
 function resourceUrlFrom(input) {

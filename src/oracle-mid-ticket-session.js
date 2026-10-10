@@ -6,12 +6,12 @@
  */
 'use strict';
 const xrpl = require('xrpl');
+const hosts = require('./xrpl-hosts');
 const fs = require('fs');
 const path = require('path');
 const { rippleNow, rippleToUnix } = require('./time/rippleEpoch');
 
 const SECRETS = '/workspace/aether-foundry-secrets/.env';
-const WS = 'wss://s.altnet.rippletest.net:51233';
 const TAXON = 20260927;
 const AETH = '4145544800000000000000000000000000000000';
 const AMM_ADDR = 'r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w';
@@ -108,8 +108,7 @@ function bidPriceXrpPerAeth(offer) {
 
 (async () => {
   const env = loadEnv(SECRETS);
-  const client = new xrpl.Client(WS);
-  await client.connect();
+  const client = await hosts.openClient(hosts.resolveWs(process.env));
 
   const w0 = xrpl.Wallet.fromSeed(env.W0_SEED);
   const w2 = xrpl.Wallet.fromSeed(env.W2_SEED);
@@ -262,7 +261,7 @@ function bidPriceXrpPerAeth(offer) {
   console.log('BUYER_BAL', bal, 'OC', ai.result.account_data.OwnerCount);
   if (bal < 25) {
     console.log('Topping up BUYER via faucet...');
-    const funded = await client.fundWallet(buyer);
+    const funded = await hosts.fundFromRippleFaucet(buyer);
     console.log('BUYER_FAUCET_BAL', funded.balance);
   }
 

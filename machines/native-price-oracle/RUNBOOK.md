@@ -45,7 +45,7 @@ Suggested clock: every 20 ledgers. One-shot is enough for the first object. `Las
 ## 4. Stranger check
 
 ```bash
-curl -sS https://s.altnet.rippletest.net:51234 \
+curl -sS https://testnet.xrpl-labs.com \
   -H 'content-type: application/json' \
   -d '{"method":"ledger_entry","params":[{"oracle":{"account":"rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ","oracle_document_id":1},"ledger_index":"validated"}]}'
 ```

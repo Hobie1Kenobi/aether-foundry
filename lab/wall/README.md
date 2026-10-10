@@ -26,7 +26,7 @@ Foundry twin rows (`foundry-heartbeat`, `foundry-oracle`, `foundry-labor-mpt`, `
 
 ## Clock
 
-Testnet prefers `lab/frontier/amendments.json` when `probed_at` is under 36 hours. Otherwise the route calls `server_info` and `feature` on `https://s.altnet.rippletest.net:51234` (network id 1). Devnet uses `lab/frontier/amendments-devnet.json` or `https://s.devnet.rippletest.net:51234` (network id 2). Mainnet has no cached file. Each read calls `server_info` and `feature` on `https://xrplcluster.com/` and keeps the dots only when `network_id` is 0. `enabled: true` is on. `enabled: false` with a majority close time is voting. `enabled: false` with no majority is off. A missing name stays unknown.
+Testnet prefers `lab/frontier/amendments.json` when `probed_at` is under 36 hours. Otherwise the route calls `server_info` and `feature` on `https://testnet.xrpl-labs.com` (network id 1) and retries `https://s.altnet.rippletest.net:51234` once on a transport failure. Devnet uses `lab/frontier/amendments-devnet.json` or `https://s.devnet.rippletest.net:51234` (network id 2). Mainnet has no cached file. Each read calls `server_info` and `feature` on `https://xrplcluster.com/` and keeps the dots only when `network_id` is 0. `enabled: true` is on. `enabled: false` with a majority close time is voting. `enabled: false` with no majority is off. A missing name stays unknown.
 
 `last-seen.json` records the mainnet column read at 2026-09-30T03:36:35Z. The route does not rewrite that file. Batch is whatever the live read says. This folder does not mark Batch enabled.
 

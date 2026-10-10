@@ -11,6 +11,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const hosts = require("../xrpl-hosts");
 const anchors = require("../director/anchors");
 const schema = require("../director/schema");
 const { rpcCall } = require("../director/snapshot");
@@ -48,7 +49,8 @@ const WATCHED = BANDS.A.concat(BANDS.B, BANDS.C);
 const HELP = `Usage: node src/frontier/probe-amendments.js [--root DIR] [--out FILE] [--xrpl-http URL]
 
 Reads server_info and feature from XRPL Testnet HTTP and writes lab/frontier/amendments.json.
-URL order: --xrpl-http, FOUNDRY_XRPL_HTTP, XRPL_HTTP, XRPL_RPC_URL, then the public Testnet default.
+URL order: --xrpl-http, FOUNDRY_XRPL_HTTP, XRPL_HTTP, XRPL_RPC_URL, then https://testnet.xrpl-labs.com.
+If that host times out, the probe retries https://s.altnet.rippletest.net:51234 once.
 Refuses network id other than 1. Does not sign. Does not invent an amendment hash.
 If RPC fails, exits non-zero and leaves any existing amendments.json untouched.`;
 
@@ -109,7 +111,7 @@ function publicRpc(raw) {
 }
 
 function resolveHttp(env, override) {
-  const raw = override || firstEnv(env, ["FOUNDRY_XRPL_HTTP", "XRPL_HTTP", "XRPL_RPC_URL"]) || anchors.XRPL_HTTP;
+  const raw = override || hosts.resolveHttp(env);
   return publicRpc(raw);
 }
 
@@ -247,11 +249,11 @@ async function run(argv, deps = {}) {
   const env = deps.env || process.env;
   const http = resolveHttp(env, args.xrplHttp);
   const outPath = args.out || path.join(args.root, OUT_REL);
-  const doc = await collect({
-    http,
+  const doc = await hosts.withFailover(http, async (url) => collect({
+    http: publicRpc(url),
     fetchImpl: deps.fetchImpl,
     now: deps.now,
-  });
+  }));
   writeAmendments(outPath, doc);
   if (!deps.silent) {
     const disabled = doc.amendments.filter((row) => row.enabled === false).map((row) => row.name);

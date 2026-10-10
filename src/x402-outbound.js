@@ -14,6 +14,7 @@
 const fs = require("fs");
 const path = require("path");
 const xrpl = require("xrpl");
+const hosts = require("./xrpl-hosts");
 const guard = require("./x402-outbound-guard");
 const record = require("./x402-outbound-record");
 const runtimePolicy = require("./runtime/policy");
@@ -166,7 +167,7 @@ async function main() {
   if (!args.dryRun && guard.envIsCi(process.env)) die("refusing to sign under CI");
   const resourceUrl = guard.assertResourceUrl(args.url);
   const call = guard.requestForUrl(resourceUrl);
-  const ws = guard.assertTestnetUrl(process.env.XRPL_WS_URL || guard.XRPL_WS);
+  const ws = guard.assertTestnetUrl(hosts.resolveWs(process.env));
 
   const first = await fetch(call.url, guard.fetchInit(call));
   const challengeHeader = first.headers.get("payment-required");
@@ -218,8 +219,14 @@ async function main() {
 
   if (repoOutboundPaidToday()) die("refusing a second outbound on this UTC day", 2);
 
+  const client = await hosts.openClient(ws, {
+    assertUrl: (url) => guard.assertTestnetUrl(url),
+  });
   const loaded = guard.loadW3SignerSeed(process.env);
-  if (!loaded.seed) die(missingSeedMessage(resourceUrl));
+  if (!loaded.seed) {
+    try { await client.disconnect(); } catch { /* already closed */ }
+    die(missingSeedMessage(resourceUrl));
+  }
 
   let wallet;
   try {
@@ -239,8 +246,6 @@ async function main() {
   if (extra.invoiceId) console.log("invoice", extra.invoiceId);
 
   const tx = guard.buildPaymentTx({ account: guard.W3_ADDRESS, accept });
-  const client = new xrpl.Client(ws);
-  await client.connect();
   try {
     if (client.networkID === 0) die("refusing NetworkID 0");
     const prepared = await client.autofill(tx);

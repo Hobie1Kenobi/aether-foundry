@@ -5,11 +5,11 @@
  */
 'use strict';
 const xrpl = require('xrpl');
+const hosts = require('./xrpl-hosts');
 const fs = require('fs');
 const crypto = require('crypto');
 
 const SECRETS = '/workspace/aether-foundry-secrets/.env';
-const WS = 'wss://s.altnet.rippletest.net:51233';
 const TAXON = 20260927;
 const README_URI =
   'https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/drip-pass/README.md';
@@ -86,8 +86,7 @@ function memoForLab(n, contentHash) {
 
 (async () => {
   const env = loadEnv(SECRETS);
-  const client = new xrpl.Client(WS);
-  await client.connect();
+  const client = await hosts.openClient(hosts.resolveWs(process.env));
   const w2 = xrpl.Wallet.fromSeed(env.W2_SEED);
   const w3 = xrpl.Wallet.fromSeed(env.W3_SEED);
   const buyer = xrpl.Wallet.fromSeed(env.BUYER_SEED);

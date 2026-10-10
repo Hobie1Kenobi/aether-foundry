@@ -14,6 +14,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const hosts = require("../xrpl-hosts");
 const anchors = require("../director/anchors");
 const probe = require("./probe-amendments");
 const shop = require("./credential-domain");
@@ -301,30 +302,31 @@ async function submitStep(step, ctx) {
   policy.assertSigningTx(step.tx);
   shop.assertNotHybrid(step.tx);
   shop.assertNotWalkIn(step.tx);
-  const seed = ctx.loadSeed(step.key_env);
-  if (!seed) throw shop.coded(`${step.key_env} is not loaded. Refusing to sign.`, "NO_SEED");
-  const xrpl = require("xrpl");
-  let wallet;
-  try {
-    wallet = xrpl.Wallet.fromSeed(seed);
-  } catch {
-    throw shop.coded(`${step.key_env} is not a usable seed`, "NO_SEED");
-  }
-  const signer = wallet.classicAddress || wallet.address;
-  if (signer === anchors.WALLETS.W0.address) throw shop.coded("refusing to sign as W0", "W0");
-  if (step.key_env === "W5_REGULAR_SEED") {
-    if (signer !== ctx.regular) throw shop.coded("W5_REGULAR_SEED address is not the regular key", "SIGNER");
-    if (step.tx.Account !== anchors.WALLETS.W5.address) throw shop.coded("W5 transaction Account is not W5", "ACCOUNT");
-  } else if (signer !== step.tx.Account) {
-    throw shop.coded(`${step.key_env} address is not the transaction Account`, "SIGNER");
-  }
-  policy.assertSigningRpc(anchors.XRPL_WS);
   const owned = !ctx.client;
-  const client = ctx.client || new xrpl.Client(anchors.XRPL_WS);
-  if (owned) await client.connect();
+  const client = ctx.client || await hosts.openClient(hosts.resolveWs(ctx.env), {
+    networkId: anchors.XRPL_NETWORK_ID,
+    assertUrl: (url) => policy.assertSigningRpc(url),
+  });
   try {
     if (client.networkID != null && Number(client.networkID) !== anchors.XRPL_NETWORK_ID) {
       throw shop.coded(`refusing network id ${client.networkID}`, "MAINNET");
+    }
+    const seed = ctx.loadSeed(step.key_env);
+    if (!seed) throw shop.coded(`${step.key_env} is not loaded. Refusing to sign.`, "NO_SEED");
+    const xrpl = require("xrpl");
+    let wallet;
+    try {
+      wallet = xrpl.Wallet.fromSeed(seed);
+    } catch {
+      throw shop.coded(`${step.key_env} is not a usable seed`, "NO_SEED");
+    }
+    const signer = wallet.classicAddress || wallet.address;
+    if (signer === anchors.WALLETS.W0.address) throw shop.coded("refusing to sign as W0", "W0");
+    if (step.key_env === "W5_REGULAR_SEED") {
+      if (signer !== ctx.regular) throw shop.coded("W5_REGULAR_SEED address is not the regular key", "SIGNER");
+      if (step.tx.Account !== anchors.WALLETS.W5.address) throw shop.coded("W5 transaction Account is not W5", "ACCOUNT");
+    } else if (signer !== step.tx.Account) {
+      throw shop.coded(`${step.key_env} address is not the transaction Account`, "SIGNER");
     }
     const prepared = await client.autofill(step.tx);
     if (prepared.NetworkID != null && Number(prepared.NetworkID) !== anchors.XRPL_NETWORK_ID) {

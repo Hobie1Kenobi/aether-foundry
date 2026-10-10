@@ -9,7 +9,7 @@ npm install
 npm test   # rippleEpoch unit tests
 ```
 
-WS: `wss://s.altnet.rippletest.net:51233`
+WS: `wss://testnet.xrpl-labs.com`
 
 ## Ripple Epoch (escrow elsewhere — not channel fields)
 

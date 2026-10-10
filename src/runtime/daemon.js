@@ -11,6 +11,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const hosts = require("../xrpl-hosts");
 const anchors = require("../director/anchors");
 const schema = require("../director/schema");
 const wake = require("../director/wake");
@@ -102,30 +103,32 @@ function archive(root, row) {
   fs.appendFileSync(file, `${JSON.stringify(clean)}\n`);
 }
 
+async function openLedgerClient(env) {
+  const ws = hosts.resolveWs(env);
+  policy.assertSigningRpc(ws);
+  return hosts.openClient(ws, {
+    networkId: anchors.XRPL_NETWORK_ID,
+    assertUrl: (url) => policy.assertSigningRpc(url),
+  });
+}
+
 async function signOnly(tx, keyEnv, regularAddress, env, loadSeed) {
   policy.assertLiveGate(env);
   policy.assertSigningTx(tx);
-  const seed = loadSeed(keyEnv);
-  if (!seed) throw policy.coded(`${keyEnv} is not loaded. Refusing to sign.`, "NO_SEED");
-  const xrpl = require("xrpl");
-  let wallet;
+  const client = await openLedgerClient(env);
+  let seed = "";
   try {
-    wallet = xrpl.Wallet.fromSeed(seed);
-  } catch {
-    throw policy.coded(`${keyEnv} is not a usable seed`, "NO_SEED");
-  }
-  const signer = wallet.classicAddress || wallet.address;
-  if (signer !== regularAddress) throw policy.coded(`${keyEnv} address is not the regular key`, "SIGNER");
-  policy.assertSigningRpc(anchors.XRPL_WS);
-  const client = new xrpl.Client(anchors.XRPL_WS);
-  try {
-    await client.connect();
-    if (client.networkID !== anchors.XRPL_NETWORK_ID) {
-      throw policy.coded(
-        `RPC did not prove XRPL Testnet network id (${client.networkID == null ? "missing" : client.networkID})`,
-        "MAINNET"
-      );
+    seed = loadSeed(keyEnv);
+    if (!seed) throw policy.coded(`${keyEnv} is not loaded. Refusing to sign.`, "NO_SEED");
+    const xrpl = require("xrpl");
+    let wallet;
+    try {
+      wallet = xrpl.Wallet.fromSeed(seed);
+    } catch {
+      throw policy.coded(`${keyEnv} is not a usable seed`, "NO_SEED");
     }
+    const signer = wallet.classicAddress || wallet.address;
+    if (signer !== regularAddress) throw policy.coded(`${keyEnv} address is not the regular key`, "SIGNER");
     const prepared = await client.autofill(tx);
     if (prepared.NetworkID === 0) throw policy.coded("refusing NetworkID 0", "MAINNET");
     policy.assertSigningTx(prepared);
@@ -152,17 +155,8 @@ async function signOnly(tx, keyEnv, regularAddress, env, loadSeed) {
 async function submitSignedBlob(txBlob, env) {
   policy.assertLiveGate(env);
   if (typeof txBlob !== "string" || !txBlob) throw policy.coded("refusing to submit an empty blob", "SUBMIT");
-  policy.assertSigningRpc(anchors.XRPL_WS);
-  const xrpl = require("xrpl");
-  const client = new xrpl.Client(anchors.XRPL_WS);
+  const client = await openLedgerClient(env);
   try {
-    await client.connect();
-    if (client.networkID !== anchors.XRPL_NETWORK_ID) {
-      throw policy.coded(
-        `RPC did not prove XRPL Testnet network id (${client.networkID == null ? "missing" : client.networkID})`,
-        "MAINNET"
-      );
-    }
     const submitted = await client.submitAndWait(txBlob);
     const result = (submitted && submitted.result) || submitted || {};
     const meta = result.meta || result.metaData || {};
@@ -187,27 +181,20 @@ async function submitSignedBlob(txBlob, env) {
 async function signAndSubmit(tx, keyEnv, regularAddress, env, loadSeed) {
   policy.assertLiveGate(env);
   policy.assertSigningTx(tx);
-  const seed = loadSeed(keyEnv);
-  if (!seed) throw policy.coded(`${keyEnv} is not loaded. Refusing to sign.`, "NO_SEED");
-  const xrpl = require("xrpl");
-  let wallet;
+  const client = await openLedgerClient(env);
+  let seed = "";
   try {
-    wallet = xrpl.Wallet.fromSeed(seed);
-  } catch {
-    throw policy.coded(`${keyEnv} is not a usable seed`, "NO_SEED");
-  }
-  const signer = wallet.classicAddress || wallet.address;
-  if (signer !== regularAddress) throw policy.coded(`${keyEnv} address is not the regular key`, "SIGNER");
-  policy.assertSigningRpc(anchors.XRPL_WS);
-  const client = new xrpl.Client(anchors.XRPL_WS);
-  await client.connect();
-  try {
-    if (client.networkID !== anchors.XRPL_NETWORK_ID) {
-      throw policy.coded(
-        `RPC did not prove XRPL Testnet network id (${client.networkID == null ? "missing" : client.networkID})`,
-        "MAINNET"
-      );
+    seed = loadSeed(keyEnv);
+    if (!seed) throw policy.coded(`${keyEnv} is not loaded. Refusing to sign.`, "NO_SEED");
+    const xrpl = require("xrpl");
+    let wallet;
+    try {
+      wallet = xrpl.Wallet.fromSeed(seed);
+    } catch {
+      throw policy.coded(`${keyEnv} is not a usable seed`, "NO_SEED");
     }
+    const signer = wallet.classicAddress || wallet.address;
+    if (signer !== regularAddress) throw policy.coded(`${keyEnv} address is not the regular key`, "SIGNER");
     const prepared = await client.autofill(tx);
     if (prepared.NetworkID === 0) throw policy.coded("refusing NetworkID 0", "MAINNET");
     policy.assertSigningTx(prepared);
@@ -358,17 +345,7 @@ async function pass(opts) {
 }
 
 async function subscribe(tick) {
-  const xrpl = require("xrpl");
-  policy.assertSigningRpc(anchors.XRPL_WS);
-  const client = new xrpl.Client(anchors.XRPL_WS);
-  await client.connect();
-  if (client.networkID !== anchors.XRPL_NETWORK_ID) {
-    await client.disconnect();
-    throw policy.coded(
-      `RPC did not prove XRPL Testnet network id (${client.networkID == null ? "missing" : client.networkID})`,
-      "MAINNET"
-    );
-  }
+  const client = await openLedgerClient(process.env);
   await client.request({
     command: "subscribe",
     accounts: [

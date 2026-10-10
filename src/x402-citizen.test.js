@@ -502,9 +502,15 @@ describe("W3 regular key signer", () => {
   it("refuses a regular seed that is not the known regular key, and a master seed that is not W3", async () => {
     const stranger = xrpl.Wallet.generate();
     let connects = 0;
+    let submits = 0;
     const connect = async () => {
       connects += 1;
-      throw new Error("should not connect");
+      return fakeClient({
+        submitAndWait() {
+          submits += 1;
+          throw new Error("must not submit");
+        },
+      });
     };
     await assert.rejects(
       () =>
@@ -539,7 +545,8 @@ describe("W3 regular key signer", () => {
         }),
       (error) => error.code === "SEED"
     );
-    assert.equal(connects, 0);
+    assert.equal(connects, 3);
+    assert.equal(submits, 0);
     const master = await citizen.run({
       args: citizen.parseArgs(["--live", "--url", "https://foreign.example/sku"]),
       env: liveEnv({ W3_SEED: "master-placeholder" }),

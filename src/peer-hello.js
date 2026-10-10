@@ -432,15 +432,18 @@ async function run(argv, io = {}) {
       const fixturePath = path.resolve(args.fixture);
       entries = loadFixture(fixturePath);
     } else {
-      const rpc = assertTestnetUrl(args.rpc || env.FOUNDRY_XRPL_HTTP || XRPL_HTTP);
+      const preferred = assertTestnetUrl(args.rpc || hosts.resolveHttp(env));
       const fetchImpl = io.fetchImpl || globalThis.fetch;
       if (typeof fetchImpl !== "function") throw new Error("no fetch implementation");
-      const info = await rpcCall(rpc, "server_info", {}, fetchImpl);
-      const networkId = info.info && info.info.network_id;
-      assertNetworkId(networkId);
-      const page = await rpcCall(rpc, "account_tx", accountTxParams(args.limit), fetchImpl);
-      if (page.validated === false) throw new Error("account_tx was not validated");
-      entries = Array.isArray(page.transactions) ? page.transactions : [];
+      entries = await hosts.withFailover(preferred, async (url) => {
+        const rpc = assertTestnetUrl(url);
+        const info = await rpcCall(rpc, "server_info", {}, fetchImpl);
+        const networkId = info.info && info.info.network_id;
+        assertNetworkId(networkId);
+        const page = await rpcCall(rpc, "account_tx", accountTxParams(args.limit), fetchImpl);
+        if (page.validated === false) throw new Error("account_tx was not validated");
+        return Array.isArray(page.transactions) ? page.transactions : [];
+      });
     }
   } catch (err) {
     error(err.message || String(err));

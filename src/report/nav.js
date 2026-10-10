@@ -6,11 +6,11 @@
  * Usage: npm run report:nav
  */
 const xrpl = require('xrpl');
+const hosts = require('../xrpl-hosts');
 const fs = require('fs');
 const path = require('path');
 
 const SECRETS = process.env.AETHER_SECRETS || '/workspace/aether-foundry-secrets/.env';
-const WS = process.env.XRPL_WS_URL || 'wss://s.altnet.rippletest.net:51233';
 const AETH = '4145544800000000000000000000000000000000';
 const AMM = 'r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w';
 
@@ -44,8 +44,7 @@ function addr(env, key, fallback) {
     { id: 'AMM', role: 'pool', address: AMM },
   ];
 
-  const client = new xrpl.Client(WS);
-  await client.connect();
+  const client = await hosts.openClient(hosts.resolveWs(process.env));
 
   const feat = await client.request({ command: 'feature' });
   const features = feat.result.features || {};

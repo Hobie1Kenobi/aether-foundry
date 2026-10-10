@@ -335,7 +335,7 @@ describe("daemon dry-run", () => {
     const code = await daemon.pass({
       argv: ["--dry-run", "--once"],
       env: { CI: "true", W5_REGULAR_SEED: "present-not-used", AETHER_SECRETS: path.join(os.tmpdir(), "missing-secrets.env") },
-      now: new Date("2026-10-09T06:00:00.000Z"),
+      now: new Date("2026-10-09T10:00:00.000Z"),
       loadSeed: () => {
         reads += 1;
         return "present-not-used";

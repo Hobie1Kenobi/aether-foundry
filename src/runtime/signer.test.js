@@ -354,19 +354,19 @@ function rpcResult(result, status = 200) {
 }
 
 describe("signer RPC fallback", () => {
-  it("proves network id 1 on the labs host when rippletest times out", async () => {
+  it("proves network id 1 on Ripple altnet when XRPL Labs times out", async () => {
     const seen = [];
     const out = await signer.health({
       env: { FOUNDRY_AGENT_SIGN: "yes" },
       fetchImpl: async (url) => {
         seen.push(String(url));
-        if (String(url).includes("rippletest.net")) throw new Error("fetch failed");
+        if (String(url).includes("xrpl-labs.com")) throw new Error("fetch failed");
         return rpcResult({ status: "success", info: { network_id: 1 } });
       },
     });
     assert.equal(out.status, 200);
     assert.equal(out.body.network_id, 1);
-    assert.deepEqual(seen, [hosts.PRIMARY_HTTP, hosts.LABS_HTTP]);
+    assert.deepEqual(seen, [hosts.PRIMARY_HTTP, hosts.FALLBACK_HTTP]);
   });
 
   it("uses XRPL_HTTP and XRPL_WS_URL when they name the labs host", async () => {
@@ -423,7 +423,7 @@ describe("signer RPC fallback", () => {
         env: {},
         fetchImpl: async (url) => {
           called += 1;
-          if (String(url).includes("rippletest.net")) throw new Error("fetch failed");
+          if (String(url).includes("xrpl-labs.com")) throw new Error("fetch failed");
           return rpcResult({ status: "success", info: { network_id: 0 } });
         },
       }),
@@ -438,7 +438,7 @@ describe("signer RPC fallback", () => {
     await assert.rejects(
       () => signer.connectForSign(hosts.PRIMARY_WS, wallet, (url) => ({
         async connect() {
-          if (String(url).includes("rippletest.net")) throw new Error("fetch failed");
+          if (String(url).includes("xrpl-labs.com")) throw new Error("fetch failed");
         },
         async request() {
           return { result: { info: { network_id: 0 } } };
@@ -454,14 +454,14 @@ describe("signer RPC fallback", () => {
 
     const opened = await signer.connectForSign(hosts.PRIMARY_WS, wallet, (url) => ({
       async connect() {
-        if (String(url).includes("rippletest.net")) throw new Error("timed out");
+        if (String(url).includes("xrpl-labs.com")) throw new Error("timed out");
       },
       async request() {
         return { result: { info: { network_id: 1, validated_ledger: { reserve_base_xrp: "1", reserve_inc_xrp: "0.2" } } } };
       },
       async disconnect() {},
     }));
-    assert.equal(opened.url, hosts.LABS_WS);
+    assert.equal(opened.url, hosts.FALLBACK_WS);
     assert.equal(opened.networkId, 1);
     await opened.client.disconnect();
 
@@ -491,7 +491,7 @@ describe("signer RPC fallback", () => {
         networkId: null,
         account: null,
         fetchImpl: async (url) => {
-          if (String(url).includes("rippletest.net")) throw new Error("fetch failed");
+          if (String(url).includes("xrpl-labs.com")) throw new Error("fetch failed");
           return rpcResult({ status: "success", info: { network_id: 21337 } });
         },
         clientFactory() {

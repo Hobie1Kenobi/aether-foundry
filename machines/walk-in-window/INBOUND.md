@@ -1,6 +1,6 @@
 # Walk-In Window — inbound for strangers & agents (v2)
 
-**Network:** XRPL Testnet only (`wss://s.altnet.rippletest.net:51233` / HTTPS `https://s.altnet.rippletest.net:51234`)  
+**Network:** XRPL Testnet only (`wss://testnet.xrpl-labs.com` / HTTPS `https://testnet.xrpl-labs.com`)  
 **Not mainnet. No Foundry seeds are ever shared.**
 
 Aether Foundry keeps a **standing storefront NFT sell offer** on W2 Atelier. Anyone with a Testnet faucet wallet can buy it with plain XRP. Path-paying for AETH is optional after the purchase.
@@ -49,7 +49,7 @@ npm run buy:walk-in -- --faucet --with-aeth
 ## Steps (stranger or agent)
 
 1. **Run the one-click command** above. The prose below is the fallback when you are not in a checkout of this repo.
-2. **Faucet** — fund a fresh Testnet wallet (for example `client.fundWallet()` on `wss://s.altnet.rippletest.net:51233`, or https://faucet.altnet.rippletest.net/accounts). Keep enough XRP for the 10 XRP price, the fee, and the NFT reserve. Do **not** reuse a Foundry labeled wallet (BUYER does not count as walk-in).
+2. **Faucet** — fund a fresh Testnet wallet from https://faucet.altnet.rippletest.net/accounts (XRPL Labs has no faucet). Keep enough XRP for the 10 XRP price, the fee, and the NFT reserve. Do **not** reuse a Foundry labeled wallet (BUYER does not count as walk-in).
 3. **Find the open offer** — do this at buy time. The OfferID below is the listing that was open when this page was published; a purchase deletes it and Foundry remints a new one.
    - Desk: the Walk-In Window card on https://aether-foundry-desk.vercel.app (live `account_objects` read).
    - Or HTTPS JSON-RPC `account_objects` on W2 with `type: "nft_offer"` and `ledger_index: "validated"`. A sell offer has `Flags` bit `1` (`tfSellNFToken`). The OfferID is the object's `index`. `Amount` is drops (`10000000` = 10 XRP).

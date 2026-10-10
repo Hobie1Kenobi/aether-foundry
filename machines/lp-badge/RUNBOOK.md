@@ -11,7 +11,7 @@ npm run report:nav   # confirm W1 LP balance + AMM
 node src/lp-badge-session.js
 ```
 
-WS: `wss://s.altnet.rippletest.net:51233`
+WS: `wss://testnet.xrpl-labs.com`
 
 ## Live checklist (completed 2026-09-27-7)
 

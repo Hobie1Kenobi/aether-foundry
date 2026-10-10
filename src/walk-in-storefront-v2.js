@@ -13,6 +13,7 @@
 const fs = require('fs');
 const path = require('path');
 const xrpl = require('xrpl');
+const hosts = require('./xrpl-hosts');
 const pub = require('./walk-in-public');
 
 function die(message) {
@@ -103,8 +104,8 @@ async function remint(io = {}) {
     throw new Error('refusing to load seeds or sign in CI');
   }
 
-  const ws = pub.assertTestnetUrl(envVars.XRPL_WS_URL || pub.XRPL_WS);
-  const http = pub.assertTestnetUrl(envVars.XRPL_HTTP || pub.XRPL_HTTP);
+  const ws = pub.assertTestnetUrl(hosts.resolveWs(envVars));
+  const http = pub.assertTestnetUrl(hosts.resolveHttp(envVars));
 
   const before = await poll({ rpc: http });
   if (!before.ok) {
@@ -117,6 +118,8 @@ async function remint(io = {}) {
     );
   }
 
+  const client = await hosts.openClient(ws, { assertUrl: (url) => pub.assertTestnetUrl(url) });
+  try {
   const secretsFile = envVars.AETHER_SECRETS || pub.SECRETS_PATH;
   if (!exists(secretsFile)) {
     throw new Error(
@@ -141,11 +144,8 @@ async function remint(io = {}) {
   }
 
   const root = io.root || path.resolve(__dirname, '..');
-  const client = new xrpl.Client(ws);
-  await client.connect();
   let nftokenId = null;
   let mintHash = null;
-  try {
     const mintTx = {
       TransactionType: 'NFTokenMint',
       Account: address,

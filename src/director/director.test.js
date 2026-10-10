@@ -263,7 +263,12 @@ describe("director schema", () => {
     assert.equal(schema.validateState(labs, { root: ROOT }).networks.xrpl_testnet.http, hosts.LABS_HTTP);
     const mixed = schema.fixtureState();
     mixed.networks.xrpl_testnet.http = hosts.LABS_HTTP;
+    mixed.networks.xrpl_testnet.ws = hosts.ALTNET_WS;
     assert.throws(() => schema.validateState(mixed), /endpoint drifted/);
+    const altnet = schema.fixtureState();
+    altnet.networks.xrpl_testnet.http = hosts.ALTNET_HTTP;
+    altnet.networks.xrpl_testnet.ws = hosts.ALTNET_WS;
+    assert.equal(schema.validateState(altnet, { root: ROOT }).networks.xrpl_testnet.http, hosts.ALTNET_HTTP);
     const ident = schema.fixtureState();
     ident.networks.xrpl_testnet.network_id = 0;
     assert.throws(() => schema.validateState(ident), /network id 0/);
@@ -486,14 +491,14 @@ describe("director snapshot", () => {
     assert.equal(fs.existsSync(missing), false);
   });
 
-  it("retries XRPL Labs when rippletest times out and still refuses a wrong network id", async () => {
+  it("retries Ripple altnet when XRPL Labs times out and still refuses a wrong network id", async () => {
     const file = tempFile();
     const seen = [];
     const code = await snapshot.run(["node", "snapshot", "--root", ROOT, "--state", file], {
       env: {},
       fetchImpl: async (url, init) => {
         seen.push(String(url));
-        if (String(url).includes("s.altnet.rippletest.net")) {
+        if (String(url).includes("testnet.xrpl-labs.com")) {
           throw new Error("The operation was aborted due to timeout");
         }
         return mockFetch()(url, init);
@@ -503,12 +508,12 @@ describe("director snapshot", () => {
     });
     assert.equal(code, 0);
     const written = JSON.parse(fs.readFileSync(file, "utf8"));
-    assert.equal(written.networks.xrpl_testnet.http, hosts.LABS_HTTP);
-    assert.equal(written.networks.xrpl_testnet.ws, hosts.LABS_WS);
+    assert.equal(written.networks.xrpl_testnet.http, hosts.ALTNET_HTTP);
+    assert.equal(written.networks.xrpl_testnet.ws, hosts.ALTNET_WS);
     assert.equal(written.networks.xrpl_testnet.network_id, 1);
     assert.equal(seen.includes(hosts.PRIMARY_HTTP), true);
-    assert.equal(seen.includes(hosts.LABS_HTTP), true);
-    assert.equal(seen.filter((url) => url === hosts.LABS_HTTP).length > 0, true);
+    assert.equal(seen.includes(hosts.FALLBACK_HTTP), true);
+    assert.equal(seen.filter((url) => url === hosts.FALLBACK_HTTP).length > 0, true);
 
     const selected = tempFile();
     const selectedSeen = [];
@@ -526,12 +531,12 @@ describe("director snapshot", () => {
     assert.equal(selectedSeen.some((url) => url.includes("rippletest.net")), false);
 
     const wrong = tempFile();
-    let labsCalls = 0;
+    let fallbackCalls = 0;
     await assert.rejects(
       () => snapshot.run(["node", "snapshot", "--root", ROOT, "--state", wrong], {
         env: {},
         fetchImpl: async (url, init) => {
-          if (String(url).includes("xrpl-labs")) labsCalls += 1;
+          if (String(url).includes("rippletest.net")) fallbackCalls += 1;
           const base = mockFetch();
           if (init && init.method === "POST" && JSON.parse(init.body).method === "server_info" && !String(url).includes("xahau")) {
             return jsonResponse({ info: { network_id: 0, build_version: "3.4.1" } });
@@ -542,7 +547,7 @@ describe("director snapshot", () => {
       }),
       /network id 0/
     );
-    assert.equal(labsCalls, 0);
+    assert.equal(fallbackCalls, 0);
     assert.equal(fs.existsSync(wrong), false);
   });
 });

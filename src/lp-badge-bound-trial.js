@@ -13,6 +13,7 @@
 const fs = require("fs");
 const path = require("path");
 const xrpl = require("xrpl");
+const hosts = require("./xrpl-hosts");
 const guard = require("./lp-badge-bound-guard");
 
 const ROOT = path.resolve(__dirname, "..");
@@ -261,9 +262,11 @@ function expectEngine(view, wanted, label) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const ws = guard.assertXrplTestnetUrl(process.env.XRPL_WS_URL || guard.XRPL_WS);
-  const client = new xrpl.Client(ws);
-  await client.connect();
+  const ws = guard.assertXrplTestnetUrl(hosts.resolveWs(process.env));
+  const client = await hosts.openClient(ws, {
+    networkId: 1,
+    assertUrl: (url) => guard.assertXrplTestnetUrl(url),
+  });
   try {
     const info = await client.request({ command: "server_info" });
     const networkId = info.result.info.network_id;

@@ -98,7 +98,7 @@ npm run frontier:token-escrow-finish -- \
 After a live create, the escrow index from the JSON:
 
 ```bash
-curl -sS https://s.altnet.rippletest.net:51234 \
+curl -sS https://testnet.xrpl-labs.com \
   -H 'content-type: application/json' \
   -d '{"method":"ledger_entry","params":[{"index":"<64 hex escrow index>","ledger_index":"validated"}]}'
 ```

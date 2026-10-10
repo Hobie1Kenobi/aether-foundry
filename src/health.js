@@ -3,11 +3,11 @@
  * Health check W0–W4 on XRPL Testnet. No seeds printed.
  */
 const xrpl = require('xrpl');
+const hosts = require('./xrpl-hosts');
 const fs = require('fs');
 const path = require('path');
 
 const SECRETS = '/workspace/aether-foundry-secrets/.env';
-const WS = 'wss://s.altnet.rippletest.net:51233';
 
 function loadEnv(p) {
   const out = {};
@@ -28,8 +28,7 @@ const WALLETS = [
 ];
 
 (async () => {
-  const client = new xrpl.Client(WS);
-  await client.connect();
+  const client = await hosts.openClient(hosts.resolveWs(process.env));
   const ss = await client.request({ command: 'server_state' });
   const validated = ss.result.state.validated_ledger;
   const baseReserve = Number(xrpl.dropsToXrp(validated.reserve_base));
@@ -70,7 +69,7 @@ const WALLETS = [
     const w = WALLETS.find(x => x.id === row.id);
     console.log(`Funding stranded ${row.id} via faucet...`);
     try {
-      const funded = await client.fundWallet(xrpl.Wallet.fromSeed(w.seed));
+      const funded = await hosts.fundFromRippleFaucet(xrpl.Wallet.fromSeed(w.seed));
       console.log(`Faucet OK ${row.id} address=${funded.wallet.address} balance≈${funded.balance}`);
       // re-check
       const ai = await client.request({ command: 'account_info', account: w.address, ledger_index: 'validated' });

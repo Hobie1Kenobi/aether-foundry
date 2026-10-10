@@ -6,10 +6,10 @@
  */
 'use strict';
 const xrpl = require('xrpl');
+const hosts = require('./xrpl-hosts');
 const fs = require('fs');
 
 const SECRETS = '/workspace/aether-foundry-secrets/.env';
-const WS = 'wss://s.altnet.rippletest.net:51233';
 const TAXON = 20260927;
 const AETH = '4145544800000000000000000000000000000000';
 const AMM = 'r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w';
@@ -102,8 +102,7 @@ function safeResult(res) {
 
 (async () => {
   const env = loadEnv(SECRETS);
-  const client = new xrpl.Client(WS);
-  await client.connect();
+  const client = await hosts.openClient(hosts.resolveWs(process.env));
 
   const w0 = xrpl.Wallet.fromSeed(env.W0_SEED);
   const w2 = xrpl.Wallet.fromSeed(env.W2_SEED);
@@ -124,14 +123,14 @@ function safeResult(res) {
 
   // ========== 1a. Fund NEW STRANGER via faucet ==========
   {
-    const funded = await client.fundWallet();
+    const funded = await hosts.fundFromRippleFaucet();
     const stranger = funded.wallet;
     // Never log seed
     appendSecret('STRANGER_SEED', stranger.seed);
     appendSecret('STRANGER_ADDRESS', stranger.classicAddress);
     log.stranger.address = stranger.classicAddress;
     log.stranger.balance_xrp = funded.balance;
-    log.stranger.funded_via = 'client.fundWallet() faucet';
+    log.stranger.funded_via = 'hosts.fundFromRippleFaucet() faucet';
     console.log('STRANGER_ADDRESS', stranger.classicAddress);
     console.log('STRANGER_BALANCE_XRP', funded.balance);
   }

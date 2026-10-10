@@ -1,7 +1,7 @@
 # Machine — Oracle Mid-Ticket (Foundry Night B)
 
 **Status:** trialled (session 2026-09-27-6) — see RESULTS.md. The ledger attestation for this quote moved to [`machines/native-price-oracle/`](../native-price-oracle/) (`OracleSet` on W5). This pack's NFT URI is still operator text.  
-**Network:** XRPL Testnet only (`wss://s.altnet.rippletest.net:51233`)  
+**Network:** XRPL Testnet only (`wss://testnet.xrpl-labs.com`)  
 **Thesis:** A *price oracle* built from **AMM mid + CLOB mid**, frozen into a work-ticket quote (XRP or AETH labor units) so Atelier can sell tickets at an honest, reproducible FX without a third-party feed.
 
 ```mermaid

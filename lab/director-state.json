@@ -9,8 +9,8 @@
     "xrpl_testnet": {
       "label": "XRPL Testnet",
       "network_id": 1,
-      "http": "https://s.altnet.rippletest.net:51234",
-      "ws": "wss://s.altnet.rippletest.net:51233",
+      "http": "https://testnet.xrpl-labs.com",
+      "ws": "wss://testnet.xrpl-labs.com",
       "explorer": "https://testnet.xrpl.org",
       "validated_ledger_index": 21398766,
       "reserve_base_drops": "1000000",

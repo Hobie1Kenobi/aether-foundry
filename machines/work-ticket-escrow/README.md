@@ -1,7 +1,7 @@
 # Machine #1 — Work-Ticket Escrow
 
 **Status:** v0 live on XRPL Testnet (2026-09-27 session-2)  
-**Network:** XRPL Testnet only (`wss://s.altnet.rippletest.net:51233`)  
+**Network:** XRPL Testnet only (`wss://testnet.xrpl-labs.com`)  
 **Thesis:** Escrow XRP work payment to W4 against an Atelier Artifact NFT deliverable; release on time-lock finish or return on cancel.
 
 ```mermaid

@@ -5,7 +5,7 @@
 
 W3 buying these routes is circular. The outbound payer refuses this payTo. See `machines/x402-outbound`.  
 **Desk:** https://aether-foundry-desk.vercel.app (Vercel project `aether-foundry-desk`, root `web`)  
-**RPC:** https://s.altnet.rippletest.net:51234
+**RPC:** https://testnet.xrpl-labs.com
 
 The desk stays seedless. It does not call `Wallet.sign` and it does not submit a signed blob. A buyer submits an exact XRP Payment on Testnet, then retries the HTTP call with proof. The desk reads that Payment from the public RPC and, if it matches, returns the JSON.
 

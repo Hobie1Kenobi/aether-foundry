@@ -181,8 +181,8 @@ function assertWallet(id, row, network) {
 }
 
 function approvedXrplEndpoints(http, ws) {
-  if (http === anchors.XRPL_HTTP && ws === anchors.XRPL_WS) return true;
-  return http === hosts.LABS_HTTP && ws === hosts.LABS_WS;
+  if (http === hosts.PRIMARY_HTTP && ws === hosts.PRIMARY_WS) return true;
+  return http === hosts.FALLBACK_HTTP && ws === hosts.FALLBACK_WS;
 }
 
 function assertNetwork(net, id, http, ws) {

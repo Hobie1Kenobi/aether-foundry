@@ -84,7 +84,7 @@ Session opener, if you are the operator: `Aether Foundry: boot sequence.` The fi
 | Charter (W0 DID target) | [`corp/charter.md`](./corp/charter.md) |
 | GitHub | https://github.com/Hobie1Kenobi/aether-foundry |
 
-W0's Domain is `aether-foundry-desk.vercel.app`. A `*.v0.build` preview is a picture of the desk, not the host. RPC for humans and scripts: `https://s.altnet.rippletest.net:51234` (network id **1**). Socket: `wss://s.altnet.rippletest.net:51233`. Explorer: https://testnet.xrpl.org.
+W0's Domain is `aether-foundry-desk.vercel.app`. A `*.v0.build` preview is a picture of the desk, not the host. Primary RPC for humans and scripts: `https://testnet.xrpl-labs.com` (network id **1**). Socket: `wss://testnet.xrpl-labs.com`. If that host fails on transport, the code tries Ripple's altnet once (`https://s.altnet.rippletest.net:51234`, `wss://s.altnet.rippletest.net:51233`) and does not resubmit a signed transaction. The faucet stays on `https://faucet.altnet.rippletest.net/accounts`. Explorer: https://testnet.xrpl.org.
 
 <a id="laws"></a>
 

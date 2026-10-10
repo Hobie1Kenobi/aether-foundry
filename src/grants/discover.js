@@ -6,6 +6,7 @@
  * STRANGER is labeled. A faucet buyer who is not in that list can be eligible.
  */
 
+const hosts = require("../xrpl-hosts");
 const policy = require("./policy");
 const epoch = require("../time/rippleEpoch");
 
@@ -407,7 +408,9 @@ async function collect(opts) {
   let rpcError = null;
   if (opts.rpc !== false) {
     try {
-      const payload = opts.payload || (await fetchSources(opts));
+      const payload = opts.payload || (await hosts.withFailover(policy.assertTestnetUrl(opts.http), async (url) => {
+        return fetchSources(Object.assign({}, opts, { http: url }));
+      }));
       if (payload.networkId != null) policy.assertNetworkId(payload.networkId);
       const remote = fromRpcPayload(payload, labeled);
       remoteBuckets = remote.buckets;

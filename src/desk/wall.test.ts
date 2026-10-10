@@ -321,7 +321,7 @@ test("wall merge reads mainnet feature flags and refuses a bad network id", asyn
           },
         });
       }
-      if (url.hostname === "s.altnet.rippletest.net") {
+      if (url.hostname === "testnet.xrpl-labs.com") {
         return rpcResponse({
           info: { network_id: 1, build_version: "3.4.1", validated_ledger: { seq: 9 } },
         });
@@ -990,7 +990,7 @@ test("mainnet account read refreshes allowlisted cards and fails soft", async ()
         }
         return rpcResponse(accountInfoResult(String(account), "1500000", 42));
       }
-      if (url.hostname === "s.altnet.rippletest.net" && method === "server_info") {
+      if (url.hostname === "testnet.xrpl-labs.com" && method === "server_info") {
         return rpcResponse({
           info: { network_id: 1, build_version: "3.4.1", validated_ledger: { seq: 9 } },
         });
@@ -1016,7 +1016,7 @@ test("mainnet account read refreshes allowlisted cards and fails soft", async ()
   const asked = calls.filter((call) => call.method === "account_info").map((call) => call.account);
   assert.deepEqual(asked.slice().sort(), [...expectedAccounts.values()].slice().sort());
   assert.equal(calls.some((call) => call.method === "submit" || call.method === "sign"), false);
-  assert.equal(calls.some((call) => call.host !== "xrplcluster.com" && call.host !== "s.altnet.rippletest.net"), false);
+  assert.equal(calls.some((call) => call.host !== "xrplcluster.com" && call.host !== "testnet.xrpl-labs.com"), false);
   for (const id of LIVE_IDS) {
     const row = payload.programs.find((item) => item.id === id);
     const prior = curated.find((item) => item.id === id);

@@ -1,6 +1,6 @@
 # Grants flywheel — W6 pays users of Foundry artifacts
 
-**Network:** XRPL Testnet only (`https://s.altnet.rippletest.net:51234`, network id 1). Not mainnet. Not Xahau.  
+**Network:** XRPL Testnet only (`https://testnet.xrpl-labs.com`, network id 1). Not mainnet. Not Xahau.  
 **Payer:** W6 GRANTS `rfnqxYQWKsVGFuWLjky41puXHJkT2v8yTf`  
 **Experiment:** `grants-flywheel`  
 **Purpose memo:** `aether-grant`

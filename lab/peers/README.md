@@ -19,7 +19,7 @@ Rules:
 
 ## Peer hello watcher
 
-`npm run peers:hello` reads one validated `account_tx` page for W3 `rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw` on `https://s.altnet.rippletest.net:51234` (network id 1). A Payment to W3 counts when MemoType is `aether-peer-hello`, or when a memo `purpose` equals that string and another memo holds the JSON body. Each new row in `hellos.jsonl` has `network`, `account`, `hash`, `ledger`, `memo` (`MemoType`, `MemoFormat`, `MemoData`, `repo`, `x402`), and `seen_at`.
+`npm run peers:hello` reads one validated `account_tx` page for W3 `rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw` on `https://testnet.xrpl-labs.com` (network id 1). A Payment to W3 counts when MemoType is `aether-peer-hello`, or when a memo `purpose` equals that string and another memo holds the JSON body. Each new row in `hellos.jsonl` has `network`, `account`, `hash`, `ledger`, `memo` (`MemoType`, `MemoFormat`, `MemoData`, `repo`, `x402`), and `seen_at`.
 
 The watcher does not sign, pay, or reply. It does not edit `xrpl-agents.json` or `candidates.json`. Re-scans skip hashes already in the log. The page is capped (`--limit`, default 100, max 200) and the request does not send a marker.
 

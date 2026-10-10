@@ -391,6 +391,26 @@ function readHook(objects, packHash) {
   return { ok: true, matches: hashes[0] === pack };
 }
 
+const LABS_HTTP_HOST = "testnet.xrpl-labs.com";
+const ALTNET_HTTP = "https://s.altnet.rippletest.net:51234";
+
+function testnetFallback(raw) {
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:") return null;
+    if (url.hostname.toLowerCase() !== LABS_HTTP_HOST) return null;
+    return ALTNET_HTTP;
+  } catch {
+    return null;
+  }
+}
+
+function isTransportError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/refusing|network id/i.test(message)) return false;
+  return /fetch failed|timed out|timeout|aborted|ECONNREFUSED|ENOTFOUND|ECONNRESET|ETIMEDOUT|socket hang up|HTTP 5\d\d|non-JSON/i.test(message);
+}
+
 async function rpc(fetchImpl, url, method, params) {
   const res = await fetchImpl(url, {
     method: "POST",
@@ -411,6 +431,17 @@ async function rpc(fetchImpl, url, method, params) {
     throw new Error(`${method} failed: ${detail}`);
   }
   return result;
+}
+
+async function rpcPreferred(fetchImpl, urlBox, method, params) {
+  try {
+    return await rpc(fetchImpl, urlBox.url, method, params);
+  } catch (error) {
+    const next = testnetFallback(urlBox.url);
+    if (!next || !isTransportError(error)) throw error;
+    urlBox.url = next;
+    return await rpc(fetchImpl, urlBox.url, method, params);
+  }
 }
 
 async function getText(fetchImpl, url) {
@@ -494,13 +525,14 @@ function ledgerSeq(state) {
   return Number.isInteger(seq) && seq > 0 ? seq : null;
 }
 
-async function accountObjects(fetchImpl, url, params) {
+async function accountObjects(fetchImpl, urlOrBox, params) {
+  const urlBox = typeof urlOrBox === "string" ? { url: urlOrBox } : urlOrBox;
   const objects = [];
   let marker;
   for (let page = 0; page < 4; page += 1) {
     const request = Object.assign({}, params);
     if (marker !== undefined) request.marker = marker;
-    const result = await rpc(fetchImpl, url, "account_objects", request);
+    const result = await rpcPreferred(fetchImpl, urlBox, "account_objects", request);
     objects.push(...(result.account_objects || []));
     if (result.marker == null) return objects;
     marker = result.marker;
@@ -592,8 +624,9 @@ async function loadXrpl(opts, errors) {
     errors.push(checked.error);
     return { network: null, ledger_index: null, walk_in: baseStatus().walk_in, amm: baseStatus().amm, batch: null, oracle_id: null, oracle: emptyOracle() };
   }
+  const urlBox = { url: checked.url };
   try {
-    const info = await rpc(opts.fetch, checked.url, "server_info", {});
+    const info = await rpcPreferred(opts.fetch, urlBox, "server_info", {});
     const id = networkIdOf(info);
     if (id !== 1) {
       errors.push(id == null ? "RPC did not prove XRPL network id" : `refusing network id ${id}`);
@@ -613,7 +646,7 @@ async function loadXrpl(opts, errors) {
     oracle: emptyOracle(),
   };
   try {
-    const state = await rpc(opts.fetch, checked.url, "server_state", {});
+    const state = await rpcPreferred(opts.fetch, urlBox, "server_state", {});
     const seq = ledgerSeq(state);
     if (seq == null) errors.push("server_state omitted validated_ledger.seq");
     else out.ledger_index = seq;
@@ -621,7 +654,7 @@ async function loadXrpl(opts, errors) {
     errors.push(error instanceof Error ? error.message : String(error));
   }
   try {
-    const objects = await accountObjects(opts.fetch, checked.url, {
+    const objects = await accountObjects(opts.fetch, urlBox, {
       account: opts.w2,
       type: "nft_offer",
       ledger_index: "validated",
@@ -640,7 +673,7 @@ async function loadXrpl(opts, errors) {
     errors.push(error instanceof Error ? error.message : String(error));
   }
   try {
-    const amm = await rpc(opts.fetch, checked.url, "amm_info", {
+    const amm = await rpcPreferred(opts.fetch, urlBox, "amm_info", {
       asset: { currency: opts.aethCurrency, issuer: opts.aethIssuer },
       asset2: { currency: "XRP" },
       ledger_index: "validated",
@@ -654,7 +687,7 @@ async function loadXrpl(opts, errors) {
   if (opts.w5 && ADDRESS_RE.test(opts.w5)) {
     const documentId = opts.oracleDocumentId == null ? 1 : opts.oracleDocumentId;
     try {
-      const entry = await rpc(opts.fetch, checked.url, "ledger_entry", {
+      const entry = await rpcPreferred(opts.fetch, urlBox, "ledger_entry", {
         oracle: { account: opts.w5, oracle_document_id: documentId },
         ledger_index: "validated",
       });
@@ -670,7 +703,7 @@ async function loadXrpl(opts, errors) {
     }
   }
   try {
-    const feature = await rpc(opts.fetch, checked.url, "feature", {});
+    const feature = await rpcPreferred(opts.fetch, urlBox, "feature", {});
     const batch = readBatch(feature);
     if (!batch.ok) errors.push(batch.error);
     else out.batch = batch.atomic_enabled;

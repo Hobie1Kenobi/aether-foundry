@@ -1,7 +1,7 @@
 {
   "network": "XRPL Testnet",
   "network_id": 1,
-  "ws": "wss://s.altnet.rippletest.net:51233",
+  "ws": "wss://testnet.xrpl-labs.com",
   "note": "Public addresses only. Seeds are not in this file. These accounts are not W1 or W2.",
   "xrpl_twins": {
     "W1_MARKET": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",

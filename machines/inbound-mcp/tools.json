@@ -190,7 +190,7 @@
       },
       "binding": {
         "mode": "http",
-        "rpc": "https://s.altnet.rippletest.net:51234",
+        "rpc": "https://testnet.xrpl-labs.com",
         "method": "amm_info",
         "unpaid": "https://aether-foundry-desk.vercel.app/api/x402/composition-quote",
         "seeds": false
