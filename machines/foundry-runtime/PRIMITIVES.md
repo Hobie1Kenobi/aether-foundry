@@ -14,7 +14,7 @@ The daemon does not invent a transaction type. Each action wraps a primitive the
 
 ## Not used
 
-- `Batch`. `watched.batch.atomic_enabled` is false. The daemon refuses `TransactionType` `Batch` on every weekday. The agent signer refuses it too, including when the gate is false.
+- `Batch` on the daemon path. `assertSigningTx` refuses `TransactionType` `Batch` on every weekday, including when the gate is on. The agent signer refuses a generic `Batch`. It allows intent `batch_heartbeat` on network id 1 when `BatchV1_1` and `fixBatchV1_2` are enabled, inside the amount caps.
 - `EscrowFinish` and `EscrowCancel` on the daemon path. The Unix-epoch BUYER escrow stays untouched. The agent signer may finish or cancel a different escrow. It refuses owner `rEbUaXDXZnzR8wJjGqULKn1YLXNd5CARth` sequence `21094052`.
 - `SetHook`. W7 is not redeployed from this process.
 - W0 master key. No daemon transaction uses the treasury account.

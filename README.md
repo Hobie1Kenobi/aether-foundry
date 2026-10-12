@@ -214,7 +214,7 @@ Status follows [`lab/director-state.json`](./lab/director-state.json) and the pa
 | F2 | [labor-mpt](./machines/labor-mpt/) | dry-run | `AETH-LABOR` MPT on W5. Transferable and capped. AETH IOU stays the AMM pair. |
 | F3 | [token-escrow-labor](./machines/token-escrow-labor/) | dry-run | TokenEscrow of AETH-LABOR `0141DD60…19504ED`. Finish and cancel. Ripple Epoch only. |
 | F4 | [credential-domain-shop](./machines/credential-domain-shop/) | dry-run | `aether-agent` credential, permissioned domain, domain OfferCreate. Open Walk-In stays public. |
-| — | [batch-heartbeat](./machines/batch-heartbeat/) | spec only | Atomic Batch of accept + deposit + DID. Amendment still off. No Batch transaction. |
+| — | [batch-heartbeat](./machines/batch-heartbeat/) | spec only | Atomic Batch is enabled. Dry-run `npm run batch:heartbeat`. Live stays on the Foundry box. No trial hash yet. |
 | — | [x402-desk](./machines/x402-desk/) | live | HTTP 402 merchant. Buyer pays W3. Desk verifies. |
 | F11 | [x402-citizen](./machines/x402-citizen/) | dry-run | Self-verify plus T54 testnet facilitator receipts. W3 outbound buy, cap 0.5 XRP. |
 | — | [x402-outbound](./machines/x402-outbound/) | live | W3 pays a foreign Testnet shop. That shop is not Foundry revenue. |
@@ -356,14 +356,14 @@ stateDiagram-v2
   wake --> alert: check exit 2
   quiet --> snapshot: next routine
   alert --> remint: sold_out on the Foundry box
-  alert --> hold: batch gate flipped then stop
+  quiet --> heartbeat: Batch enabled and src/batch/heartbeat.js is present
 ```
 
 | Routine | Quiet when | Alert means |
 |---------|------------|-------------|
 | `morning-health` | Desk, toml, W0 float, SignerList, regular keys | Fix the red probe before spending |
 | `weekly-nav` | Spendable drops, AETH outstanding, AMM amounts present | Missing figures. A changed NAV stays quiet |
-| `batch-probe` | `atomic_enabled` is false | The amendment flipped. Do not submit Batch from the alert |
+| `batch-probe` | Batch is off, or it is on and `src/batch/heartbeat.js` is present | `batch_enabled` only when the gate is on and that file is absent. The probe does not submit |
 | `walk-in-remint` | W2 still has a sell offer | Sold out. `npm run remint:walk-in` on the Foundry box only |
 
 Clock for the card is `America/Chicago`. A GitHub workflow watches the Walk-In offer and does not sign: [`.github/workflows/walk-in-remint-watch.yml`](./.github/workflows/walk-in-remint-watch.yml). Grants, when an operator chooses to pay: `npm run grants:scan` then `npm run grants:pay -- --dry-run`. Live pay is Foundry-box only. One Payment is already archived in [`machines/grants-flywheel/RESULTS.md`](./machines/grants-flywheel/RESULTS.md). Trust that file for the hash. Refresh the wake card before you trust a pointer inside it.
@@ -398,6 +398,7 @@ Anything that signs refuses `CI`, `GITHUB_ACTIONS`, and mainnet hosts. Seeds loa
 | `npm run peers:demo:live` | Operator path. Fails if the signer or Ollama key is missing |
 | `npm run remint:walk-in` | Founder remint. Refuses while an offer is open |
 | `npm run license:demo` | Agent Work License dry-run. `--live` needs the loopback signer |
+| `npm run batch:heartbeat` | Testnet Batch dry-run. `--live` needs the loopback signer. Refuses CI |
 | `npm run x402:pay` | Buy a desk SKU |
 | `npm run x402:hit` | Archive a 200 body |
 | `npm run x402:outbound` | W3 pays a foreign URL |
@@ -444,7 +445,7 @@ Deeper map, still short: [`docs/architecture.md`](./docs/architecture.md). Desk 
 
 Honest leftovers. No dates attached.
 
-- **Atomic Batch is off.** On rippled 3.4.1, `BatchV1_1` and `fixBatchV1_2` were `enabled: false`. `TicketBatch: true` is a different amendment. [`machines/batch-heartbeat/`](./machines/batch-heartbeat/) stays a spec until a probe says otherwise. No faux-batch.
+- **Atomic Batch is on. The heartbeat has no trial hash yet.** The 2026-10-12 XRPL Labs probe (network id 1, rippled 3.4.1) found `BatchV1_1`, `fixBatchV1_2`, and `TicketBatch` enabled. [`machines/batch-heartbeat/`](./machines/batch-heartbeat/) dry-runs with `npm run batch:heartbeat`. `--live` stays on the Foundry box. The DID stamp is on W1. The signer does not load the W0 seed. No faux-batch, and no Batch from CI.
 - **Machine #4's quote NFT is still honor-system.** The ledger object that replaces that attestation is [`machines/native-price-oracle/`](./machines/native-price-oracle/). The keeper is dry-run until the box submits `OracleSet`. A stranger reproduces the ticket from `ledger_entry`, not from the URI text.
 - **Labor MPT is issued.** `mpt_issuance_id` `0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED` is in `lab/metrics.json` (create `1DDA337DD81833BEE768DED7E54889A4F92D5DC5958F75760417801909C02BCB`). W2 opted in, then W5 authorized (`MPToken` Flags `2`). [`machines/token-escrow-labor/`](./machines/token-escrow-labor/) locks 1 of that MPT. 1 AETH is the lock only when the metrics id is absent.
 - **LP Badge v0 was not upgraded in place.** The NFT on W1 still claims a bond the ledger does not enforce. The bond that *is* enforced is the separate door in [`machines/lp-badge-bound/`](./machines/lp-badge-bound/).

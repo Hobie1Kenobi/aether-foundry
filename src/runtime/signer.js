@@ -21,6 +21,7 @@ const metrics = require("./metrics");
 const policy = require("./policy");
 const licenseChallenge = require("../license/challenge");
 const licenseLedger = require("../license/ledger");
+const heartbeat = require("../batch/heartbeat");
 
 const DEFAULT_BIND = "127.0.0.1";
 const DEFAULT_PORT = 8787;
@@ -126,6 +127,13 @@ function statusFor(code) {
   return 400;
 }
 
+function batchAmount(body, prepared, fields) {
+  const base = policy.xrpOut(prepared);
+  if (!body || body.intent !== "batch_heartbeat") return base.toString();
+  const extra = fields && fields.offerAmount ? grants.dropsOf(fields.offerAmount) : 0n;
+  return (base + extra).toString();
+}
+
 function archiveAction(intent, tx) {
   const memos = grants.decodeMemos(tx);
   if (intent === "heartbeat" || intent === "aether-heartbeat" || memos.purpose === "aether-heartbeat") return "heartbeat";
@@ -135,6 +143,7 @@ function archiveAction(intent, tx) {
   if (intent === "license_mint" || intent === "license_list" || intent === "license_buy" || intent === "license_burn") {
     return intent;
   }
+  if (intent === "batch_heartbeat" || intent === "batch_heartbeat_prepare") return intent;
   return "agent-sign";
 }
 
@@ -324,7 +333,7 @@ function finishSuccess(body, prepared, submitted, fields, seed, env, options) {
     result: "tesSUCCESS",
     network_id: fields.networkId == null ? null : Number(fields.networkId),
     transaction_type: prepared.TransactionType,
-    amount_drops: policy.xrpOut(prepared).toString(),
+    amount_drops: batchAmount(body, prepared, fields),
   };
   try {
     publicArchive(fields.root, row, [seed, env.FOUNDRY_SIGNER_TOKEN]);
@@ -487,6 +496,30 @@ async function evaluate(body, ctx) {
     const offerId = body.tx && body.tx.NFTokenSellOffer;
     const node = await tryCandidates(hosts.candidates(urls.http), (url) => {
       return licenseLedger.sellOfferAt(url, offerId, options.fetchImpl);
+    });
+    pre.sellOffer = node;
+    pre.offerAmount = node.Amount;
+  }
+  if (policy.isBatchIntent(body.intent) && !pre.skipRpc) {
+    const batchWallet = policy.agentWallet(body.wallet);
+    const urls = rpcFor(batchWallet, env);
+    const probe = await tryCandidates(hosts.candidates(urls.http), async (url) => {
+      const feature = await rpcPost(url, batchWallet, "feature", {}, options.fetchImpl);
+      const info = await rpcPost(url, batchWallet, "server_info", {}, options.fetchImpl);
+      const networkId = info.info && info.info.network_id;
+      if (Number(networkId) !== anchors.XRPL_NETWORK_ID) {
+        throw policy.coded(`refusing network id ${networkId}`, "MAINNET");
+      }
+      return heartbeat.probeFromFeature(feature, { networkId: anchors.XRPL_NETWORK_ID });
+    });
+    const prior = pre.state || loadDirector(pre.root || anchors.repoRoot());
+    pre.state = heartbeat.withBatchProbe(prior, probe);
+  }
+  if (body.intent === "batch_heartbeat" && !pre.skipRpc) {
+    const offerId = heartbeat.sellOfferId(body.tx);
+    const urls = rpcFor(policy.agentWallet(body.wallet), env);
+    const node = await tryCandidates(hosts.candidates(urls.http), (url) => {
+      return heartbeat.readSellOffer(url, offerId, options.fetchImpl);
     });
     pre.sellOffer = node;
     pre.offerAmount = node.Amount;

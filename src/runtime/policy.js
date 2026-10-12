@@ -79,7 +79,7 @@ const AGENT_CAPS = {
 const AGENT_SPECIAL = {
   epoch_scar: "do not EscrowFinish or EscrowCancel the Unix-epoch BUYER escrow",
   walk_in_price_drops: "10000000",
-  batch: "refuse while watched.batch.atomic_enabled is false",
+  batch: "Batch only as batch_heartbeat on network id 1 when BatchV1_1 and fixBatchV1_2 are enabled; amount caps apply; otherwise refuse",
   license_price_drops: license.PRICE_DROPS,
   license_transfer_fee: license.TRANSFER_FEE,
   license_taxon: license.TAXON,
@@ -151,6 +151,40 @@ const SPEC = {
     max_drops: "0",
     signs: false,
   },
+  batch_heartbeat_prepare: {
+    account: "W2",
+    address: anchors.WALLETS.W2.address,
+    key_env: "W2_REGULAR_SEED",
+    max_offer_drops: "100000",
+    signs: true,
+  },
+  batch_heartbeat: {
+    account: "W1",
+    address: anchors.WALLETS.W1.address,
+    key_env: "W1_REGULAR_SEED",
+    max_deposit_drops: "2000000",
+    max_fee_drops: "100000",
+    signs: true,
+  },
+};
+
+const BATCH_HEARTBEAT = {
+  purpose: "aether-batch-heartbeat",
+  experiment: "batch-heartbeat",
+  offer_drops: "10000",
+  max_offer_drops: "100000",
+  deposit_drops: "1000000",
+  max_deposit_drops: "2000000",
+  max_fee_drops: "100000",
+  taxon: 20261012,
+  network_id: 1,
+  tf_all_or_nothing: 65536,
+  tf_inner: 1073741824,
+  tf_single_asset: 524288,
+  tf_sell: 1,
+  mint_flags: 9,
+  charter: "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/corp/charter.md",
+  pack_uri: "https://raw.githubusercontent.com/Hobie1Kenobi/aether-foundry/main/machines/batch-heartbeat/README.md",
 };
 
 function coded(message, code) {
@@ -226,6 +260,13 @@ function assertAllowlist(doc) {
       if (row.key_env !== null) throw coded("director_snapshot has no key", "SIGN");
     } else if (row.signs === true) {
       throw coded(`${name} must not set signs true in a way that bypasses the daemon`, "ALLOWLIST");
+    }
+    if (name === "batch_heartbeat_prepare") {
+      same(row.max_offer_drops, spec.max_offer_drops, "batch prepare offer");
+    }
+    if (name === "batch_heartbeat") {
+      same(row.max_deposit_drops, spec.max_deposit_drops, "batch deposit");
+      same(row.max_fee_drops, spec.max_fee_drops, "batch fee");
     }
   }
   assertAgentAllowlist(doc);
@@ -668,6 +709,12 @@ function xrpOut(tx) {
   else if (type === "PaymentChannelCreate" || type === "PaymentChannelFund") add(tx.Amount);
   else if (type === "CheckCreate") add(tx.SendMax);
   else if (type === "CheckCash") add(tx.Amount);
+  else if (type === "Batch") {
+    for (const raw of tx.RawTransactions || []) {
+      const inner = raw && raw.RawTransaction;
+      if (inner && inner.TransactionType === "AMMDeposit") add(inner.Amount);
+    }
+  }
   return total;
 }
 
@@ -708,7 +755,8 @@ function assertAgentAmounts(tx, motions, intent) {
   }
   if (tx.TransactionType === "NFTokenCreateOffer" && tx.Account === anchors.WALLETS.W2.address) {
     const sell = (Number(tx.Flags) & 1) === 1;
-    if (sell) {
+    const prepare = intent === "batch_heartbeat_prepare" && sell;
+    if (sell && !prepare) {
       if (tx.Destination) throw coded("refusing a Destination on the Walk-In sell offer", "DEST");
       if (Object.prototype.hasOwnProperty.call(tx, "Destination")) {
         throw coded("refusing a Destination on the Walk-In sell offer", "DEST");
@@ -794,13 +842,242 @@ function batchEnabled(state) {
   return Boolean(state && state.watched && state.watched.batch && state.watched.batch.atomic_enabled === true);
 }
 
-function assertAgentBatch(tx, state) {
-  if (tx.TransactionType === "Batch" || tx.RawTransactions) {
-    const why = batchEnabled(state)
-      ? "refusing Batch"
-      : "refusing Batch while atomic_enabled is false";
-    throw coded(why, "BATCH");
+function isBatchIntent(intent) {
+  return intent === "batch_heartbeat" || intent === "batch_heartbeat_prepare";
+}
+
+function batchGateOpen(state) {
+  const batch = state && state.watched && state.watched.batch;
+  if (!batch || batch.atomic_enabled !== true) return false;
+  if (Array.isArray(batch.amendments) && batch.amendments.length > 0) {
+    const enabled = new Map(batch.amendments.map((row) => [row.name, row.enabled === true]));
+    if (enabled.get("BatchV1_1") !== true || enabled.get("fixBatchV1_2") !== true) return false;
   }
+  return true;
+}
+
+function hexUtf8(hex) {
+  const text = String(hex || "");
+  if (!/^[0-9A-Fa-f]+$/.test(text) || text.length % 2 !== 0) return null;
+  return Buffer.from(text, "hex").toString("utf8");
+}
+
+function parsedNft(id) {
+  const text = String(id || "").toUpperCase();
+  if (!anchors.HASH_RE.test(text)) throw coded("batch heartbeat NFTokenID drifted", "TX");
+  try {
+    return require("xrpl").parseNFTokenID(text);
+  } catch {
+    throw coded("batch heartbeat NFTokenID drifted", "TX");
+  }
+}
+
+function innerTransactions(tx) {
+  if (!tx || !Array.isArray(tx.RawTransactions)) return null;
+  const inners = [];
+  for (const row of tx.RawTransactions) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) return null;
+    const keys = Object.keys(row);
+    if (keys.length !== 1 || keys[0] !== "RawTransaction" || !row.RawTransaction) return null;
+    inners.push(row.RawTransaction);
+  }
+  return inners;
+}
+
+function assertNoW0Signer(tx) {
+  if (!tx || typeof tx !== "object") return;
+  if (tx.Account === anchors.WALLETS.W0.address) throw coded("refusing to sign as W0", "W0");
+  const inners = innerTransactions(tx) || [];
+  for (const inner of inners) {
+    if (inner.Account === anchors.WALLETS.W0.address) throw coded("refusing to sign as W0", "W0");
+  }
+  if (tx.BatchSigners) throw coded("batch heartbeat is a single-account Batch", "BATCH");
+}
+
+function assertHeartbeatMemos(tx) {
+  const memos = grants.decodeMemos(tx);
+  if (memos.purpose !== BATCH_HEARTBEAT.purpose || memos.experiment !== BATCH_HEARTBEAT.experiment) {
+    throw coded("batch heartbeat memo drifted", "TX");
+  }
+}
+
+function assertBatchPrepare(tx) {
+  if (!tx || typeof tx !== "object") throw coded("refusing empty tx", "TX");
+  assertNoW0Signer(tx);
+  if (tx.Account !== anchors.WALLETS.W2.address) throw coded("batch heartbeat prepare is only W2", "ACCOUNT");
+  assertHeartbeatMemos(tx);
+  if (tx.TransactionType === "NFTokenMint") {
+    if (tx.NFTokenTaxon !== BATCH_HEARTBEAT.taxon) throw coded("batch heartbeat taxon drifted", "TX");
+    if (tx.Flags !== BATCH_HEARTBEAT.mint_flags) throw coded("batch heartbeat mint flags drifted", "TX");
+    if (tx.Issuer || tx.Destination || tx.Amount) throw coded("batch heartbeat mint must not set Issuer, Destination, or Amount", "TX");
+    if (tx.TransferFee != null && Number(tx.TransferFee) !== 0) throw coded("batch heartbeat mint fee drifted", "TX");
+    if (hexUtf8(tx.URI) !== BATCH_HEARTBEAT.pack_uri) throw coded("batch heartbeat mint URI drifted", "TX");
+    return;
+  }
+  if (tx.TransactionType === "NFTokenCreateOffer") {
+    if (tx.Flags !== BATCH_HEARTBEAT.tf_sell) throw coded("batch heartbeat prepare must be a sell offer", "TX");
+    if (tx.Destination !== anchors.WALLETS.W1.address) throw coded("batch heartbeat offer destination must be W1", "DEST");
+    if (tx.Owner || tx.Expiration) throw coded("batch heartbeat offer must not set Owner or Expiration", "TX");
+    const drops = grants.dropsOf(tx.Amount);
+    const cap = grants.dropsOf(BATCH_HEARTBEAT.max_offer_drops);
+    if (drops <= 0n || drops > cap) throw coded("batch heartbeat offer is above the cap", "CAP");
+    const parsed = parsedNft(tx.NFTokenID);
+    if (Number(parsed.Taxon) !== BATCH_HEARTBEAT.taxon) throw coded("batch heartbeat NFT taxon drifted", "TX");
+    if (parsed.Issuer !== anchors.WALLETS.W2.address) throw coded("batch heartbeat NFT issuer must be W2", "ACCOUNT");
+    return;
+  }
+  throw coded("batch heartbeat prepare is mint or sell offer", "TX");
+}
+
+function assertHeartbeatOffer(offer, accept) {
+  if (!offer || offer.LedgerEntryType !== "NFTokenOffer") {
+    throw coded("batch heartbeat requires the sell offer", "OFFER");
+  }
+  if ((Number(offer.Flags) & BATCH_HEARTBEAT.tf_sell) !== BATCH_HEARTBEAT.tf_sell) {
+    throw coded("batch heartbeat offer is not a sell offer", "OFFER");
+  }
+  if (offer.Owner !== anchors.WALLETS.W2.address) throw coded("batch heartbeat offer owner must be W2", "ACCOUNT");
+  if (offer.Destination !== anchors.WALLETS.W1.address) throw coded("batch heartbeat offer destination must be W1", "DEST");
+  let drops;
+  try {
+    drops = grants.dropsOf(offer.Amount);
+  } catch {
+    throw coded("batch heartbeat offer amount must be drops", "CAP");
+  }
+  if (drops <= 0n || drops > grants.dropsOf(BATCH_HEARTBEAT.max_offer_drops)) {
+    throw coded("batch heartbeat offer is above the cap", "CAP");
+  }
+  const parsed = parsedNft(offer.NFTokenID);
+  if (Number(parsed.Taxon) !== BATCH_HEARTBEAT.taxon) throw coded("batch heartbeat NFT taxon drifted", "TX");
+  if (parsed.Issuer !== anchors.WALLETS.W2.address) throw coded("batch heartbeat NFT issuer must be W2", "ACCOUNT");
+  if (offer.index && String(offer.index).toUpperCase() !== String(accept.NFTokenSellOffer || "").toUpperCase()) {
+    throw coded("batch heartbeat offer index drifted", "OFFER");
+  }
+  return drops.toString();
+}
+
+function assertInnerCommon(inner, label) {
+  if (!inner || inner.Account !== anchors.WALLETS.W1.address) {
+    throw coded(`batch heartbeat ${label} account must be W1`, "ACCOUNT");
+  }
+  if (inner.TxnSignature != null || inner.Signers != null) {
+    throw coded(`batch heartbeat ${label} must be unsigned`, "TX");
+  }
+  if (inner.TicketSequence != null) throw coded(`batch heartbeat ${label} must not use a ticket`, "TX");
+  if (inner.Fee != null && inner.Fee !== "0") throw coded(`batch heartbeat ${label} fee must be 0`, "TX");
+  if (inner.SigningPubKey != null && inner.SigningPubKey !== "") {
+    throw coded(`batch heartbeat ${label} signing key must be empty`, "TX");
+  }
+  if (inner.Sequence != null && (!Number.isInteger(inner.Sequence) || inner.Sequence <= 0)) {
+    throw coded(`batch heartbeat ${label} sequence drifted`, "TX");
+  }
+  if (inner.NetworkID != null && Number(inner.NetworkID) !== anchors.XRPL_NETWORK_ID) {
+    throw coded(`refusing network id ${inner.NetworkID}`, "MAINNET");
+  }
+  if (inner.LastLedgerSequence != null) throw coded(`batch heartbeat ${label} must not set LastLedgerSequence`, "TX");
+}
+
+function assertBatchHeartbeat(tx, opts) {
+  const options = opts || {};
+  if (!tx || tx.TransactionType !== "Batch") throw coded("batch_heartbeat requires Batch", "TX");
+  if (!batchGateOpen(options.state)) {
+    throw coded("refusing Batch while atomic_enabled is false", "BATCH");
+  }
+  if (options.networkId != null && options.networkId !== "" && Number(options.networkId) !== anchors.XRPL_NETWORK_ID) {
+    throw coded(`refusing network id ${options.networkId}`, "MAINNET");
+  }
+  assertNoW0Signer(tx);
+  if (tx.Account !== anchors.WALLETS.W1.address) throw coded("batch heartbeat fee payer is W1", "ACCOUNT");
+  if (tx.Flags !== BATCH_HEARTBEAT.tf_all_or_nothing) throw coded("batch heartbeat requires tfAllOrNothing", "TX");
+  if (tx.NetworkID != null && Number(tx.NetworkID) !== anchors.XRPL_NETWORK_ID) {
+    throw coded(`refusing network id ${tx.NetworkID}`, "MAINNET");
+  }
+  if (tx.Fee != null) {
+    const fee = grants.dropsOf(tx.Fee);
+    if (fee <= 0n || fee > grants.dropsOf(BATCH_HEARTBEAT.max_fee_drops)) {
+      throw coded("batch heartbeat fee is above the cap", "CAP");
+    }
+  }
+  assertHeartbeatMemos(tx);
+  const inners = innerTransactions(tx);
+  if (!inners || inners.length !== 3) throw coded("batch heartbeat requires exactly 3 inners", "TX");
+  const accept = inners[0];
+  const deposit = inners[1];
+  const did = inners[2];
+  if (accept.TransactionType !== "NFTokenAcceptOffer") throw coded("batch heartbeat inner 1 is NFTokenAcceptOffer", "TX");
+  if (deposit.TransactionType !== "AMMDeposit") throw coded("batch heartbeat inner 2 is AMMDeposit", "TX");
+  if (did.TransactionType !== "DIDSet") throw coded("batch heartbeat inner 3 is DIDSet", "TX");
+  assertInnerCommon(accept, "accept");
+  assertInnerCommon(deposit, "deposit");
+  assertInnerCommon(did, "did");
+  if (accept.Flags !== BATCH_HEARTBEAT.tf_inner) throw coded("batch heartbeat accept flags drifted", "TX");
+  if (!anchors.HASH_RE.test(String(accept.NFTokenSellOffer || "").toUpperCase())) {
+    throw coded("batch heartbeat requires NFTokenSellOffer", "TX");
+  }
+  if (accept.NFTokenBuyOffer || accept.Amount) throw coded("batch heartbeat accept sets no amount", "TX");
+  const depositFlags = BATCH_HEARTBEAT.tf_inner | BATCH_HEARTBEAT.tf_single_asset;
+  if (deposit.Flags !== depositFlags) throw coded("batch heartbeat deposit must be single-asset XRP", "TX");
+  if (!deposit.Asset || deposit.Asset.currency !== "XRP" || deposit.Asset.issuer) {
+    throw coded("batch heartbeat deposit asset must be XRP", "TX");
+  }
+  const asset2 = deposit.Asset2;
+  if (!asset2 || asset2.currency !== anchors.AETH_HEX || asset2.issuer !== anchors.WALLETS.W0.address) {
+    throw coded("batch heartbeat deposit asset2 must be AETH issued by W0", "TX");
+  }
+  if (deposit.Amount2 || deposit.LPTokenOut || deposit.EPrice) {
+    throw coded("batch heartbeat deposit is single-asset XRP", "TX");
+  }
+  const depositDrops = grants.dropsOf(deposit.Amount);
+  if (depositDrops <= 0n || depositDrops > grants.dropsOf(BATCH_HEARTBEAT.max_deposit_drops)) {
+    throw coded("batch heartbeat deposit is above the cap", "CAP");
+  }
+  if (did.Flags !== BATCH_HEARTBEAT.tf_inner) throw coded("batch heartbeat DID flags drifted", "TX");
+  if (did.DIDDocument) throw coded("batch heartbeat DIDSet uses URI and Data", "TX");
+  const uri = hexUtf8(did.URI);
+  const prefix = `${BATCH_HEARTBEAT.charter}#heartbeat=`;
+  if (!uri || !uri.startsWith(prefix)) throw coded("batch heartbeat DID URI drifted", "TX");
+  const stamp = uri.slice(prefix.length);
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(stamp)) {
+    throw coded("batch heartbeat DID timestamp drifted", "TX");
+  }
+  let data;
+  try {
+    data = JSON.parse(hexUtf8(did.Data) || "");
+  } catch {
+    throw coded("batch heartbeat DID data drifted", "TX");
+  }
+  if (!data || Object.keys(data).sort().join(",") !== "heartbeat,machine") {
+    throw coded("batch heartbeat DID data drifted", "TX");
+  }
+  if (data.machine !== "batch-heartbeat" || data.heartbeat !== stamp) {
+    throw coded("batch heartbeat DID data drifted", "TX");
+  }
+  if (tx.Sequence != null && inners.every((inner) => inner.Sequence != null)) {
+    const outer = Number(tx.Sequence);
+    if (!Number.isInteger(outer) || outer <= 0) throw coded("batch heartbeat sequence drifted", "TX");
+    inners.forEach((inner, index) => {
+      if (inner.Sequence !== outer + 1 + index) throw coded("batch heartbeat inner sequence drifted", "TX");
+    });
+  }
+  const offerDrops = assertHeartbeatOffer(options.sellOffer, accept);
+  if (paidOnUtcDay(options.history || [], "batch_heartbeat", options.now || new Date())) {
+    throw coded("refusing a second batch heartbeat on this UTC day", "DAY");
+  }
+  return { depositDrops: depositDrops.toString(), offerDrops, stamp };
+}
+
+function assertAgentBatch(tx, options) {
+  const opts = options || {};
+  const state = opts.state;
+  const isBatch = Boolean(tx && (tx.TransactionType === "Batch" || tx.RawTransactions));
+  if (opts.intent === "batch_heartbeat") {
+    return assertBatchHeartbeat(tx, opts);
+  }
+  if (!isBatch) return null;
+  const why = batchGateOpen(state) || batchEnabled(state)
+    ? "refusing Batch"
+    : "refusing Batch while atomic_enabled is false";
+  throw coded(why, "BATCH");
 }
 
 function assertDisableMaster(tx) {
@@ -809,10 +1086,16 @@ function assertDisableMaster(tx) {
   }
 }
 
-function assertAgentType(tx) {
+function assertAgentType(tx, intent) {
   const type = tx.TransactionType;
   if (!type || typeof type !== "string") throw coded("refusing missing TransactionType", "TX");
-  if (type === "Batch") throw coded("refusing Batch while atomic_enabled is false", "BATCH");
+  if (type === "Batch") {
+    if (intent === "batch_heartbeat") return;
+    throw coded(
+      "refusing Batch while atomic_enabled is false",
+      "BATCH"
+    );
+  }
   if (AGENT_TX_REFUSED.includes(type) || !AGENT_TX_TYPES.includes(type)) {
     throw coded(`refusing ${type}`, "TX");
   }
@@ -899,6 +1182,11 @@ function assertLicenseTx(tx, intent, opts) {
 
 function assertKnownIntent(tx, intent, opts) {
   const options = opts || {};
+  if (intent === "batch_heartbeat_prepare") {
+    assertBatchPrepare(tx);
+    return;
+  }
+  if (intent === "batch_heartbeat") return;
   if (assertLicenseTx(tx, intent, options)) return;
   const memos = grants.decodeMemos(tx);
   let name = intent;
@@ -980,17 +1268,29 @@ function assertAgentRequest(opts) {
     }
   }
   if (tx.Account !== wallet.address) throw coded("tx.Account does not match wallet", "ACCOUNT");
-  assertAgentBatch(tx, options.state);
-  assertAgentType(tx);
+  if (isBatchIntent(options.intent) && Number(options.networkId) !== anchors.XRPL_NETWORK_ID) {
+    throw coded("batch heartbeat is network id 1 only", "MAINNET");
+  }
+  assertAgentBatch(tx, options);
+  assertAgentType(tx, options.intent);
   assertDisableMaster(tx);
   assertAgentAmounts(tx, options.motions || [], options.intent);
   assertKnownIntent(tx, options.intent, options);
-  const licenseSpend = options.intent === "license_buy" ? license.PRICE_DROPS : null;
-  if (options.account) assertAgentFloat(tx, options.account, options.feeDrops, licenseSpend);
+  let spendExtra = options.intent === "license_buy" ? license.PRICE_DROPS : null;
+  let account = options.account;
+  if (options.intent === "batch_heartbeat") {
+    spendExtra = options.offerAmount || (options.sellOffer && options.sellOffer.Amount) || "0";
+    if (account) {
+      account = Object.assign({}, account, {
+        ownerCount: Number(account.ownerCount || 0) + 3,
+      });
+    }
+  }
+  if (account) assertAgentFloat(tx, account, options.feeDrops, spendExtra);
   else if (options.requireAccount) throw coded("refusing without an account balance", "FLOAT");
-  assertAgentRate(options.history || [], options.now || new Date(), wallet, tx, licenseSpend);
+  assertAgentRate(options.history || [], options.now || new Date(), wallet, tx, spendExtra);
   assertEpochScar(tx);
-  assertAgentBatch(tx, options.state);
+  assertAgentBatch(tx, options);
   return { wallet, tx };
 }
 
@@ -1016,7 +1316,12 @@ module.exports = {
   EPOCH_SCAR,
   ASF_DISABLE_MASTER,
   BANNED_TYPES,
+  BATCH_HEARTBEAT,
   coded,
+  isBatchIntent,
+  batchGateOpen,
+  assertBatchHeartbeat,
+  assertBatchPrepare,
   envIsCi,
   assertNotCi,
   assertLiveGate,

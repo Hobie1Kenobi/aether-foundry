@@ -72,4 +72,4 @@ Adversary checks from the runtime activation list. This pack is Workstream 1. La
 
 **Claim:** a Monday cron submits `Batch` while `atomic_enabled` is false.
 
-**Check:** `Batch` is not an allowlisted action. `assertSigningTx` throws `BATCH` for `TransactionType` `Batch` whether or not the weekday is Monday, including when `watched.batch.atomic_enabled` is false. `EscrowFinish` and `EscrowCancel` throw `BANNED`. The daemon does not read the Unix-epoch BUYER escrow. The Monday director clock runs `weekly-nav` and `batch-probe` as read-only wake checks. `batch_enabled` fails the job. It does not submit a transaction.
+**Check:** `Batch` is not a daemon allowlisted action. `assertSigningTx` throws `BATCH` for `TransactionType` `Batch` whether or not the weekday is Monday, including when `watched.batch.atomic_enabled` is true. `EscrowFinish` and `EscrowCancel` throw `BANNED`. The daemon does not read the Unix-epoch BUYER escrow. The Monday director clock runs `weekly-nav` and `batch-probe` as read-only wake checks. `batch_enabled` fails the job only when the gate is on and `src/batch/heartbeat.js` is absent. The probe does not submit a transaction.

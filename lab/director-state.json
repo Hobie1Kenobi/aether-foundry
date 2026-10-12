@@ -9,8 +9,8 @@
     "xrpl_testnet": {
       "label": "XRPL Testnet",
       "network_id": 1,
-      "http": "https://s.altnet.rippletest.net:51234",
-      "ws": "wss://s.altnet.rippletest.net:51233",
+      "http": "https://testnet.xrpl-labs.com",
+      "ws": "wss://testnet.xrpl-labs.com",
       "explorer": "https://testnet.xrpl.org",
       "validated_ledger_index": 21472776,
       "reserve_base_drops": "1000000",
@@ -147,7 +147,7 @@
       "status": "spec-only",
       "results": "machines/batch-heartbeat/RESULTS.md",
       "last_result_hash": null,
-      "note": "no trial hash until atomic Batch is enabled"
+      "note": "trial hash lands after a tesSUCCESS batch heartbeat"
     },
     "xahau-split-treasury": {
       "status": "live",
@@ -342,7 +342,7 @@
     }
   },
   "next_actions": [
-    "Testnet re-probe 2026-09-28T20:17:30-05:00 (rippled 3.4.1, id 1): BatchV1_1, fixBatchV1_2, and PermissionDelegationV1_1 are still disabled. batch-heartbeat and delegation stay spec-only. Do not submit Batch.",
+    "Testnet re-probe 2026-10-12 (rippled 3.4.1, network id 1, XRPL Labs): BatchV1_1, fixBatchV1_2, and TicketBatch are enabled. Dry-run: npm run batch:heartbeat. Live stays on the Foundry box. See machines/batch-heartbeat/RESULTS.md.",
     "Devnet map lab/frontier/amendments-devnet.json is id 2, same build, Band C enabled. D0-D3 in corp/wallets.md are blank. Fund only from the Devnet faucet on the Foundry box. No Vault, Loan, Sponsor, or ConfidentialTransfer transaction until then.",
     "F8/F9/F10 notes are lab/frontier/port-forward.md. Do not mix Devnet into Testnet NAV. Heartbeat live stays on the box. Walk-In remint only after sold_out."
   ],
