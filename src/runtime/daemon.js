@@ -297,6 +297,7 @@ async function pass(opts) {
     archive: (row) => archive(root, row),
     fetchImpl: options.fetchImpl,
     pollSellOffers: options.pollSellOffers,
+    history: options.history,
   };
 
   const plans = [];

@@ -348,6 +348,10 @@ describe("daemon dry-run", () => {
       argv: ["--dry-run", "--once"],
       env: { CI: "true", W5_REGULAR_SEED: "present-not-used", AETHER_SECRETS: path.join(os.tmpdir(), "missing-secrets.env") },
       now: clockFromFixture(60 * 60 * 1000),
+      // The committed ledger log can already hold a W5 heartbeat inside the 6h
+      // window of this fixture clock (CI merges main). Empty history keeps this
+      // check on the unsigned payment. The rate limit stays in heartbeat.test.js.
+      history: [],
       loadSeed: () => {
         reads += 1;
         return "present-not-used";
