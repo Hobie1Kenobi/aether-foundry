@@ -40,7 +40,7 @@ Agent-run ops for the XRPL **Testnet** corporation. Read this before any session
 | F3 | `token-escrow-labor` | Trialled. Finish `7536CB47…A7815DA1` (seq `21093737`). Cancel `FC7CB7C6…50A58797` (seq `21093738`). |
 | F4 | `credential-domain-shop` | Trialled. `domain_id` `6AF56BC1…52DCD4`. Take `A3A60DF9…054EEE`. Uncredentialed `A1046BD2…0B4A8E` → `tecNO_PERMISSION`. Walk-In untouched. |
 | 5 | `lp-badge` | v0 NFT still honor-system. v1 door `lp-badge-bound` trialled: PASS `D21E08CC…FED2`, revoked `tecBAD_CREDENTIALS` `919C1C77…EE48` |
-| 6 | `batch-heartbeat` | **Spec only** — gated on Batch amendment |
+| 6 | `batch-heartbeat` | **Spec only until a tesSUCCESS hash** — Batch is enabled; dry-run `npm run batch:heartbeat` |
 | 7 | `xahau-split-treasury` | Live on Xahau Testnet — SetHook + 1 XAH split |
 | 8 | `governance-board` | Policy H1 in force. SignerList / RegularKey live set is Foundry-box gated |
 | — | `grants-flywheel` | Operational. W6 pays non-labeled artifact users. No grant hash until `tesSUCCESS` |
@@ -68,10 +68,11 @@ F3 TokenEscrow: `npm run frontier:token-escrow-create`, `npm run frontier:token-
 
 ## Batch gate rule
 
-Re-probe only. Check `server_info` / feature flags for `BatchV1_1` / `fixBatchV1_2` (names may evolve). Session-8: rippled 3.4.1, both **enabled:false**. `TicketBatch` ≠ atomic Batch — do not treat it as unlock.
+2026-10-12 XRPL Labs, network id 1, rippled 3.4.1: `BatchV1_1` and `fixBatchV1_2` are enabled. `TicketBatch` is also enabled and is not the atomic gate by itself.
 
-- If disabled: document in RESULTS / session note and **stop**. No Batch txs. No faux-batch.
-- If enabled: then pack + trial `machines/batch-heartbeat/` per its README.
+- If a later probe shows either atomic amendment disabled: document it in RESULTS and stop. No faux-batch.
+- While they are enabled: `npm run batch:heartbeat` dry-runs. `--live` is the Foundry box, signer `127.0.0.1:8787`, and it refuses CI. See `machines/batch-heartbeat/README.md`.
+- The director probe still does not submit. `batch_enabled` holds the wake only when the gate is on and `src/batch/heartbeat.js` is missing.
 
 ## Frontier amendment map
 

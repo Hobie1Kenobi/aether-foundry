@@ -35,7 +35,7 @@ Day 7 Devnet map, Chicago `2026-09-28T20:17:31-05:00`, rippled **3.4.1**, networ
 
 F8, F9, and F10 stay on Devnet. `npm run frontier:devnet-sponsor`, `npm run frontier:devnet-vault`, and `npm run frontier:devnet-confidential` re-read `feature` on the Devnet URL and refuse a network id other than 2. Dry-run is the default. Operator note: [`DEVNET.md`](./DEVNET.md). They do not write the Testnet ledger log.
 
-Until a later Testnet probe says otherwise, do not submit Batch on Testnet, and do not stand in for a disabled Testnet amendment with a sequence of other transactions.
+2026-10-12 re-probe on XRPL Labs (`wss://testnet.xrpl-labs.com`), rippled 3.4.1, network id 1, ledger 21481707: `BatchV1_1`, `fixBatchV1_2`, and `TicketBatch` are enabled. The trial is `npm run batch:heartbeat` (dry-run). `--live` stays on the Foundry box and refuses CI. Do not stand in for the Batch with a sequence of other transactions. Day-7 rows above stay as the measurement from that day. `lab/frontier/amendments.json` is still the 2026-09-28 map until the next `npm run frontier:probe`.
 
 F1 keeper: `npm run frontier:oracle-set` reads this map's live twin via `feature` and refuses `OracleSet` unless `PriceOracle` is enabled on network id 1. Default is dry-run. The ticket command is `npm run frontier:oracle-ticket`. Pack: `machines/native-price-oracle/`.
 

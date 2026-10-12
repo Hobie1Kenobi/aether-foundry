@@ -10,6 +10,7 @@ const anchors = require("../director/anchors");
 const grants = require("../grants/policy");
 const guard = require("../x402-outbound-guard");
 const policy = require("./policy");
+const wake = require("../director/wake");
 const daemon = require("./daemon");
 const remint = require("./actions/remint");
 const heartbeat = require("./actions/heartbeat");
@@ -347,6 +348,10 @@ describe("daemon dry-run", () => {
       argv: ["--dry-run", "--once"],
       env: { CI: "true", W5_REGULAR_SEED: "present-not-used", AETHER_SECRETS: path.join(os.tmpdir(), "missing-secrets.env") },
       now: clockFromFixture(60 * 60 * 1000),
+      // The committed ledger log can already hold a W5 heartbeat inside the 6h
+      // window of this fixture clock (CI merges main). Empty history keeps this
+      // check on the unsigned payment. The rate limit stays in heartbeat.test.js.
+      history: [],
       loadSeed: () => {
         reads += 1;
         return "present-not-used";
@@ -361,7 +366,8 @@ describe("daemon dry-run", () => {
     const codes = body.alerts.map((row) => row.code);
     assert.equal(codes.includes("future"), false);
     assert.equal(codes.includes("stale"), false);
-    if (state.watched.batch.atomic_enabled === true) {
+    const batchHolds = state.watched.batch.atomic_enabled === true && wake.heartbeatMachinePresent() !== true;
+    if (batchHolds) {
       assert.deepEqual(codes, ["batch_enabled"]);
       assert.equal(code, 2);
     } else {

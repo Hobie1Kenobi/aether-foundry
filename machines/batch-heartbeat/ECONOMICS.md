@@ -4,14 +4,17 @@
 
 Without Batch, accept→deposit→DID can interleave with snipes: NFT accepted but deposit fails → badge of inventory without LP deepen; or DID updates claiming a heartbeat that never funded the pool. Atomic Batch makes the *public claim* (DID) true iff capital moved.
 
-## Sizing (proposed first live trial)
+## Sizing (first live trial)
 
 | Leg | Size |
 |-----|------|
-| NFT accept | existing offer ≤ 10 XRP |
-| AMMDeposit | 1 XRP + ~99 AETH (near spot) or single-asset 1 XRP |
-| Fees | Batch fee ≥ sum of inners (TBD by amendment) |
+| NFT accept | fresh W2 sell, default `10000` drops, cap `100000` drops |
+| AMMDeposit | single-asset XRP, default `1000000` drops, cap `2000000` drops |
+| Fees | outer fee, cap `100000` drops. Inners are `Fee` `"0"`. |
+| First-run reserve | about `400000` drops on W1 if the DID object and the LP trust line are new |
 
-## Idle cost while gated
+Default spend is about 1.01 XRP plus a few dozen drops of fee. The W2 offer reserve returns when the accept succeeds.
 
-Zero — spec only. No capital locked waiting for amendment.
+## While the trial hash is still absent
+
+Dry-run spends nothing. Live stays on the Foundry box.

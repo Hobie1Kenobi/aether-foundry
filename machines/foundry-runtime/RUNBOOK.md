@@ -145,7 +145,7 @@ MCP on the box may POST `/sign` only when `MCP_SIGN=on`, `FOUNDRY_AGENT_SIGN=yes
 
 - `npm run runtime:live` in GitHub Actions.
 - `npm run remint:walk-in` while `watched.walk_in_offer.status` is `open`.
-- Any `Batch` transaction while `watched.batch.atomic_enabled` is false.
+- Any generic `Batch`. The daemon refuses `TransactionType` `Batch`. The agent path is only `npm run batch:heartbeat` on network id 1, and `--live` is not for CI.
 - Escrow finish or cancel on the Unix-epoch BUYER escrow.
 - A grant to STRANGER, BUYER, AMM, or W0–W6.
 - A second grant or a second outbound on the same UTC day.

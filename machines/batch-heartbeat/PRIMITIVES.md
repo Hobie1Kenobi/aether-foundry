@@ -1,37 +1,45 @@
-# PRIMITIVES — Batch Heartbeat v0
+# PRIMITIVES — Batch Heartbeat
 
-## Batch (amendment-gated)
+## Batch
 
-| Field | Intended v0 usage |
-|-------|-------------------|
+| Field | Usage |
+|-------|--------|
 | TransactionType | `Batch` |
-| Flags | `tfAllOrNothing` (or current finalize flag names when docs stabilize) |
-| RawTransactions | [NFTokenAcceptOffer, AMMDeposit, DIDUpdate] |
-| Account | W1 or W0 (fee payer / multi-account inner mode per final amendment) |
+| Flags | `65536` (`tfAllOrNothing`) only |
+| RawTransactions | `NFTokenAcceptOffer`, `AMMDeposit`, `DIDSet`, in that order |
+| Account | W1 |
+| BatchSigners | absent. Single-account. |
+| Network | id 1. Testnet only. |
 
-**Probe result:** amendments `BatchV1_1` / `fixBatchV1_2` **not enabled** on testnet 3.4.1 → do not submit.
+`BatchV1_1` and `fixBatchV1_2` are enabled on XRPL Testnet as of the 2026-10-12 Labs probe. The daemon still refuses a generic `Batch`. Only intent `batch_heartbeat` passes, and only inside the amount caps.
 
 ## NFTokenAcceptOffer
 
-| Field | v0 usage |
-|-------|----------|
-| NFTokenBuyOffer or SellOffer | pre-booked offer index from atelier desk |
-| Account | W1 or designated acceptor |
+| Field | Usage |
+|-------|--------|
+| Account | W1 |
+| NFTokenSellOffer | W2 sell, destination W1, taxon `20261012`, issuer W2 |
+| Amount | absent (the offer carries the price) |
+
+Prepare, outside the Batch, is `NFTokenMint` (flags `9`) and `NFTokenCreateOffer` (sell flag `1`) from W2. Intent `batch_heartbeat_prepare`. The Walk-In taxon `20260927` is refused.
 
 ## AMMDeposit
 
-| Field | v0 usage |
-|-------|----------|
-| Asset / Asset2 | AETH/W0 + XRP |
-| Amount / Amount2 | small heartbeat size (e.g. 1 XRP + proportional AETH) |
-| Flags | `tfLPToken` / double-asset per XRPL AMM deposit flags |
+| Field | Usage |
+|-------|--------|
+| Account | W1 |
+| Flags | inner flag plus `tfSingleAsset` (`1074266112`) |
+| Asset | XRP |
+| Asset2 | AETH issued by W0 |
+| Amount | drops. Default `1000000`. Cap `2000000`. |
+| Pool | `r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w` |
 
-## DIDUpdate
+## DIDSet
 
-| Field | v0 usage |
-|-------|----------|
-| Account | W0 TREASURY |
-| URI | charter URL + `#heartbeat=<ledger>` |
-| Data / DIDDocument | optional compact attestation |
+| Field | Usage |
+|-------|--------|
+| Account | W1, not W0 |
+| URI | charter URL plus `#heartbeat=<ISO timestamp>` |
+| Data | `{"machine":"batch-heartbeat","heartbeat":"<same stamp>"}` |
 
-Port-forward: when Batch enables, inner DIDUpdate must be valid alone (sequence/ticket hygiene).
+A W0 `DIDSet` would require a `BatchSigner`. This signer will not load `W0_SEED` to produce one.

@@ -118,7 +118,7 @@ const MACHINES = [
     status: "spec-only",
     last_result_hash: null,
     results: "machines/batch-heartbeat/RESULTS.md",
-    note: "no trial hash until atomic Batch is enabled",
+    note: "trial hash lands after a tesSUCCESS batch heartbeat",
   },
   {
     slug: "xahau-split-treasury",
@@ -192,7 +192,7 @@ const MACHINES = [
 // Remint stays on the Foundry box. Do not invent a buy hash in this file.
 const DEFAULT_NEXT_ACTIONS = [
   "Morning health: read probes.desk, probes.toml, wallets.W0.spendable_drops, and watched.w0_signer_list before acting.",
-  "Batch probe: read watched.batch.atomic_enabled and stay quiet while it is false; do not submit a Batch transaction.",
+  "Batch is enabled on Testnet as of 2026-10-12. Dry-run npm run batch:heartbeat. Live stays on the Foundry box. The director probe does not submit.",
   "Grants flywheel is operational: npm run grants:scan, then npm run grants:pay -- --dry-run from W6 to non-labeled counterparties. No trial hash until tesSUCCESS. Walk-In buy remains npm run buy:walk-in while the offer is open; remint only on the Foundry box after sold_out.",
 ];
 

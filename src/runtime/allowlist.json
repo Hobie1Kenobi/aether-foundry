@@ -61,7 +61,7 @@
   "special": {
     "epoch_scar": "do not EscrowFinish or EscrowCancel the Unix-epoch BUYER escrow",
     "walk_in_price_drops": "10000000",
-    "batch": "refuse while watched.batch.atomic_enabled is false",
+    "batch": "Batch only as batch_heartbeat on network id 1 when BatchV1_1 and fixBatchV1_2 are enabled; amount caps apply; otherwise refuse",
     "license_price_drops": "2000000",
     "license_transfer_fee": 5000,
     "license_taxon": 20261012,
@@ -131,6 +131,28 @@
       "trigger": "every loop / stale > 36h",
       "preserves": ["next_actions", "blockers", "last_session_id"],
       "refuse": ["must_not_sign"]
+    },
+    "batch_heartbeat_prepare": {
+      "account": "W2",
+      "address": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+      "key_env": "W2_REGULAR_SEED",
+      "max_offer_drops": "100000",
+      "taxon": 20261012,
+      "destination": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+      "network_id": 1,
+      "trigger": "npm run batch:heartbeat -- --live, before the Batch",
+      "refuse": ["walk_in_price", "public_offer", "w0", "ci", "mainnet"]
+    },
+    "batch_heartbeat": {
+      "account": "W1",
+      "address": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+      "key_env": "W1_REGULAR_SEED",
+      "max_deposit_drops": "2000000",
+      "max_fee_drops": "100000",
+      "network_id": 1,
+      "flags": "tfAllOrNothing",
+      "trigger": "npm run batch:heartbeat -- --live",
+      "refuse": ["w0", "batch_signers", "ci", "mainnet", "over_cap", "atomic_disabled"]
     }
   }
 }

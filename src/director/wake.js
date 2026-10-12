@@ -173,7 +173,14 @@ function navAlerts(state) {
   return alerts;
 }
 
-function batchAlerts(state) {
+const HEARTBEAT_MACHINE_REL = path.join("src", "batch", "heartbeat.js");
+
+function heartbeatMachinePresent(root) {
+  return fs.existsSync(path.join(root || anchors.repoRoot(), HEARTBEAT_MACHINE_REL));
+}
+
+function batchAlerts(state, opts) {
+  const options = opts || {};
   const batch = state.watched.batch;
   if (!batch || !Array.isArray(batch.amendments) || batch.amendments.length === 0) {
     return [alert("batch_unknown", "watched.batch amendments missing")];
@@ -183,6 +190,7 @@ function batchAlerts(state) {
     return [alert("batch_unknown", "BatchV1 amendments missing from the snapshot")];
   }
   if (batch.atomic_enabled !== false) {
+    if (options.machinePresent === true) return [];
     return [alert("batch_enabled", "atomic Batch is enabled; stop and do not submit until the founder chooses a heartbeat")];
   }
   return [];
@@ -210,11 +218,12 @@ function evaluate(state, opts = {}) {
   const now = opts.now || new Date();
   const maxAgeHours = opts.maxAgeHours == null ? anchors.MAX_AGE_HOURS : opts.maxAgeHours;
   const routine = opts.routine || null;
+  const machinePresent = opts.machinePresent != null ? opts.machinePresent === true : heartbeatMachinePresent(opts.root);
   const fresh = freshness(state, now, maxAgeHours);
   let specific = [];
   if (!routine || routine === "morning-health") specific = specific.concat(morningAlerts(state));
   if (!routine || routine === "weekly-nav") specific = specific.concat(navAlerts(state));
-  if (!routine || routine === "batch-probe") specific = specific.concat(batchAlerts(state));
+  if (!routine || routine === "batch-probe") specific = specific.concat(batchAlerts(state, { machinePresent }));
   if (!routine || routine === "walk-in-remint") specific = specific.concat(walkInAlerts(state));
   if (!routine) specific = specific.concat(hookAlerts(state));
   const alerts = fresh.concat(specific);
@@ -391,6 +400,7 @@ module.exports = {
   parseArgs,
   loadState,
   evaluate,
+  heartbeatMachinePresent,
   continuationCard,
   renderText,
   run,

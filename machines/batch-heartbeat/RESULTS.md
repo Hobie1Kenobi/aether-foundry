@@ -1,14 +1,25 @@
 # RESULTS — Batch Heartbeat
 
-**spec only — no product trial** (atomic Batch still disabled)
+**spec-only until a tesSUCCESS hash.** Atomic Batch is enabled on XRPL Testnet. The trial script is `npm run batch:heartbeat` (dry-run). No Batch transaction has been submitted.
 
 ## Blocking answer
 
 | Question | Answer |
 |----------|--------|
-| Is atomic Batch enabled on `s.altnet.rippletest.net`? | **false** |
+| Is atomic Batch enabled on XRPL Testnet (network id 1, XRPL Labs)? | **true** (2026-10-12) |
+| Trial hash | none yet |
 
 ## Feature probes (live)
+
+### 2026-10-12 09:53 CDT (re-probe, XRPL Labs)
+
+| Name | Hash | enabled | supported |
+|------|------|---------|-----------|
+| BatchV1_1 | `9F287AED3CDB50A7BD1ACEC24296A30C9B5230CCD136219317AC790E3B884377` | **true** | true |
+| fixBatchV1_2 | `14A2B45E48A4A124D1BBA657AC7B0DC3D5EA8C256C89E8F0D8142D32960A7944` | **true** | true |
+| TicketBatch | `955DF3FA5891195A9DAEFA1DDC6BB244B545DDE1BAA84CBB25D5F12A8DA68A0C` | **true** | true |
+
+Server: rippled **3.4.1**, network id **1**, ledger **21481707**. Primary host `wss://testnet.xrpl-labs.com` (`https://testnet.xrpl-labs.com`). Read by `npm run batch:heartbeat` (dry-run; nothing submitted). `TicketBatch` is enabled and is still not the atomic gate. The atomic gate is `BatchV1_1` and `fixBatchV1_2`, both enabled.
 
 ### 2026-09-27 ~10:13 AM CT (session-5)
 
@@ -58,7 +69,7 @@ The same minute, Devnet network id **2** (`lab/frontier/amendments-devnet.json`,
 
 | Action | Result |
 |--------|--------|
-| Batch heartbeat tx | **not sent** (RUNBOOK Step 0: stop when `enabled:false`) |
-| Engine code | n/a |
+| Batch heartbeat tx | **not sent** from this change. Dry-run is `npm run batch:heartbeat`. `--live` stays on the Foundry box with the loopback signer. |
+| Engine code | n/a until a validated outer hash and three inner hashes are `tesSUCCESS` |
 
-Port-forward: re-probe `feature` each session until `BatchV1_1` / `fixBatchV1_2` flip; then at most one Batch heartbeat (AcceptOffer + AMMDeposit + DIDUpdate). No sequential faux-batch.
+The accept leg uses a fresh taxon-`20261012` sell from W2 to W1. The deposit is single-asset XRP into the AETH/XRP pool. The DID stamp is `DIDSet` on W1, not W0, so the signer never loads the treasury seed. No sequential faux-batch.

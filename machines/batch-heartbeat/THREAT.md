@@ -1,20 +1,14 @@
 # THREAT — Batch Heartbeat (Adversary sign-off)
 
-## Why v0 is amendment-gated (Adversary)
+## Gate (Adversary)
 
-**Adversary claim:** On this server, submitting `TransactionType: Batch` will not produce the atomic heartbeat. Observed state:
+**Adversary claim:** a generic `Batch`, a mainnet `Batch`, or three separate transactions can stand in for this machine.
 
-- `BatchV1_1.enabled === false`
-- `fixBatchV1_2.enabled === false`
-- `TicketBatch.enabled === true` (unrelated: ticket sequence batching)
-
-Any “heartbeat” executed as three separate transactions is **not** this machine — it is a marketing lie. Operator could DIDUpdate after a failed AMMDeposit and claim success.
-
-**Therefore v0 is amendment-gated:** RESULTS must show `feature` probe. Until `BatchV1_*` (or successor name) flips `enabled:true`, the only honest output is **tec/feature blocked — no trial**.
+**Check:** 2026-10-12 XRPL Labs, network id 1, rippled 3.4.1: `BatchV1_1` and `fixBatchV1_2` are enabled. `TicketBatch` is also enabled and is not the gate. The signer re-reads `feature` and refuses a network id other than 1. The daemon still refuses `TransactionType` `Batch`. The agent signer accepts `Batch` only as intent `batch_heartbeat`, all-or-nothing, three named inners, amount caps, one per UTC day. A sequential accept, deposit, and DID is not this machine. Outer `tesSUCCESS` is not enough: the script requires `tesSUCCESS` on every inner hash.
 
 ## Inner-tx account mismatch
 
-Batch multi-account rules (when live) may reject mixed W0/W1/W2 inners. Mitigation: design fee-payer + Ticket pre-auth; re-read amendment docs on enable day.
+W0 does not appear as an inner account and does not appear in `BatchSigners`. The DID account is W1, which the signer already holds. Loading `W0_SEED` or a board seed to build a `BatchSigner` is refused.
 
 ## DID document spoof
 
@@ -22,7 +16,7 @@ DID URI can point anywhere. Mitigation: URI stays on `raw.githubusercontent.com/
 
 ## Probe grief
 
-Director allows **at most one** Batch probe if enabled. We did **zero** probes because disabled — avoids burning fees on `temDISABLED` / unknown tx.
+The director probe does not submit. `batch_enabled` holds the wake only when the gate is on and `src/batch/heartbeat.js` is missing. The heartbeat command refuses CI. A failed inner is not papered over by an outer `tesSUCCESS`.
 
 ## Seed exposure
 
