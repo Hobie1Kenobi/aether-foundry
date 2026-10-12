@@ -1,0 +1,8 @@
+flowchart LR
+  mint["01 Mint<br/>W2 NFTokenMint<br/>flags 9 · fee 5000<br/>taxon 20261012"]
+  list["02 List<br/>sell offer 2 XRP<br/>no Destination"]
+  buy["03 Buy<br/>W4 AcceptOffer<br/>issuer sale, no fee"]
+  redeem["04 Redeem<br/>challenge + signature<br/>account_nfts"]
+  deliver["05 Deliver<br/>ledger report<br/>Scribe or fallback"]
+  settle["06 Settle<br/>holder NFTokenBurn<br/>or lab use counter"]
+  mint --> list --> buy --> redeem --> deliver --> settle

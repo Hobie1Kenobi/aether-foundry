@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <rect width="1600" height="900" fill="#0b1220"/>
+  <text x="64" y="52" fill="#5ee0d0" font-family="Inter, DejaVu Sans, sans-serif" font-size="15" font-weight="600" letter-spacing="2.2">AETHER FOUNDRY  ·  REDEEM  ·  LOOPBACK ONLY</text>
+  <text x="64" y="100" fill="#f4f1ea" font-family="Inter, DejaVu Sans, sans-serif" font-size="40" font-weight="700">How a license is checked</text>
+  <text x="64" y="140" fill="#9aabbe" font-family="Inter, DejaVu Sans, sans-serif" font-size="20">Signature, then the nonce, then the ledger. A failed check does no work.</text>
+
+  <line x1="96" y1="196" x2="96" y2="748" stroke="#2c4060" stroke-width="2"/>
+
+  <g font-family="Inter, DejaVu Sans, sans-serif">
+    <g>
+      <circle cx="96" cy="214" r="18" fill="#152033" stroke="#e4b15a"/>
+      <text x="96" y="220" text-anchor="middle" fill="#e4b15a" font-size="14" font-weight="700">1</text>
+      <text x="136" y="208" fill="#f4f1ea" font-size="22" font-weight="700">Ask for a challenge</text>
+      <text x="136" y="236" fill="#9aabbe" font-size="16">Buyer posts the account and the NFTokenID. Server returns a nonce and an expiry, 120 seconds.</text>
+    </g>
+    <g>
+      <circle cx="96" cy="300" r="18" fill="#152033" stroke="#e4b15a"/>
+      <text x="96" y="306" text-anchor="middle" fill="#e4b15a" font-size="14" font-weight="700">2</text>
+      <text x="136" y="294" fill="#f4f1ea" font-size="22" font-weight="700">Sign the challenge string</text>
+      <text x="136" y="322" fill="#9aabbe" font-size="16">POST /sign-challenge on the signer. W4 only. This path refuses a transaction body.</text>
+    </g>
+    <g>
+      <circle cx="96" cy="386" r="18" fill="#152033" stroke="#5ee0d0"/>
+      <text x="96" y="392" text-anchor="middle" fill="#5ee0d0" font-size="14" font-weight="700">3</text>
+      <text x="136" y="380" fill="#f4f1ea" font-size="22" font-weight="700">Match the key to the account</text>
+      <text x="136" y="408" fill="#9aabbe" font-size="16">Derived classic address is the holder, or the regular key on file for that account.</text>
+    </g>
+    <g>
+      <circle cx="96" cy="472" r="18" fill="#152033" stroke="#f08a6e"/>
+      <text x="96" y="478" text-anchor="middle" fill="#f08a6e" font-size="14" font-weight="700">4</text>
+      <text x="136" y="466" fill="#f4f1ea" font-size="22" font-weight="700">Consume the nonce</text>
+      <text x="136" y="494" fill="#9aabbe" font-size="16">Stored after the signature and before the holder check. A second use is a replay.</text>
+    </g>
+    <g>
+      <circle cx="96" cy="558" r="18" fill="#152033" stroke="#5ee0d0"/>
+      <text x="96" y="564" text-anchor="middle" fill="#5ee0d0" font-size="14" font-weight="700">5</text>
+      <text x="136" y="552" fill="#f4f1ea" font-size="22" font-weight="700">Read account_nfts</text>
+      <text x="136" y="580" fill="#9aabbe" font-size="16">The address must hold it now. Issuer is W2. Taxon and aflic URI must match.</text>
+    </g>
+    <g>
+      <circle cx="96" cy="644" r="18" fill="#152033" stroke="#5ee0d0"/>
+      <text x="96" y="650" text-anchor="middle" fill="#5ee0d0" font-size="14" font-weight="700">6</text>
+      <text x="136" y="638" fill="#f4f1ea" font-size="22" font-weight="700">Uses left, and not expired</text>
+      <text x="136" y="666" fill="#9aabbe" font-size="16">Metadata hash in the URI must match the desk JSON. The job name must match.</text>
+    </g>
+    <g>
+      <circle cx="96" cy="730" r="18" fill="#123832" stroke="#8fd18a"/>
+      <text x="96" y="736" text-anchor="middle" fill="#8fd18a" font-size="14" font-weight="700">7</text>
+      <text x="136" y="724" fill="#f4f1ea" font-size="22" font-weight="700">Deliver, then settle</text>
+      <text x="136" y="752" fill="#9aabbe" font-size="16">Write the receipt. Burn on the last use. Otherwise increment the lab counter.</text>
+    </g>
+  </g>
+
+  <rect x="1048" y="188" width="488" height="584" rx="16" fill="#10192b" stroke="#2c4060"/>
+  <text x="1080" y="232" fill="#f08a6e" font-family="Inter, DejaVu Sans, sans-serif" font-size="14" font-weight="700" letter-spacing="1.8">REFUSED</text>
+  <text x="1080" y="268" fill="#f4f1ea" font-family="Inter, DejaVu Sans, sans-serif" font-size="24" font-weight="700">The job does not run</text>
+
+  <g font-family="Inter, DejaVu Sans, sans-serif">
+    <rect x="1080" y="296" width="424" height="96" rx="12" fill="#152033"/>
+    <text x="1104" y="332" fill="#f08a6e" font-size="16" font-weight="700">401  signature</text>
+    <text x="1104" y="362" fill="#c9d4e3" font-size="16">Key does not match the claimed address.</text>
+
+    <rect x="1080" y="408" width="424" height="96" rx="12" fill="#152033"/>
+    <text x="1104" y="444" fill="#f08a6e" font-size="16" font-weight="700">409  replay or used up</text>
+    <text x="1104" y="474" fill="#c9d4e3" font-size="16">Nonce already stored, or no uses remain.</text>
+
+    <rect x="1080" y="520" width="424" height="96" rx="12" fill="#152033"/>
+    <text x="1104" y="556" fill="#f08a6e" font-size="16" font-weight="700">403  wrong holder</text>
+    <text x="1104" y="586" fill="#c9d4e3" font-size="16">account_nfts does not list this token.</text>
+
+    <rect x="1080" y="632" width="424" height="108" rx="12" fill="#152033"/>
+    <text x="1104" y="668" fill="#f08a6e" font-size="16" font-weight="700">400  expired or malformed</text>
+    <text x="1104" y="698" fill="#c9d4e3" font-size="16">Past expiry, or the challenge text</text>
+    <text x="1104" y="722" fill="#c9d4e3" font-size="16">is not the fixed license string.</text>
+  </g>
+
+  <text x="64" y="848" fill="#9aabbe" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="15">aether-license-redeem/v1    account    nftoken_id    nonce    exp    job</text>
+</svg>

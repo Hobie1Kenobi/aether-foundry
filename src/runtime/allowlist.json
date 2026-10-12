@@ -25,6 +25,7 @@
     "NFTokenCreateOffer",
     "NFTokenAcceptOffer",
     "NFTokenCancelOffer",
+    "NFTokenBurn",
     "EscrowCreate",
     "EscrowFinish",
     "EscrowCancel",
@@ -60,7 +61,16 @@
   "special": {
     "epoch_scar": "do not EscrowFinish or EscrowCancel the Unix-epoch BUYER escrow",
     "walk_in_price_drops": "10000000",
-    "batch": "refuse while watched.batch.atomic_enabled is false"
+    "batch": "refuse while watched.batch.atomic_enabled is false",
+    "license_price_drops": "2000000",
+    "license_transfer_fee": 5000,
+    "license_taxon": 20261012,
+    "license_mint_flags": 9,
+    "license_mint_wallet": "W2",
+    "license_list_wallet": "W2",
+    "license_buy_wallet": "W4",
+    "license_burn_wallet": "W4",
+    "license_challenge_wallet": "W4"
   },
   "actions": {
     "walk_in_remint": {

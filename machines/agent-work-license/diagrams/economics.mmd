@@ -1,0 +1,19 @@
+flowchart TB
+  w2["W2 Atelier<br/>mint and list"]
+  signer["Signer :8787<br/>seeds stay here<br/>W2 and W4 only"]
+  w4["W4 Escrow<br/>buy, redeem, burn"]
+  ledger["XRPL Testnet network_id 1<br/>one host per signed blob"]
+  shop["Walk-In shop<br/>10 XRP · taxon 20260927"]
+  license["License line<br/>2 XRP · taxon 20261012"]
+  watch["Remint watch<br/>partition by amount<br/>license sold-out is detect-only"]
+  resale["Later resale<br/>TransferFee 5% to W2<br/>first issuer sale charges no fee"]
+  side["Redeem :8792 · Scribe :8791<br/>lab/ledger-log.jsonl"]
+  w2 --> signer
+  w4 --> signer
+  signer --> ledger
+  ledger --> shop
+  ledger --> license
+  shop --> watch
+  license --> watch
+  license --> resale
+  w4 --> side

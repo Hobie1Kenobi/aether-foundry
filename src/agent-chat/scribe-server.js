@@ -228,6 +228,31 @@ async function handle(req, res, state) {
     send(res, 200, Object.assign({ network: protocol.NETWORK }, issued));
     return;
   }
+  if (req.method === "POST" && url.pathname === "/v1/summarize") {
+    const body = await readBody(req);
+    const text = body && typeof body.text === "string" ? body.text.trim() : "";
+    if (!text || text.length > 4000) {
+      send(res, 400, { error: "text is required" });
+      return;
+    }
+    if (ollama.mockForced(state.env)) {
+      const summary = `Scribe summary: ${text.replace(/\s+/g, " ").slice(0, 360)}`;
+      send(res, 200, { summary, mock: true, network: protocol.NETWORK });
+      return;
+    }
+    try {
+      const summary = await replyText(
+        state,
+        `Summarize this ledger report in one sentence. Do not invent hashes or addresses.\n\n${text}`,
+        []
+      );
+      send(res, 200, { summary, mock: false, network: protocol.NETWORK });
+    } catch (err) {
+      const key = state.env && state.env.OLLAMA_API_KEY;
+      send(res, 502, { error: signerPost.redact(err.message || "scribe summary failed", [key]) });
+    }
+    return;
+  }
   if (req.method === "POST" && url.pathname === "/v1/chat") {
     const session = tokenSession(state, req.headers && (req.headers.authorization || req.headers.Authorization));
     if (!session) {
