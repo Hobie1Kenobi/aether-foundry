@@ -734,7 +734,11 @@ describe("committed director state", () => {
     const file = path.join(ROOT, "lab", "director-state.json");
     const state = schema.validateState(JSON.parse(fs.readFileSync(file, "utf8")), { root: ROOT });
     assert.equal(state.source, "director:snapshot");
-    assert.equal(state.networks.xrpl_testnet.http, anchors.XRPL_HTTP);
+    assert.equal(anchors.XRPL_HTTP, hosts.LABS_HTTP);
+    assert.equal(anchors.XRPL_WS, hosts.LABS_WS);
+    assert.equal(state.networks.xrpl_testnet.http, hosts.LABS_HTTP);
+    assert.equal(state.networks.xrpl_testnet.ws, hosts.LABS_WS);
+    assert.notEqual(state.networks.xrpl_testnet.http, hosts.FALLBACK_HTTP);
     assert.equal(state.networks.xahau_testnet.http, anchors.XAHAU_HTTP);
     assert.equal(state.networks.xrpl_testnet.network_id, 1);
     assert.equal(state.networks.xahau_testnet.network_id, 21338);

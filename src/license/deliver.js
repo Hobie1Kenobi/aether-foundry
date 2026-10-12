@@ -7,6 +7,14 @@
 
 const catalog = require("./catalog");
 
+const DEFAULT_SCRIBE_URL = "http://127.0.0.1:8792";
+
+function resolveScribeUrl(env, override) {
+  const source = env || {};
+  const raw = override || source.AETHER_SCRIBE_URL || DEFAULT_SCRIBE_URL;
+  return String(raw).replace(/\/$/, "");
+}
+
 function fallbackSummary(report) {
   const row = report || {};
   return `Ledger analysis for ${row.account}: balance ${row.balance_drops} drops, owner_count ${row.owner_count}, objects ${row.object_count}, sequence ${row.sequence}, ledger ${row.ledger_index}.`;
@@ -29,7 +37,10 @@ async function summarize(report, opts) {
   const options = opts || {};
   const fallback = fallbackSummary(report);
   if (options.scribe === false) return { source: "fallback", text: fallback };
-  const base = String(options.scribeUrl || process.env.AETHER_SCRIBE_URL || "http://127.0.0.1:8791").replace(/\/$/, "");
+  const base = resolveScribeUrl(
+    options.env || process.env,
+    options.scribeUrl
+  );
   if (!/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(base)) {
     return { source: "fallback", text: fallback };
   }
@@ -79,6 +90,8 @@ async function deliver(spec) {
 }
 
 module.exports = {
+  DEFAULT_SCRIBE_URL,
+  resolveScribeUrl,
   fallbackSummary,
   reportFromReads,
   summarize,

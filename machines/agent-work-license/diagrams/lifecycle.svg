@@ -63,7 +63,7 @@
       <text x="96" y="608" fill="#c9d4e3" font-size="17">Nonce is single use. Replay fails.</text>
       <text x="96" y="636" fill="#c9d4e3" font-size="17">account_nfts must show the holder.</text>
       <text x="96" y="664" fill="#c9d4e3" font-size="17">Uses remain. Not expired.</text>
-      <text x="96" y="700" fill="#9aabbe" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="15">loopback  :8792</text>
+      <text x="96" y="700" fill="#9aabbe" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="15">loopback  :8793</text>
     </g>
     <g>
       <rect x="564" y="484" width="472" height="248" rx="16" fill="#152033" stroke="#2c4060"/>

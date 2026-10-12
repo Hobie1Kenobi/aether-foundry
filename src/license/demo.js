@@ -15,6 +15,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const catalog = require("./catalog");
+const deliver = require("./deliver");
 const ledger = require("./ledger");
 const server = require("./server");
 
@@ -422,6 +423,7 @@ async function runLive(args, io) {
     allowDrySignature: false,
     regularKeys: io.regularKeys,
     scribe: io.scribe !== false,
+    scribeUrl: io.scribeUrl || deliver.resolveScribeUrl(process.env),
     accountNfts: async (account) => client.accountNfts(proved.url, account),
     readAccount: async (account) => client.readAccount(proved.url, account),
     fetchImpl,

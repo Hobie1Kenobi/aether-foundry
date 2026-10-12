@@ -57,6 +57,6 @@
 
   <rect x="1076" y="710" width="460" height="140" rx="16" fill="#10192b" stroke="#2c4060"/>
   <text x="1104" y="752" fill="#5ee0d0" font-family="Inter, DejaVu Sans, sans-serif" font-size="14" font-weight="700" letter-spacing="1.4">BESIDE THE LEDGER</text>
-  <text x="1104" y="788" fill="#f4f1ea" font-family="Inter, DejaVu Sans, sans-serif" font-size="17">Redeem :8792    Scribe :8791</text>
+  <text x="1104" y="788" fill="#f4f1ea" font-family="Inter, DejaVu Sans, sans-serif" font-size="17">Redeem :8793    Scribe :8792</text>
   <text x="1104" y="818" fill="#9aabbe" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="15">lab/ledger-log.jsonl</text>
 </svg>

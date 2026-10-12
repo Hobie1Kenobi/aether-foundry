@@ -74,7 +74,7 @@ TTL is 120 seconds. Anything further than 600 seconds ahead is refused.
 
 ## Deliver
 
-Read `account_info` and `account_objects` for the holder. The receipt line in `lab/ledger-log.jsonl` carries the report. `POST /v1/summarize` on the Scribe (`127.0.0.1:8791`) may rewrite the sentence. A down Scribe, a non-loopback URL, or a failed call keeps the fixed sentence. The job still completes.
+Read `account_info` and `account_objects` for the holder. The receipt line in `lab/ledger-log.jsonl` carries the report. `POST /v1/summarize` on the Scribe (`AETHER_SCRIBE_URL`, otherwise `127.0.0.1:8792`) may rewrite the sentence. The redeem server is `127.0.0.1:8793` unless `AETHER_LICENSE_PORT` is set. A down Scribe, a non-loopback URL, or a failed call keeps the fixed sentence. The job still completes.
 
 ## Settle
 

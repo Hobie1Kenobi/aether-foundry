@@ -18,7 +18,7 @@ Dry-run is the default. It loads no seed. Live mode talks to the loopback signer
 2. **List.** W2 creates a sell offer at 2 XRP with no Destination. Same shape as the Walk-In shop, a different price and a different product line.
 3. **Buy.** W4 accepts the offer. The first sale is from the issuer, so the 5% fee is not charged. A later sale between other accounts pays W2 that fee on-ledger.
 4. **Redeem.** The buyer asks the local redeem server for a one-time challenge, signs it, and posts it back. The server checks the signature, `account_nfts`, remaining uses, expiry, and the nonce.
-5. **Deliver.** The job is a ledger analysis of the buyer account (balance, owner count, objects, sequence). If Scribe is listening on `127.0.0.1:8791`, it summarizes. If it is not, the sentence is fixed.
+5. **Deliver.** The job is a ledger analysis of the buyer account (balance, owner count, objects, sequence). If Scribe is listening on `AETHER_SCRIBE_URL` or `127.0.0.1:8792`, it summarizes. If it is not, the sentence is fixed. The redeem server listens on `127.0.0.1:8793` (`AETHER_LICENSE_PORT`).
 6. **Settle.** One use, or the last use of a multi-use license: the holder submits `NFTokenBurn`. Uses still remaining only advance a counter in `lab/ledger-log.jsonl`.
 
 ## Why the holder burns

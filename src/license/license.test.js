@@ -453,6 +453,19 @@ describe("challenge and redeem", () => {
 });
 
 describe("deliver and scribe", () => {
+  it("keeps redeem on 8793 and Scribe on 8792", () => {
+    assert.equal(licenseServer.DEFAULT_PORT, 8793);
+    assert.equal(licenseServer.assertPort(undefined), 8793);
+    assert.equal(licenseServer.assertPort(""), 8793);
+    assert.equal(licenseServer.assertPort("8794"), 8794);
+    assert.equal(deliver.DEFAULT_SCRIBE_URL, "http://127.0.0.1:8792");
+    assert.equal(deliver.resolveScribeUrl({}), "http://127.0.0.1:8792");
+    assert.equal(
+      deliver.resolveScribeUrl({ AETHER_SCRIBE_URL: "http://127.0.0.1:8800/" }),
+      "http://127.0.0.1:8800"
+    );
+  });
+
   it("uses Scribe when the summarize route is up and falls back when it is not", async () => {
     const report = deliver.reportFromReads(catalog.W4, infoFixture(), [{}, {}], 7);
     const down = await deliver.summarize(report, { scribeUrl: "http://127.0.0.1:9", timeoutMs: 200 });

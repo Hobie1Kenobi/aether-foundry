@@ -26,7 +26,7 @@ Second shell, same token, no seeds:
 FOUNDRY_SIGNER_TOKEN=<token> npm run license:demo -- --live --pace 1.5s
 ```
 
-Optional: `AETHER_SCRIBE_URL=http://127.0.0.1:8791` if Scribe is already up (`AETHER_SCRIBE_MOCK=1 npm run peers:scribe` is enough for a canned summary). If Scribe is down, the job still finishes with the fixed sentence.
+Optional: Scribe. The demo calls `AETHER_SCRIBE_URL`, or `http://127.0.0.1:8792` when that variable is unset. On the Foundry box Scribe is `AETHER_SCRIBE_PORT=8792` because 8791 is the egress tunnel. `AETHER_SCRIBE_MOCK=1 npm run peers:scribe` is enough for a canned summary if you point `AETHER_SCRIBE_URL` at that process. If Scribe is down, the job still finishes with the fixed sentence.
 
 The signer proves `network_id` 1 before it signs. It autofills, signs, and submits on one connection. It does not resubmit that blob to the altnet. Reads in the demo may fail over from XRPL Labs to `s.altnet.rippletest.net` only before a signature exists.
 
@@ -47,7 +47,7 @@ The signer proves `network_id` 1 before it signs. It autofills, signs, and submi
 ## Redeem server alone
 
 ```bash
-node src/license/server.js --port 8792
+node src/license/server.js --port 8793
 ```
 
 `GET /health` is unsigned. `POST /v1/license/challenge` and `POST /v1/license/redeem` are the two calls. The demo starts its own ephemeral port and does not need this process.

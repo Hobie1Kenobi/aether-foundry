@@ -16,7 +16,8 @@ const catalog = require("./catalog");
 
 const HELP = `Usage: node src/license/server.js [--port N] [--root DIR]
 
-Listens on 127.0.0.1:8792 unless AETHER_LICENSE_PORT is set.
+Listens on 127.0.0.1:8793 unless AETHER_LICENSE_PORT is set.
+Scribe uses 8792 on the Foundry box. Do not bind the redeem server there.
 POST /v1/license/challenge issues a nonce. POST /v1/license/redeem verifies it.
 This process never loads a seed.`;
 
@@ -31,8 +32,10 @@ function assertBind(host) {
   throw catalog.coded("refusing non-loopback license bind", "BIND");
 }
 
+const DEFAULT_PORT = 8793;
+
 function assertPort(raw) {
-  const port = Number(raw == null || raw === "" ? 8792 : raw);
+  const port = Number(raw == null || raw === "" ? DEFAULT_PORT : raw);
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
     throw catalog.coded("refusing license port", "BIND");
   }
@@ -237,7 +240,9 @@ async function main(argv) {
 
 module.exports = {
   HELP,
+  DEFAULT_PORT,
   assertBind,
+  assertPort,
   startServer,
   createState,
   dispatch,
