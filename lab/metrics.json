@@ -1,10 +1,10 @@
 {
-  "updated_at": "2026-10-12T15:59:30-05:00",
+  "updated_at": "2026-10-12T17:26:20-05:00",
   "x402_hits": 0,
   "x402_outbound_hits": 5,
-  "grants_paid": 4,
+  "grants_paid": 5,
   "inbound_counterparties": 2,
-  "last_grant_hash": "1D4182FE52265D216CBB9A4B2E099E11764B44F4BF1DACD2004916037329B3B1",
+  "last_grant_hash": "E7D64F0CE60454168299CBA9559759C823A6251346B25148BE2019502BCB41E1",
   "last_outbound_hash": "4D0407BF40A4131C383CA1F463F5AA208E059A53EE85C73B8487D780DAFDA2F7",
   "last_heartbeat_hash": "49DAA1326D187BB4817F63C43C8C3ADEAEC43006B753F1A63BD530F709C3190F",
   "last_heartbeat": {
