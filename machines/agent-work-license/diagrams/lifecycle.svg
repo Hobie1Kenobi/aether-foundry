@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <rect width="1600" height="900" fill="#0b1220"/>
+  <text x="64" y="52" fill="#5ee0d0" font-family="Inter, DejaVu Sans, sans-serif" font-size="15" font-weight="600" letter-spacing="2.2">AETHER FOUNDRY  ·  XRPL TESTNET  ·  NETWORK ID 1</text>
+  <text x="64" y="100" fill="#f4f1ea" font-family="Inter, DejaVu Sans, sans-serif" font-size="40" font-weight="700">Agent Work License</text>
+  <text x="64" y="140" fill="#9aabbe" font-family="Inter, DejaVu Sans, sans-serif" font-size="20">Hold the NFToken. Hire the Atelier agent. The ledger is the license.</text>
+
+  <!-- row 1 -->
+  <g font-family="Inter, DejaVu Sans, sans-serif">
+    <g>
+      <rect x="64" y="176" width="472" height="248" rx="16" fill="#152033" stroke="#2c4060"/>
+      <rect x="64" y="176" width="6" height="248" rx="3" fill="#e4b15a"/>
+      <circle cx="108" cy="220" r="18" fill="#3a2e1a" stroke="#e4b15a"/>
+      <text x="108" y="226" text-anchor="middle" fill="#e4b15a" font-size="14" font-weight="700">01</text>
+      <text x="140" y="226" fill="#f4f1ea" font-size="24" font-weight="700">Mint</text>
+      <text x="96" y="268" fill="#5ee0d0" font-size="16" font-weight="600">W2 Atelier  ·  NFTokenMint</text>
+      <text x="96" y="300" fill="#c9d4e3" font-size="17">Burnable and transferable (flags 9)</text>
+      <text x="96" y="328" fill="#c9d4e3" font-size="17">TransferFee 5000  ·  about 5%</text>
+      <text x="96" y="356" fill="#c9d4e3" font-size="17">Taxon 20261012</text>
+      <text x="96" y="392" fill="#9aabbe" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="15">URI  aflic:1:&lt;sha256&gt;</text>
+    </g>
+    <g>
+      <rect x="564" y="176" width="472" height="248" rx="16" fill="#152033" stroke="#2c4060"/>
+      <rect x="564" y="176" width="6" height="248" rx="3" fill="#e4b15a"/>
+      <circle cx="608" cy="220" r="18" fill="#3a2e1a" stroke="#e4b15a"/>
+      <text x="608" y="226" text-anchor="middle" fill="#e4b15a" font-size="14" font-weight="700">02</text>
+      <text x="640" y="226" fill="#f4f1ea" font-size="24" font-weight="700">List</text>
+      <text x="596" y="268" fill="#5ee0d0" font-size="16" font-weight="600">Sell offer  ·  2 XRP</text>
+      <text x="596" y="300" fill="#c9d4e3" font-size="17">No Destination. Open to a buyer.</text>
+      <text x="596" y="328" fill="#c9d4e3" font-size="17">Same shape as the Walk-In shop.</text>
+      <text x="596" y="356" fill="#c9d4e3" font-size="17">A new line, not a replacement.</text>
+      <text x="596" y="392" fill="#9aabbe" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="15">Amount  2000000 drops</text>
+    </g>
+    <g>
+      <rect x="1064" y="176" width="472" height="248" rx="16" fill="#152033" stroke="#2c4060"/>
+      <rect x="1064" y="176" width="6" height="248" rx="3" fill="#e4b15a"/>
+      <circle cx="1108" cy="220" r="18" fill="#3a2e1a" stroke="#e4b15a"/>
+      <text x="1108" y="226" text-anchor="middle" fill="#e4b15a" font-size="14" font-weight="700">03</text>
+      <text x="1140" y="226" fill="#f4f1ea" font-size="24" font-weight="700">Buy</text>
+      <text x="1096" y="268" fill="#5ee0d0" font-size="16" font-weight="600">W4 Escrow  ·  AcceptOffer</text>
+      <text x="1096" y="300" fill="#c9d4e3" font-size="17">W4 pays 2 XRP and takes the NFT.</text>
+      <text x="1096" y="328" fill="#c9d4e3" font-size="17">First sale is from the issuer.</text>
+      <text x="1096" y="356" fill="#c9d4e3" font-size="17">The 5% fee is not charged yet.</text>
+      <text x="1096" y="392" fill="#9aabbe" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="15">NFTokenAcceptOffer</text>
+    </g>
+  </g>
+
+  <polygon points="540,292 556,300 540,308" fill="#e4b15a"/>
+  <polygon points="1040,292 1056,300 1040,308" fill="#e4b15a"/>
+
+  <text x="800" y="460" text-anchor="middle" fill="#e4b15a" font-family="Inter, DejaVu Sans, sans-serif" font-size="14" font-weight="700" letter-spacing="2">THEN THE JOB</text>
+  <line x1="560" y1="454" x2="680" y2="454" stroke="#3a2e1a" stroke-width="2"/>
+  <line x1="920" y1="454" x2="1040" y2="454" stroke="#3a2e1a" stroke-width="2"/>
+
+  <!-- row 2 -->
+  <g font-family="Inter, DejaVu Sans, sans-serif">
+    <g>
+      <rect x="64" y="484" width="472" height="248" rx="16" fill="#152033" stroke="#2c4060"/>
+      <rect x="64" y="484" width="6" height="248" rx="3" fill="#5ee0d0"/>
+      <circle cx="108" cy="528" r="18" fill="#123832" stroke="#5ee0d0"/>
+      <text x="108" y="534" text-anchor="middle" fill="#5ee0d0" font-size="14" font-weight="700">04</text>
+      <text x="140" y="534" fill="#f4f1ea" font-size="24" font-weight="700">Redeem</text>
+      <text x="96" y="576" fill="#5ee0d0" font-size="16" font-weight="600">Challenge, then a signature</text>
+      <text x="96" y="608" fill="#c9d4e3" font-size="17">Nonce is single use. Replay fails.</text>
+      <text x="96" y="636" fill="#c9d4e3" font-size="17">account_nfts must show the holder.</text>
+      <text x="96" y="664" fill="#c9d4e3" font-size="17">Uses remain. Not expired.</text>
+      <text x="96" y="700" fill="#9aabbe" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="15">loopback  :8793</text>
+    </g>
+    <g>
+      <rect x="564" y="484" width="472" height="248" rx="16" fill="#152033" stroke="#2c4060"/>
+      <rect x="564" y="484" width="6" height="248" rx="3" fill="#5ee0d0"/>
+      <circle cx="608" cy="528" r="18" fill="#123832" stroke="#5ee0d0"/>
+      <text x="608" y="534" text-anchor="middle" fill="#5ee0d0" font-size="14" font-weight="700">05</text>
+      <text x="640" y="534" fill="#f4f1ea" font-size="24" font-weight="700">Deliver</text>
+      <text x="596" y="576" fill="#5ee0d0" font-size="16" font-weight="600">Ledger analysis of the buyer</text>
+      <text x="596" y="608" fill="#c9d4e3" font-size="17">Balance, objects, sequence, index.</text>
+      <text x="596" y="636" fill="#c9d4e3" font-size="17">Scribe summarizes when it is up.</text>
+      <text x="596" y="664" fill="#c9d4e3" font-size="17">A fixed sentence when it is not.</text>
+      <text x="596" y="700" fill="#9aabbe" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="15">receipt  lab/ledger-log.jsonl</text>
+    </g>
+    <g>
+      <rect x="1064" y="484" width="472" height="248" rx="16" fill="#152033" stroke="#2c4060"/>
+      <rect x="1064" y="484" width="6" height="248" rx="3" fill="#5ee0d0"/>
+      <circle cx="1108" cy="528" r="18" fill="#123832" stroke="#5ee0d0"/>
+      <text x="1108" y="534" text-anchor="middle" fill="#5ee0d0" font-size="14" font-weight="700">06</text>
+      <text x="1140" y="534" fill="#f4f1ea" font-size="24" font-weight="700">Settle</text>
+      <text x="1096" y="576" fill="#5ee0d0" font-size="16" font-weight="600">Holder burns the license</text>
+      <text x="1096" y="608" fill="#c9d4e3" font-size="17">One use: NFTokenBurn immediately.</text>
+      <text x="1096" y="636" fill="#c9d4e3" font-size="17">Many uses: a counter in the lab log.</text>
+      <text x="1096" y="664" fill="#c9d4e3" font-size="17">The last use burns as well.</text>
+      <text x="1096" y="700" fill="#9aabbe" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="15">NFTokenBurn  ·  no Owner field</text>
+    </g>
+  </g>
+  <polygon points="1040,608 1056,616 1040,624" fill="#5ee0d0"/>
+  <polygon points="540,608 556,616 540,624" fill="#5ee0d0"/>
+
+  <rect x="64" y="768" width="1472" height="84" rx="14" fill="#10192b" stroke="#2c4060"/>
+  <text x="88" y="802" fill="#e4b15a" font-family="Inter, DejaVu Sans, sans-serif" font-size="15" font-weight="700" letter-spacing="1.4">ON-LEDGER STEPS</text>
+  <text x="88" y="830" fill="#f4f1ea" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="16">https://testnet.xrpl.org/transactions/&lt;hash&gt;</text>
+  <text x="860" y="802" fill="#9aabbe" font-family="Inter, DejaVu Sans, sans-serif" font-size="16">Full JSON stays in desk/ and lab/licenses/</text>
+  <text x="860" y="830" fill="#9aabbe" font-family="Inter, DejaVu Sans, sans-serif" font-size="16">The token only carries the hash.</text>
+</svg>

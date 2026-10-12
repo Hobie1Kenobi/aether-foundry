@@ -328,14 +328,25 @@ describe("refusals", () => {
   });
 });
 
+function committedDirectorState() {
+  return JSON.parse(fs.readFileSync(path.join(ROOT, "lab", "director-state.json"), "utf8"));
+}
+
+function clockFromFixture(offsetMs) {
+  const stamp = Date.parse(committedDirectorState().updated_at);
+  assert.equal(Number.isNaN(stamp), false);
+  return new Date(stamp + offsetMs);
+}
+
 describe("daemon dry-run", () => {
   it("prints unsigned tx JSON and does not read a seed", async () => {
     let reads = 0;
     let captured = "";
+    const state = committedDirectorState();
     const code = await daemon.pass({
       argv: ["--dry-run", "--once"],
       env: { CI: "true", W5_REGULAR_SEED: "present-not-used", AETHER_SECRETS: path.join(os.tmpdir(), "missing-secrets.env") },
-      now: new Date("2026-10-09T10:00:00.000Z"),
+      now: clockFromFixture(60 * 60 * 1000),
       loadSeed: () => {
         reads += 1;
         return "present-not-used";
@@ -344,10 +355,19 @@ describe("daemon dry-run", () => {
         captured = text;
       },
     });
-    assert.equal(code, 0);
     assert.equal(reads, 0);
     assert.equal(captured.includes("present-not-used"), false);
     const body = JSON.parse(captured);
+    const codes = body.alerts.map((row) => row.code);
+    assert.equal(codes.includes("future"), false);
+    assert.equal(codes.includes("stale"), false);
+    if (state.watched.batch.atomic_enabled === true) {
+      assert.deepEqual(codes, ["batch_enabled"]);
+      assert.equal(code, 2);
+    } else {
+      assert.deepEqual(codes, []);
+      assert.equal(code, 0);
+    }
     assert.equal(body.mode, "dry-run");
     assert.equal(body.signed, false);
     assert.equal(body.key_loaded, false);
@@ -369,18 +389,25 @@ describe("daemon dry-run", () => {
 
   it("returns 2 on stale state without reading a seed", async () => {
     let reads = 0;
+    let captured = "";
     const code = await daemon.pass({
       argv: ["--dry-run", "--once"],
       env: {},
-      now: new Date("2026-10-05T00:00:00.000Z"),
+      now: clockFromFixture((anchors.MAX_AGE_HOURS + 1) * 60 * 60 * 1000),
       loadSeed: () => {
         reads += 1;
         return "";
       },
-      stdout: () => {},
+      stdout: (text) => {
+        captured = text;
+      },
     });
     assert.equal(code, 2);
     assert.equal(reads, 0);
+    const body = JSON.parse(captured);
+    assert.equal(body.alerts.some((row) => row.code === "stale"), true);
+    assert.equal(body.alerts.some((row) => row.code === "future"), false);
+    assert.equal(body.key_loaded, false);
   });
 
   it("throws CI for --live and runtime:watch under Actions", () => {

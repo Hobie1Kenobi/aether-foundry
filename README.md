@@ -222,6 +222,7 @@ Status follows [`lab/director-state.json`](./lab/director-state.json) and the pa
 | — | [governance-board](./machines/governance-board/) | live | H1 SignerList on W0, regular keys on W1–W6. Hashes in RESULTS. |
 | — | [grants-flywheel](./machines/grants-flywheel/) | live | W6 pays non-labeled accounts that already used a house artifact. |
 | — | [inbound-mcp](./machines/inbound-mcp/) | stdio | Tool server for an outside agent. `npm run mcp`. Signing stays delegated. |
+| — | [agent-work-license](./machines/agent-work-license/) | demo | XLS-20 license to hire W2. W4 buys, redeems, and the holder burns a single use. |
 
 <a id="interact"></a>
 
@@ -396,6 +397,7 @@ Anything that signs refuses `CI`, `GITHUB_ACTIONS`, and mainnet hosts. Seeds loa
 | `npm run peers:demo:sim` | Zero-chain hello→close demo with a transcript |
 | `npm run peers:demo:live` | Operator path. Fails if the signer or Ollama key is missing |
 | `npm run remint:walk-in` | Founder remint. Refuses while an offer is open |
+| `npm run license:demo` | Agent Work License dry-run. `--live` needs the loopback signer |
 | `npm run x402:pay` | Buy a desk SKU |
 | `npm run x402:hit` | Archive a 200 body |
 | `npm run x402:outbound` | W3 pays a foreign URL |

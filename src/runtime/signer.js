@@ -19,12 +19,16 @@ const hosts = require("../xrpl-hosts");
 const daemon = require("./daemon");
 const metrics = require("./metrics");
 const policy = require("./policy");
+const licenseChallenge = require("../license/challenge");
+const licenseLedger = require("../license/ledger");
 
 const DEFAULT_BIND = "127.0.0.1";
 const DEFAULT_PORT = 8787;
 const HELP = `Usage: node src/runtime/signer.js [--self-test-dry]
 
 Listens on 127.0.0.1:8787 unless FOUNDRY_SIGNER_BIND / FOUNDRY_SIGNER_PORT are set.
+POST /sign submits an allowlisted transaction.
+POST /sign-challenge signs one aether-license-redeem/v1 string for W4 and rejects a tx.
 Requires FOUNDRY_AGENT_SIGN=yes and FOUNDRY_SIGNER_TOKEN. Refuses CI and GITHUB_ACTIONS.
 --self-test-dry prints an unsigned autofill and does not read a key.`;
 
@@ -128,6 +132,9 @@ function archiveAction(intent, tx) {
   if (intent === "grant_pay" || intent === "aether-grant" || memos.purpose === "aether-grant") return "grant_paid";
   if (intent === "x402_outbound" || intent === "x402_buy") return "x402_outbound";
   if (intent === "walk_in_remint") return "walk_in_remint";
+  if (intent === "license_mint" || intent === "license_list" || intent === "license_buy" || intent === "license_burn") {
+    return intent;
+  }
   return "agent-sign";
 }
 
@@ -279,6 +286,8 @@ function requestFields(body, ctx, dry) {
     wallet: body.wallet,
     tx: body.tx,
     intent: body.intent,
+    offerAmount: options.offerAmount,
+    sellOffer: options.sellOffer,
     url: options.skipRpc ? undefined : urls.http,
     networkId: options.networkId,
     account: options.account,
@@ -472,6 +481,16 @@ async function evaluate(body, ctx) {
       pre.ws = hosts.matchingWs(fetched.url, urls.ws);
     }
   }
+  if (body.intent === "license_buy" && !pre.skipRpc) {
+    const buyer = policy.agentWallet(body.wallet);
+    const urls = rpcFor(buyer, env);
+    const offerId = body.tx && body.tx.NFTokenSellOffer;
+    const node = await tryCandidates(hosts.candidates(urls.http), (url) => {
+      return licenseLedger.sellOfferAt(url, offerId, options.fetchImpl);
+    });
+    pre.sellOffer = node;
+    pre.offerAmount = node.Amount;
+  }
   const fields = requestFields(body, pre, dry);
   const checked = policy.assertAgentRequest(fields);
   let prepared = checked.tx;
@@ -566,10 +585,98 @@ function readBody(req) {
   });
 }
 
+async function signChallenge(body, ctx) {
+  const options = ctx || {};
+  const env = options.env || {};
+  policy.assertAgentGate(env);
+  if (!options.skipAuth) assertBearer(options.authorization, env.FOUNDRY_SIGNER_TOKEN);
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw policy.coded("refusing empty body", "ARGS");
+  policy.assertNoSeedFields(body);
+  if (body.tx || body.TransactionType) throw policy.coded("refusing tx on the challenge endpoint", "TX");
+  const wallet = policy.agentWallet(body.wallet);
+  if (wallet.id !== "W4") throw policy.coded("challenge signing is only for W4", "WALLET");
+  const parsed = licenseChallenge.parseChallenge(body.challenge);
+  if (parsed.account !== wallet.address) {
+    throw policy.coded("challenge account is not the W4 account", "CHALLENGE");
+  }
+  licenseChallenge.assertFresh(parsed, options.now || new Date());
+  let networkId = options.networkId;
+  if (networkId == null && !options.skipRpc) {
+    const urls = rpcFor(wallet, env);
+    const proved = await tryCandidates(hosts.candidates(urls.http), (url) => proveHttp(url, wallet, options.fetchImpl));
+    networkId = proved.networkId;
+  }
+  if (Number(networkId) !== anchors.XRPL_NETWORK_ID) {
+    throw policy.coded(`refusing network id ${networkId}`, "MAINNET");
+  }
+  const dry = options.dry === true || body.dry_run === true;
+  if (dry) {
+    return {
+      status: 200,
+      body: {
+        dry_run: true,
+        key_loaded: false,
+        signed: false,
+        wallet: "W4",
+        account: wallet.address,
+        network_id: 1,
+      },
+    };
+  }
+  const loadSeed = options.loadSeed || ((name) => daemon.readSeed(name, env, options.io, policy.AGENT_KEY_ENVS));
+  let seed = "";
+  try {
+    seed = loadSeed(wallet.key_env);
+    if (!seed) throw policy.coded(`${wallet.key_env} is not loaded. Refusing to sign.`, "NO_SEED");
+    const xrpl = require("xrpl");
+    let key;
+    try {
+      key = options.openWallet ? options.openWallet(seed) : xrpl.Wallet.fromSeed(seed);
+    } catch (error) {
+      if (error && error.code) throw error;
+      throw policy.coded(`${wallet.key_env} is not a usable seed`, "NO_SEED");
+    }
+    const classic = key.classicAddress || key.address;
+    assertRegularKey(wallet.id, classic, options.root || anchors.repoRoot());
+    const signed = options.signMessage
+      ? options.signMessage(parsed.text, key)
+      : licenseChallenge.signMessage(parsed.text, key);
+    const out = {
+      wallet: "W4",
+      account: wallet.address,
+      address: signed.address,
+      public_key: signed.public_key,
+      signature: signed.signature,
+      network_id: 1,
+    };
+    const text = JSON.stringify(out);
+    if (seed && text.includes(seed)) throw policy.coded("refusing to return a seed", "SEED");
+    if (env.FOUNDRY_SIGNER_TOKEN && text.includes(env.FOUNDRY_SIGNER_TOKEN)) {
+      throw policy.coded("refusing to echo the signer token", "TOKEN");
+    }
+    policy.assertNoSeedFields(out);
+    return { status: 200, body: out };
+  } catch (error) {
+    if (error && error.code && error.message && !String(error.message).includes(seed || "\0")) throw error;
+    throw policy.coded(
+      policy.redact(error && error.message ? error.message : "challenge sign failed", [seed, env.FOUNDRY_SIGNER_TOKEN]),
+      (error && error.code) || "SUBMIT"
+    );
+  } finally {
+    seed = "";
+  }
+}
+
 async function handleNodeRequest(req, ctx) {
   const options = ctx || {};
   const url = new URL(req.url || "/", "http://127.0.0.1");
   if (req.method === "GET" && url.pathname === "/health") return health(options);
+  if (req.method === "POST" && url.pathname === "/sign-challenge") {
+    const body = await readBody(req);
+    return signChallenge(body, Object.assign({}, options, {
+      authorization: req.headers && (req.headers.authorization || req.headers.Authorization),
+    }));
+  }
   if (req.method === "POST" && (url.pathname === "/sign" || url.pathname === "/dry-run")) {
     const body = await readBody(req);
     return evaluate(body, Object.assign({}, options, {
@@ -703,6 +810,7 @@ module.exports = {
   assertBearer,
   assertRegularKey,
   evaluate,
+  signChallenge,
   health,
   connectForSign,
   handleNodeRequest,

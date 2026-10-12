@@ -12,6 +12,7 @@ const directorSchema = require("../director/schema");
 const grants = require("../grants/policy");
 const guard = require("../x402-outbound-guard");
 const walkIn = require("../walk-in-public");
+const license = require("../license/catalog");
 
 const ALLOWLIST_PATH = path.join(__dirname, "allowlist.json");
 const STALE_MS = anchors.MAX_AGE_HOURS * 60 * 60 * 1000;
@@ -42,6 +43,7 @@ const AGENT_TX_TYPES = [
   "NFTokenCreateOffer",
   "NFTokenAcceptOffer",
   "NFTokenCancelOffer",
+  "NFTokenBurn",
   "EscrowCreate",
   "EscrowFinish",
   "EscrowCancel",
@@ -78,6 +80,15 @@ const AGENT_SPECIAL = {
   epoch_scar: "do not EscrowFinish or EscrowCancel the Unix-epoch BUYER escrow",
   walk_in_price_drops: "10000000",
   batch: "refuse while watched.batch.atomic_enabled is false",
+  license_price_drops: license.PRICE_DROPS,
+  license_transfer_fee: license.TRANSFER_FEE,
+  license_taxon: license.TAXON,
+  license_mint_flags: license.MINT_FLAGS,
+  license_mint_wallet: "W2",
+  license_list_wallet: "W2",
+  license_buy_wallet: "W4",
+  license_burn_wallet: "W4",
+  license_challenge_wallet: "W4",
 };
 const AGENT_ACCOUNTS = {
   W0: { sign: false, reason: "treasury master / signer list only" },
@@ -258,6 +269,15 @@ function assertAgentAllowlist(doc) {
   same(doc.special.epoch_scar, AGENT_SPECIAL.epoch_scar, "epoch_scar");
   same(doc.special.walk_in_price_drops, AGENT_SPECIAL.walk_in_price_drops, "walk_in_price");
   same(doc.special.batch, AGENT_SPECIAL.batch, "batch gate");
+  same(doc.special.license_price_drops, AGENT_SPECIAL.license_price_drops, "license price");
+  same(doc.special.license_transfer_fee, AGENT_SPECIAL.license_transfer_fee, "license fee");
+  same(doc.special.license_taxon, AGENT_SPECIAL.license_taxon, "license taxon");
+  same(doc.special.license_mint_flags, AGENT_SPECIAL.license_mint_flags, "license flags");
+  same(doc.special.license_mint_wallet, AGENT_SPECIAL.license_mint_wallet, "license mint wallet");
+  same(doc.special.license_list_wallet, AGENT_SPECIAL.license_list_wallet, "license list wallet");
+  same(doc.special.license_buy_wallet, AGENT_SPECIAL.license_buy_wallet, "license buy wallet");
+  same(doc.special.license_burn_wallet, AGENT_SPECIAL.license_burn_wallet, "license burn wallet");
+  same(doc.special.license_challenge_wallet, AGENT_SPECIAL.license_challenge_wallet, "license challenge wallet");
 }
 
 function loadAllowlist(file) {
@@ -665,7 +685,7 @@ function loadMotions(root, io) {
   return files;
 }
 
-function assertAgentAmounts(tx, motions) {
+function assertAgentAmounts(tx, motions, intent) {
   const perTx = grants.dropsOf(AGENT_CAPS.per_tx_drops);
   const motionLine = grants.dropsOf(AGENT_CAPS.motion_drops);
   const files = Array.isArray(motions) ? motions : [];
@@ -690,17 +710,25 @@ function assertAgentAmounts(tx, motions) {
     const sell = (Number(tx.Flags) & 1) === 1;
     if (sell) {
       if (tx.Destination) throw coded("refusing a Destination on the Walk-In sell offer", "DEST");
-      if (tx.Amount !== AGENT_SPECIAL.walk_in_price_drops) {
+      if (Object.prototype.hasOwnProperty.call(tx, "Destination")) {
+        throw coded("refusing a Destination on the Walk-In sell offer", "DEST");
+      }
+      if (intent === "license_list" || tx.Amount === AGENT_SPECIAL.license_price_drops) {
+        if (tx.Amount !== AGENT_SPECIAL.license_price_drops) {
+          throw coded("license sell offer must be 2 XRP", "CAP");
+        }
+      } else if (tx.Amount !== AGENT_SPECIAL.walk_in_price_drops) {
         throw coded("Walk-In sell offer must be 10 XRP", "CAP");
       }
     }
   }
 }
 
-function assertAgentFloat(tx, account, feeDrops) {
+function assertAgentFloat(tx, account, feeDrops, extraDrops) {
   if (!account) throw coded("refusing without an account balance", "FLOAT");
   const fee = grants.dropsOf(feeDrops || tx.Fee || "12");
-  const pay = xrpOut(tx) + fee;
+  const extra = extraDrops ? grants.dropsOf(extraDrops) : 0n;
+  const pay = xrpOut(tx) + fee + extra;
   const owners = Number(account.ownerCount || 0) + (OWNER_OBJECT_TYPES.has(tx.TransactionType) ? 1 : 0);
   grants.assertFloat(
     account.balance,
@@ -719,7 +747,7 @@ function agentRows(history, now) {
   });
 }
 
-function assertAgentRate(history, now, wallet, tx) {
+function assertAgentRate(history, now, wallet, tx, extraDrops) {
   const when = now || new Date();
   const rows = agentRows(history, when);
   const hour = rows.filter((row) => when.getTime() - Date.parse(row.ts) < HOUR_MS);
@@ -734,7 +762,8 @@ function assertAgentRate(history, now, wallet, tx) {
   const spent = today
     .filter((row) => row.wallet === wallet.id)
     .reduce((sum, row) => sum + grants.dropsOf(row.amount_drops || "0"), 0n);
-  const next = spent + xrpOut(tx);
+  const extra = extraDrops ? grants.dropsOf(extraDrops) : 0n;
+  const next = spent + xrpOut(tx) + extra;
   if (next > grants.dropsOf(wallet.daily_max_drops)) {
     throw coded(`refusing ${wallet.id} spend above daily_max_drops`, "CAP");
   }
@@ -789,8 +818,88 @@ function assertAgentType(tx) {
   }
 }
 
+function licenseUriOk(uri) {
+  if (typeof uri !== "string" || !/^[A-F0-9]+$/.test(uri)) return false;
+  const text = Buffer.from(uri, "hex").toString("utf8");
+  return license.parseUri(text) != null;
+}
+
+function assertLicenseTx(tx, intent, opts) {
+  const options = opts || {};
+  const name = typeof intent === "string" ? intent : "";
+  const named = name.startsWith("license_");
+  const mintShaped = tx.TransactionType === "NFTokenMint" && Number(tx.NFTokenTaxon) === license.TAXON;
+  const listShaped = tx.TransactionType === "NFTokenCreateOffer"
+    && (Number(tx.Flags) & 1) === 1
+    && tx.Amount === license.PRICE_DROPS;
+  const burnShaped = tx.TransactionType === "NFTokenBurn";
+  if (!named && !mintShaped && !listShaped && !burnShaped) return false;
+  if (burnShaped || name === "license_burn") {
+    if (name !== "license_burn") throw coded("refusing NFTokenBurn outside license_burn", "TX");
+    if (options.wallet !== "W4") throw coded("license burn is only W4", "WALLET");
+    if (tx.TransactionType !== "NFTokenBurn") throw coded("license_burn requires NFTokenBurn", "TX");
+    if (!license.HEX64.test(String(tx.NFTokenID || "").toUpperCase())) {
+      throw coded("license burn requires NFTokenID", "TX");
+    }
+    if (tx.Owner) throw coded("holder burn must not set Owner", "TX");
+    if (tx.Amount != null) throw coded("NFTokenBurn has no amount", "TX");
+    return true;
+  }
+  if (mintShaped || name === "license_mint") {
+    if (name !== "license_mint") throw coded("license mint requires intent license_mint", "TX");
+    if (options.wallet !== "W2") throw coded("license mint is only W2", "WALLET");
+    if (tx.TransactionType !== "NFTokenMint") throw coded("license_mint requires NFTokenMint", "TX");
+    if (Number(tx.NFTokenTaxon) !== license.TAXON) throw coded("license taxon drifted", "TX");
+    if (Number(tx.Flags) !== license.MINT_FLAGS) throw coded("license mint flags must be burnable and transferable", "TX");
+    if (Number(tx.TransferFee) !== license.TRANSFER_FEE) throw coded("license TransferFee must be 5000", "TX");
+    if (!licenseUriOk(tx.URI)) throw coded("license URI must be aflic:1:<hash>", "TX");
+    if (tx.Destination || tx.Amount || tx.Issuer) throw coded("license mint must not set Destination, Amount, or Issuer", "TX");
+    return true;
+  }
+  if (listShaped || name === "license_list") {
+    if (name !== "license_list") throw coded("license list requires intent license_list", "TX");
+    if (options.wallet !== "W2") throw coded("license list is only W2", "WALLET");
+    if (tx.TransactionType !== "NFTokenCreateOffer") throw coded("license_list requires NFTokenCreateOffer", "TX");
+    if (Number(tx.Flags) !== license.TF_SELL_NFTOKEN) throw coded("license list must be a sell offer", "TX");
+    if (tx.Amount !== license.PRICE_DROPS) throw coded("license sell offer must be 2 XRP", "CAP");
+    if (tx.Destination || Object.prototype.hasOwnProperty.call(tx, "Destination")) {
+      throw coded("refusing a Destination on the license sell offer", "DEST");
+    }
+    if (!license.HEX64.test(String(tx.NFTokenID || "").toUpperCase())) {
+      throw coded("license list requires NFTokenID", "TX");
+    }
+    return true;
+  }
+  if (name === "license_buy") {
+    if (options.wallet !== "W4") throw coded("license buy is only W4", "WALLET");
+    if (tx.TransactionType !== "NFTokenAcceptOffer") throw coded("license_buy requires NFTokenAcceptOffer", "TX");
+    if (!license.HEX64.test(String(tx.NFTokenSellOffer || "").toUpperCase())) {
+      throw coded("license buy requires NFTokenSellOffer", "TX");
+    }
+    if (tx.NFTokenBuyOffer || tx.Amount) throw coded("license buy accepts a sell offer and sets no amount", "TX");
+    const offer = options.sellOffer;
+    const amount = options.offerAmount != null ? options.offerAmount : offer && offer.Amount;
+    if (typeof amount !== "string" || amount !== license.PRICE_DROPS) {
+      throw coded("license sell offer must be 2 XRP", "CAP");
+    }
+    if (offer) {
+      if (offer.LedgerEntryType && offer.LedgerEntryType !== "NFTokenOffer") {
+        throw coded("license buy offer is not an NFTokenOffer", "TX");
+      }
+      if ((Number(offer.Flags) & 1) !== 1) throw coded("license offer is not a sell offer", "TX");
+      if (offer.Owner && offer.Owner !== anchors.WALLETS.W2.address) {
+        throw coded("license sell offer owner must be W2", "ACCOUNT");
+      }
+      if (offer.Destination) throw coded("refusing a Destination on the license sell offer", "DEST");
+    }
+    return true;
+  }
+  throw coded(`refusing ${name || tx.TransactionType}`, "TX");
+}
+
 function assertKnownIntent(tx, intent, opts) {
   const options = opts || {};
+  if (assertLicenseTx(tx, intent, options)) return;
   const memos = grants.decodeMemos(tx);
   let name = intent;
   if (memos.purpose === "aether-heartbeat") name = "heartbeat";
@@ -874,11 +983,12 @@ function assertAgentRequest(opts) {
   assertAgentBatch(tx, options.state);
   assertAgentType(tx);
   assertDisableMaster(tx);
-  assertAgentAmounts(tx, options.motions || []);
+  assertAgentAmounts(tx, options.motions || [], options.intent);
   assertKnownIntent(tx, options.intent, options);
-  if (options.account) assertAgentFloat(tx, options.account, options.feeDrops);
+  const licenseSpend = options.intent === "license_buy" ? license.PRICE_DROPS : null;
+  if (options.account) assertAgentFloat(tx, options.account, options.feeDrops, licenseSpend);
   else if (options.requireAccount) throw coded("refusing without an account balance", "FLOAT");
-  assertAgentRate(options.history || [], options.now || new Date(), wallet, tx);
+  assertAgentRate(options.history || [], options.now || new Date(), wallet, tx, licenseSpend);
   assertEpochScar(tx);
   assertAgentBatch(tx, options.state);
   return { wallet, tx };

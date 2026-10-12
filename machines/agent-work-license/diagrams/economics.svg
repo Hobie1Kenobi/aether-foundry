@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <rect width="1600" height="900" fill="#0b1220"/>
+  <text x="64" y="52" fill="#5ee0d0" font-family="Inter, DejaVu Sans, sans-serif" font-size="15" font-weight="600" letter-spacing="2.2">AETHER FOUNDRY  ·  WALLETS, FEE, AND THE SHOP</text>
+  <text x="64" y="100" fill="#f4f1ea" font-family="Inter, DejaVu Sans, sans-serif" font-size="40" font-weight="700">Where the license sits</text>
+  <text x="64" y="140" fill="#9aabbe" font-family="Inter, DejaVu Sans, sans-serif" font-size="20">Seeds stay in the signer. The shop stays 10 XRP. Resale pays the issuer.</text>
+
+  <g font-family="Inter, DejaVu Sans, sans-serif">
+    <rect x="64" y="176" width="460" height="210" rx="16" fill="#152033" stroke="#2c4060"/>
+    <text x="92" y="216" fill="#e4b15a" font-size="14" font-weight="700" letter-spacing="1.6">ISSUER</text>
+    <text x="92" y="254" fill="#f4f1ea" font-size="28" font-weight="700">W2 Atelier</text>
+    <text x="92" y="292" fill="#c9d4e3" font-size="17">Mints the license and lists it.</text>
+    <text x="92" y="320" fill="#c9d4e3" font-size="17">Collects the 5% fee on a later sale.</text>
+    <text x="92" y="356" fill="#9aabbe" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="15">rLBKyi...wKEw</text>
+
+    <rect x="570" y="176" width="460" height="210" rx="16" fill="#152033" stroke="#e4b15a"/>
+    <text x="598" y="216" fill="#e4b15a" font-size="14" font-weight="700" letter-spacing="1.6">SIGNER  ·  127.0.0.1:8787</text>
+    <text x="598" y="254" fill="#f4f1ea" font-size="28" font-weight="700">Seeds stay here</text>
+    <text x="598" y="292" fill="#c9d4e3" font-size="17">Mint, list, buy, burn. W2 and W4 only.</text>
+    <text x="598" y="320" fill="#c9d4e3" font-size="17">Challenge signing is not a free transaction.</text>
+    <text x="598" y="356" fill="#9aabbe" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="15">network_id 1 before any signature</text>
+
+    <rect x="1076" y="176" width="460" height="210" rx="16" fill="#152033" stroke="#2c4060"/>
+    <text x="1104" y="216" fill="#5ee0d0" font-size="14" font-weight="700" letter-spacing="1.6">HOLDER</text>
+    <text x="1104" y="254" fill="#f4f1ea" font-size="28" font-weight="700">W4 Escrow</text>
+    <text x="1104" y="292" fill="#c9d4e3" font-size="17">Buys for 2 XRP. Redeems. Burns.</text>
+    <text x="1104" y="320" fill="#c9d4e3" font-size="17">Spend counts toward float and the daily cap.</text>
+    <text x="1104" y="356" fill="#9aabbe" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="15">ra9X6T...cD5pN</text>
+  </g>
+
+  <rect x="64" y="414" width="1472" height="72" rx="14" fill="#10192b" stroke="#2c4060"/>
+  <text x="92" y="458" fill="#f4f1ea" font-family="Inter, DejaVu Sans, sans-serif" font-size="18">XRPL Testnet. One host per signed blob. Reads may fail over. A signed blob never does.</text>
+
+  <g font-family="Inter, DejaVu Sans, sans-serif">
+    <rect x="64" y="514" width="460" height="168" rx="16" fill="#152033" stroke="#2c4060"/>
+    <text x="92" y="554" fill="#9aabbe" font-size="14" font-weight="700" letter-spacing="1.4">WALK-IN WINDOW</text>
+    <text x="92" y="592" fill="#f4f1ea" font-size="24" font-weight="700">10 XRP shop</text>
+    <text x="92" y="628" fill="#c9d4e3" font-size="17">Taxon 20260927. Still the shop.</text>
+    <text x="92" y="656" fill="#c9d4e3" font-size="17">Unchanged remint when it sells out.</text>
+
+    <rect x="570" y="514" width="460" height="168" rx="16" fill="#152033" stroke="#5ee0d0"/>
+    <text x="598" y="554" fill="#5ee0d0" font-size="14" font-weight="700" letter-spacing="1.4">LICENSE LINE</text>
+    <text x="598" y="592" fill="#f4f1ea" font-size="24" font-weight="700">2 XRP license</text>
+    <text x="598" y="628" fill="#c9d4e3" font-size="17">Taxon 20261012. New product.</text>
+    <text x="598" y="656" fill="#c9d4e3" font-size="17">URI is a hash of the desk JSON.</text>
+
+    <rect x="1076" y="514" width="460" height="168" rx="16" fill="#152033" stroke="#2c4060"/>
+    <text x="1104" y="554" fill="#e4b15a" font-size="14" font-weight="700" letter-spacing="1.4">REMINT WATCH</text>
+    <text x="1104" y="592" fill="#f4f1ea" font-size="24" font-weight="700">Detect only</text>
+    <text x="1104" y="628" fill="#c9d4e3" font-size="17">Splits offers by amount.</text>
+    <text x="1104" y="656" fill="#c9d4e3" font-size="17">A sold-out license is not a remint.</text>
+  </g>
+
+  <rect x="64" y="710" width="980" height="140" rx="16" fill="#152033" stroke="#2c4060"/>
+  <text x="92" y="752" fill="#e4b15a" font-family="Inter, DejaVu Sans, sans-serif" font-size="14" font-weight="700" letter-spacing="1.4">RESALE</text>
+  <text x="92" y="790" fill="#f4f1ea" font-family="Inter, DejaVu Sans, sans-serif" font-size="22" font-weight="700">A later sale pays W2 five percent</text>
+  <text x="92" y="822" fill="#c9d4e3" font-family="Inter, DejaVu Sans, sans-serif" font-size="17">The first sale is from the issuer, so that fee is not charged. TransferFee is 5000.</text>
+
+  <rect x="1076" y="710" width="460" height="140" rx="16" fill="#10192b" stroke="#2c4060"/>
+  <text x="1104" y="752" fill="#5ee0d0" font-family="Inter, DejaVu Sans, sans-serif" font-size="14" font-weight="700" letter-spacing="1.4">BESIDE THE LEDGER</text>
+  <text x="1104" y="788" fill="#f4f1ea" font-family="Inter, DejaVu Sans, sans-serif" font-size="17">Redeem :8793    Scribe :8792</text>
+  <text x="1104" y="818" fill="#9aabbe" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="15">lab/ledger-log.jsonl</text>
+</svg>

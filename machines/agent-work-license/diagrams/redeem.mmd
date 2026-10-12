@@ -1,0 +1,17 @@
+sequenceDiagram
+  participant Buyer as W4 buyer
+  participant Signer as Signer :8787
+  participant Server as Redeem :8793
+  participant Ledger as XRPL Testnet
+  Buyer->>Server: request challenge
+  Server-->>Buyer: nonce and expiry
+  Buyer->>Signer: POST /sign-challenge
+  Signer-->>Buyer: signature, not a transaction
+  Buyer->>Server: redeem with signature
+  Server->>Server: match key to account or regular key
+  Server->>Server: consume nonce before holder check
+  Server->>Ledger: account_nfts
+  Ledger-->>Server: holder, issuer, taxon, URI
+  Server->>Server: uses remain and not expired
+  Server->>Server: deliver job and write lab receipt
+  Note over Server: 401 signature · 409 replay or used up<br/>403 wrong holder · 400 expired

@@ -34,7 +34,7 @@ jobs:
 
       - name: Commit sold-out plan
         run: |
-          git add -- lab/ledger-log.jsonl machines/walk-in-window/RESULTS.md
+          git add -- lab/ledger-log.jsonl machines/walk-in-window/RESULTS.md machines/agent-work-license/RESULTS.md
           if [ -d lab/remint-plans ]; then
             git add -- lab/remint-plans
           fi

@@ -3,8 +3,10 @@
 
 /**
  * Walk-In Window remint watcher. Read-only Testnet poll.
- * Exit 0 when a W2 sell offer is OPEN. On SOLD OUT, write a dry-run
- * remint plan plus ledger-log and RESULTS lines. Never signs.
+ * Exit 0 when a W2 Walk-In sell offer (10 XRP) is OPEN. On SOLD OUT, write a
+ * dry-run remint plan plus ledger-log and RESULTS lines. A 2 XRP license
+ * sell offer is a different line: this watch can record that it sold out,
+ * detect-only, and will not remint it. Never signs.
  *
  *   npm run watch:walk-in
  *   node src/walk-in-remint-watch.js [--quiet] [--simulate-sold-out --root DIR]
@@ -14,6 +16,7 @@ const fs = require('fs');
 const path = require('path');
 const hosts = require('./xrpl-hosts');
 const pub = require('./walk-in-public');
+const licenseWatch = require('./license/watch');
 
 const HELP = `Usage: node src/walk-in-remint-watch.js [--quiet] [--rpc URL] [--simulate-sold-out --root DIR]
 
@@ -272,17 +275,26 @@ async function run(argv, io = {}) {
       error(snap.error || 'account_objects failed');
       return 1;
     }
-    if (snap.offers.length > 0) {
+    const grouped = licenseWatch.partition(snap.offers);
+    const licensePlan = licenseWatch.detectSoldOut(root, {
+      offers: snap.offers,
+      rpc: snap.rpc,
+      ledgerIndex: snap.ledgerIndex,
+      now: io.now ? io.now() : new Date(),
+    });
+    if (grouped.walkIn.length > 0) {
       if (!args.quiet) {
-        const first = snap.offers[0];
+        const first = grouped.walkIn[0];
         log(
-          `OPEN w2=${pub.W2} offers=${snap.offers.length} offer=${first.offerId} nft=${first.nftokenId}`
+          `OPEN w2=${pub.W2} offers=${grouped.walkIn.length} offer=${first.offerId} nft=${first.nftokenId}`
         );
       }
+      if (licensePlan) log(`SOLD OUT license plan=${licensePlan}`);
       return 0;
     }
     ledgerIndex = snap.ledgerIndex;
     rpc = snap.rpc;
+    if (licensePlan) log(`SOLD OUT license plan=${licensePlan}`);
   }
 
   const known = readLastKnown(root);
