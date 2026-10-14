@@ -64,6 +64,7 @@ function isolatedEnv(extra) {
     {
       PATH: process.env.PATH,
       AETHER_SECRETS: path.join(os.tmpdir(), "aether-outbound-missing.env"),
+      AETHER_LEDGER_LOG: path.join(os.tmpdir(), "aether-outbound-missing-ledger.jsonl"),
       CI: "",
       GITHUB_ACTIONS: "",
     },

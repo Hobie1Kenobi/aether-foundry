@@ -12,6 +12,7 @@
       "method": "POST",
       "body": { "account": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw" }
     },
-    "https://x402.cryptobuddy.com.au/crypto/australia/best?asset=XRP&amount=5000&side=buy"
+    "https://x402.cryptobuddy.com.au/crypto/australia/best?asset=XRP&amount=5000&side=buy",
+    "https://agentxr.agentic-swarm-marketplace.com/sku/ledger-index"
   ]
 }

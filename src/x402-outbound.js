@@ -118,7 +118,7 @@ function outboundPaidToday(text, now) {
 }
 
 function repoOutboundPaidToday(now) {
-  const file = path.join(ROOT, "lab", "ledger-log.jsonl");
+  const file = process.env.AETHER_LEDGER_LOG || path.join(ROOT, "lab", "ledger-log.jsonl");
   const text = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
   return outboundPaidToday(text, now || new Date());
 }
