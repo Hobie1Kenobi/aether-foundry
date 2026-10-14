@@ -354,7 +354,7 @@ async function run(opts) {
       throw Object.assign(new Error("refusing NetworkID other than 1"), { code: "invalid_network" });
     }
     const signed = wallet.sign(prepared);
-    return finishLive(
+    return await finishLive(
       signed,
       async () => {
         const submitted = await client.submitAndWait(signed.tx_blob);

@@ -652,3 +652,55 @@ describe("W3 regular key signer", () => {
     );
   });
 });
+
+describe("citizen buyer client lifecycle", () => {
+  it("keeps the XRPL client connected until the verify-only submit finishes", async () => {
+    const wallet = xrpl.Wallet.generate();
+    let connected = true;
+    let submits = 0;
+    const report = await citizen.run({
+      args: citizen.parseArgs(["--live", "--url", "https://foreign.example/sku"]),
+      env: liveEnv({ W3_SEED: wallet.seed }),
+      ledgerText: "",
+      sleep: async () => {},
+      walletFromSeed() {
+        return {
+          classicAddress: guard.W3_ADDRESS,
+          sign() {
+            return { tx_blob: "blob", hash: "E".repeat(64) };
+          },
+        };
+      },
+      fetchImpl: async (_url, init) => {
+        if (!init || !init.headers || !init.headers["PAYMENT-SIGNATURE"]) return challenge(FOREIGN);
+        const decoded = rules.decodeHeader(init.headers["PAYMENT-SIGNATURE"]);
+        if (!decoded.payload.transaction) {
+          return {
+            status: 402,
+            headers: { get: () => "" },
+            text: async () => JSON.stringify({ code: "payment_not_on_ledger" }),
+          };
+        }
+        return { status: 200, headers: { get: () => "" }, text: async () => "{}" };
+      },
+      connect: async () =>
+        Object.assign(fakeClient({
+          async submitAndWait() {
+            await new Promise((resolve) => setImmediate(resolve));
+            if (!connected) throw new Error("NotConnectedError: submit after disconnect");
+            submits += 1;
+            return { result: { hash: "E".repeat(64), ledger_index: 7, meta: { TransactionResult: "tesSUCCESS" } } };
+          },
+        }), {
+          async disconnect() {
+            connected = false;
+          },
+        }),
+    });
+    assert.equal(submits, 1);
+    assert.equal(report.submitted, true);
+    assert.equal(report.settlement, "client-submit");
+    assert.equal(report.http_status, 200);
+    assert.equal(connected, false);
+  });
+});
