@@ -75,6 +75,7 @@ describe("citizen buyer", () => {
         body: { account: guard.W3_ADDRESS },
       },
       "https://x402.cryptobuddy.com.au/crypto/australia/best?asset=XRP&amount=5000&side=buy",
+      "https://agentxr.agentic-swarm-marketplace.com/sku/ledger-index",
     ]);
     assert.equal(filed.network, "xrpl:1");
     const loaded = citizen.loadCandidates(citizen.CANDIDATES);
