@@ -1,0 +1,16 @@
+{
+  "schema": "aether-foundry/net-chat-demo@1",
+  "mode": "sim",
+  "synthetic": true,
+  "ledger_claim": false,
+  "network": "xrpl:1",
+  "scribe": "mock",
+  "model": "mock",
+  "scout_wallet": "W5",
+  "scout_address": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+  "w3": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+  "session": "s_a11ce00000000001",
+  "accept_hash": "4444444444444444444444444444444444444444444444444444444444444444",
+  "transcript_sha256": "728c0bc253b37df2b652f1d42e0187b1630a63a21e10906d83057b389dca9a71",
+  "note": "Hashes in frames.json are synthetic. They are not XRPL transaction hashes."
+}

@@ -1,0 +1,16 @@
+{
+  "schema": "aether-foundry/net-chat-demo@1",
+  "mode": "live",
+  "synthetic": false,
+  "ledger_claim": true,
+  "network": "xrpl:1",
+  "scribe": "glm-5.3-flash",
+  "model": "glm-5.3-flash",
+  "scout_wallet": "W5",
+  "scout_address": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+  "w3": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+  "session": "s_6fb7b781225408aa",
+  "accept_hash": "0512F2317A791F5BEE46556CCE2CF600185C825EC5473B8A4CE280EF7E4142B5",
+  "transcript_sha256": "a9aa3c10bd00bbbbb42e958477dc45bbfe3ae9ced552dbd283ebc97b3e5c2777",
+  "note": "Hashes are the tesSUCCESS values returned by the signer. They were not invented in this file."
+}

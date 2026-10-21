@@ -1,0 +1,17 @@
+{
+  "schema": "aether-foundry/net-chat-demo@1",
+  "mode": "live",
+  "tool": "net-chat-demo.sh",
+  "synthetic": false,
+  "ledger_claim": true,
+  "network": "xrpl:1",
+  "model": "glm-5.3-flash",
+  "scribe": "http://127.0.0.1:8792",
+  "scout_address": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+  "w3": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+  "session": "s_35fb4ae40324a43f",
+  "accept_hash": "0ECD247DD8932583BDCA97EB310A108A648BE015B48D8B36D48A3BE0397FB8B4",
+  "close_hash": "A6C7A918FF3A747DC1ABF8F885D1C22B5EC956D807DC8F9A3C154BFA7CC40621",
+  "transcript_sha256": "9f935427f0410b53fe989631e604e2b06816e2e78798b1b9e40343828d6cd173",
+  "note": "Hashes came from signer tesSUCCESS results and the W3 ledger, then were re-checked with tx RPC."
+}
