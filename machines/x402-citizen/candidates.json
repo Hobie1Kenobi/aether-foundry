@@ -1,18 +1,110 @@
 {
   "network": "xrpl:1",
-  "note": "HTTPS URLs of other agents' XRPL Testnet x402 SKUs. A string is GET with no body. An object sets method and a JSON body; the unpaid probe and the PAYMENT-SIGNATURE retry both send that same method and body. Sciphr demo subject and account are W3 CHANNELS rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw (Testnet classic, request body only, not pay-to). Empty urls means the daily buy dry-runs and records no hash. Do not list the Foundry desk. Pay-to must stay outside WALLETS.",
+  "note": "HTTPS URLs of other agents' XRPL Testnet x402 SKUs. A string is GET with no body. An object sets method and a JSON body; the unpaid probe and the PAYMENT-SIGNATURE retry both send that same method and body. Sciphr demo subject and account are W3 CHANNELS rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw (Testnet classic, request body only, not pay-to). Empty urls means the daily buy dry-runs and records no hash. Do not list the Foundry desk. Pay-to must stay outside WALLETS. stablecoingateways entries (added 2026-10-22, Hobie approved): GET with the OpenAPI example query params the shop requires; pay_to/drops/network are informational, the live 402 is re-checked before any sign.",
   "urls": [
     {
       "url": "https://verify.sciphr.io/v1/credential/verify",
       "method": "POST",
-      "body": { "subject": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw" }
+      "body": {
+        "subject": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw"
+      }
     },
     {
       "url": "https://verify.sciphr.io/v1/did/resolve",
       "method": "POST",
-      "body": { "account": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw" }
+      "body": {
+        "account": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw"
+      }
     },
     "https://x402.cryptobuddy.com.au/crypto/australia/best?asset=XRP&amount=5000&side=buy",
-    "https://agentxr.agentic-swarm-marketplace.com/sku/ledger-index"
+    "https://agentxr.agentic-swarm-marketplace.com/sku/ledger-index",
+    {
+      "url": "https://api.stablecoingateways.com/v1/fx/convert?from=USD&to=EUR&amount=1",
+      "method": "GET",
+      "network": "xrpl:1",
+      "pay_to": "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs",
+      "drops": "782",
+      "source": "CDP bazaar 2026-10-22 (scratch/peerprobe/run-2026-10-22am); query params are the shop's OpenAPI examples; XRP drops float with the shop's XRP-USD quote"
+    },
+    {
+      "url": "https://api.stablecoingateways.com/v1/fx/rates?base=USD&symbols=EUR,GBP,JPY",
+      "method": "GET",
+      "network": "xrpl:1",
+      "pay_to": "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs",
+      "drops": "782",
+      "source": "CDP bazaar 2026-10-22 (scratch/peerprobe/run-2026-10-22am); query params are the shop's OpenAPI examples; XRP drops float with the shop's XRP-USD quote"
+    },
+    {
+      "url": "https://api.stablecoingateways.com/v1/business-days?calendar=US-NY&op=add&date=2026-12-23&days=3",
+      "method": "GET",
+      "network": "xrpl:1",
+      "pay_to": "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs",
+      "drops": "782",
+      "source": "CDP bazaar 2026-10-22 (scratch/peerprobe/run-2026-10-22am); query params are the shop's OpenAPI examples; XRP drops float with the shop's XRP-USD quote"
+    },
+    {
+      "url": "https://api.stablecoingateways.com/v1/us/rates-macro?series=treasury,cpi",
+      "method": "GET",
+      "network": "xrpl:1",
+      "pay_to": "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs",
+      "drops": "1563",
+      "source": "CDP bazaar 2026-10-22 (scratch/peerprobe/run-2026-10-22am); query params are the shop's OpenAPI examples; XRP drops float with the shop's XRP-USD quote"
+    },
+    {
+      "url": "https://api.stablecoingateways.com/v1/recalls?q=stroller&source=cpsc",
+      "method": "GET",
+      "network": "xrpl:1",
+      "pay_to": "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs",
+      "drops": "1563",
+      "source": "CDP bazaar 2026-10-22 (scratch/peerprobe/run-2026-10-22am); query params are the shop's OpenAPI examples; XRP drops float with the shop's XRP-USD quote"
+    },
+    {
+      "url": "https://api.stablecoingateways.com/v1/lei?lei=HWUPKR0MPOU8FGXBT394",
+      "method": "GET",
+      "network": "xrpl:1",
+      "pay_to": "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs",
+      "drops": "1563",
+      "source": "CDP bazaar 2026-10-22 (scratch/peerprobe/run-2026-10-22am); query params are the shop's OpenAPI examples; XRP drops float with the shop's XRP-USD quote"
+    },
+    {
+      "url": "https://api.stablecoingateways.com/v1/page-to-markdown?url=https://example.org/",
+      "method": "GET",
+      "network": "xrpl:1",
+      "pay_to": "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs",
+      "drops": "1563",
+      "source": "CDP bazaar 2026-10-22 (scratch/peerprobe/run-2026-10-22am); query params are the shop's OpenAPI examples; XRP drops float with the shop's XRP-USD quote"
+    },
+    {
+      "url": "https://api.stablecoingateways.com/v1/whois?domain=example.com",
+      "method": "GET",
+      "network": "xrpl:1",
+      "pay_to": "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs",
+      "drops": "2345",
+      "source": "CDP bazaar 2026-10-22 (scratch/peerprobe/run-2026-10-22am); query params are the shop's OpenAPI examples; XRP drops float with the shop's XRP-USD quote"
+    },
+    {
+      "url": "https://api.stablecoingateways.com/v1/sec/company-facts?ticker=AAPL",
+      "method": "GET",
+      "network": "xrpl:1",
+      "pay_to": "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs",
+      "drops": "2345",
+      "source": "CDP bazaar 2026-10-22 (scratch/peerprobe/run-2026-10-22am); query params are the shop's OpenAPI examples; XRP drops float with the shop's XRP-USD quote"
+    },
+    {
+      "url": "https://api.stablecoingateways.com/v1/domain-facts?domain=example.com",
+      "method": "GET",
+      "network": "xrpl:1",
+      "pay_to": "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs",
+      "drops": "2345",
+      "source": "CDP bazaar 2026-10-22 (scratch/peerprobe/run-2026-10-22am); query params are the shop's OpenAPI examples; XRP drops float with the shop's XRP-USD quote"
+    },
+    {
+      "url": "https://api.stablecoingateways.com/v1/sanctions/screen?name=Huawei%20Technologies",
+      "method": "GET",
+      "network": "xrpl:1",
+      "pay_to": "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs",
+      "drops": "3908",
+      "source": "CDP bazaar 2026-10-22 (scratch/peerprobe/run-2026-10-22am); query params are the shop's OpenAPI examples; XRP drops float with the shop's XRP-USD quote"
+    }
   ]
 }
