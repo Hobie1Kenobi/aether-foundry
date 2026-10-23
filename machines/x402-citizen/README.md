@@ -45,7 +45,7 @@ The catalog at `GET /api/x402` and `howToPay.facilitator` advertise the testnet 
 
 ## Outbound
 
-`npm run x402:citizen` is the daily buy from W3. Dry-run is the default. `--live` needs `FOUNDRY_DAEMON_LIVE=yes` on the Foundry box. The cap is `500000` drops (0.5 XRP), the same Hands outbound cap.
+`npm run x402:citizen` is the W3 outbound buy (no daily limit since 2026-10-23). Dry-run is the default. `--live` needs `FOUNDRY_DAEMON_LIVE=yes` on the Foundry box. The cap is `500000` drops (0.5 XRP), the same Hands outbound cap.
 
 The Payment carries the shop's `SourceTag` when the 402 names one, otherwise SourceTag `202609296`. It always adds a memo whose type is `aether-foundry` and whose data is `aether-foundry:f11`. The retry header carries `payload.invoiceId` from the challenge. Foundry does not submit that blob when the shop settles it.
 

@@ -47,3 +47,7 @@ no tx hash (not submitted)
 ```
 
 Stopped before `--live`. No new `x402_outbound` ledger row.
+
+## 2026-10-23 all-shops run (no daily limit)
+
+Owner removed the one-per-UTC-day citizen limit. One live `--record --max-drops 10000` buy per `candidates.json` entry, xrpl:1 only, shop-settle every time. 17/18 returned HTTP 200 with a result body; `stablecoingateways /v1/whois` answered 500 `charged:false` and nothing landed on ledger. W3 paid 44684 drops plus 204 drops fees (105977961 → 105933073). `x402_outbound_hits` 7 → 24. Per-shop bodies: `/workspace/scratch/peerprobe/allshops-2026-10-23/` (box scratch, not in repo).

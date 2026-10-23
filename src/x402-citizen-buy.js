@@ -2,7 +2,7 @@
 "use strict";
 
 /**
- * Daily W3 outbound buy of someone else's Testnet x402 SKU.
+ * W3 outbound buy of someone else's Testnet x402 SKU. No daily limit; per-buy caps only.
  * Dry-run unless --live. Cap 500000 drops (0.5 XRP).
  * SourceTag plus an aether-foundry memo so an indexer can see the payment.
  * Does not call a facilitator settle endpoint. Does not print a seed.
@@ -254,18 +254,8 @@ async function run(opts) {
   if (!env || env.FOUNDRY_DAEMON_LIVE !== "yes") {
     throw Object.assign(new Error("refusing --live without FOUNDRY_DAEMON_LIVE=yes"), { code: "LIVE_GATE" });
   }
-  const rows = [];
-  for (const line of String(text || "").split("\n")) {
-    if (!line.trim()) continue;
-    try {
-      rows.push(JSON.parse(line));
-    } catch {
-      /* torn line */
-    }
-  }
-  if (runtimePolicy.paidOnUtcDay(rows, "x402_outbound", options.now || new Date())) {
-    throw Object.assign(new Error("refusing a second outbound on this UTC day"), { code: "NOT_DUE" });
-  }
+  // No per-UTC-day limit on citizen buys (owner, 2026-10-23). Every buy is still
+  // xrpl:1 only, foreign payTo only, <= CAP_DROPS, and <= --max-drops when passed.
   const fetchPaid = options.fetchImpl || globalThis.fetch;
   async function finishLive(signed, submit, keyEnv) {
     if (!signed || typeof signed.tx_blob !== "string" || !signed.tx_blob || !signed.hash) {
@@ -393,6 +383,11 @@ function printReport(report) {
   if (report.notes && report.notes.length) console.log("notes", report.notes.join(" | "));
   if (report.settlement) console.log("settlement", report.settlement);
   if (report.http_status != null) console.log("http_status", report.http_status);
+  if (report.result) console.log("result", report.result);
+  if (report.body != null) {
+    const body = String(report.body);
+    console.log("body", body.length > 4000 ? `${body.slice(0, 4000)}...[truncated ${body.length} chars]` : body);
+  }
   if (report.hash) console.log("hash", report.hash);
   else console.log("no tx hash (not submitted)");
 }

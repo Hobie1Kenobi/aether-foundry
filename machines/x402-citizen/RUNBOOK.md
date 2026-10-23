@@ -23,7 +23,7 @@ Confirm `GET /api/status` shows `facilitator.mode` `dual`, `facilitator.host` `x
 2. Pay W3 yourself and retry with `payload.transaction`. That is self-verify. It works with the facilitator env unset.
 3. With the testnet env set, a `facilitatorReceipt` whose `transaction` is that same validated hash also returns 200. The desk does not post the blob to settle.
 
-## Daily outbound
+## Outbound (no daily limit)
 
 ```bash
 npm run x402:citizen
