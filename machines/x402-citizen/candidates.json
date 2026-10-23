@@ -105,6 +105,30 @@
       "pay_to": "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs",
       "drops": "3908",
       "source": "CDP bazaar 2026-10-22 (scratch/peerprobe/run-2026-10-22am); query params are the shop's OpenAPI examples; XRP drops float with the shop's XRP-USD quote"
+    },
+    {
+      "url": "https://api.stablecoingateways.com/v1/merchant-check?domain=apple.com&name=Apple%20Inc.",
+      "method": "GET",
+      "network": "xrpl:1",
+      "pay_to": "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs",
+      "drops": "7880",
+      "source": "CDP bazaar 2026-10-23 (scratch/peerprobe/run-2026-10-23am); query params are the shop's OpenAPI examples; XRP drops float with the shop's XRP-USD quote"
+    },
+    {
+      "url": "https://api.stablecoingateways.com/v1/counterparty-check?name=Siemens%20Aktiengesellschaft&domain=siemens.com",
+      "method": "GET",
+      "network": "xrpl:1",
+      "pay_to": "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs",
+      "drops": "7880",
+      "source": "CDP bazaar 2026-10-23 (scratch/peerprobe/run-2026-10-23am); query params are the shop's OpenAPI examples; XRP drops float with the shop's XRP-USD quote"
+    },
+    {
+      "url": "https://api.stablecoingateways.com/v1/sanctions/address?address=0x098B716B8Aaf21512996dC57EB0615e2383E2f96",
+      "method": "GET",
+      "network": "xrpl:1",
+      "pay_to": "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs",
+      "drops": "1576",
+      "source": "CDP bazaar 2026-10-23 (scratch/peerprobe/run-2026-10-23am); query params are the shop's OpenAPI examples; XRP drops float with the shop's XRP-USD quote"
     }
   ]
 }
