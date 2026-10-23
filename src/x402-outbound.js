@@ -117,12 +117,6 @@ function outboundPaidToday(text, now) {
   return runtimePolicy.paidOnUtcDay(rows, "x402_outbound", now || new Date());
 }
 
-function repoOutboundPaidToday(now) {
-  const file = process.env.AETHER_LEDGER_LOG || path.join(ROOT, "lab", "ledger-log.jsonl");
-  const text = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
-  return outboundPaidToday(text, now || new Date());
-}
-
 function parseBody(text) {
   try {
     return JSON.parse(text);
@@ -217,7 +211,7 @@ async function main() {
     return;
   }
 
-  if (repoOutboundPaidToday()) die("refusing a second outbound on this UTC day", 2);
+  // No per-UTC-day limit (owner, 2026-10-23). One manual buy per invocation; caps above still apply.
 
   const client = await hosts.openClient(ws, {
     assertUrl: (url) => guard.assertTestnetUrl(url),

@@ -119,7 +119,7 @@
       "address": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
       "key_env": "W3_REGULAR_SEED",
       "max_drops": "500000",
-      "trigger": "director next_action names outbound; foreign payTo != W3",
+      "trigger": "director next_action names outbound; foreign payTo != W3; no daily limit, >= 10 min since last x402_outbound",
       "refuse": ["circular", "mainnet", "missing_402", "ci"]
     },
     "director_snapshot": {

@@ -23,6 +23,9 @@ const HEARTBEAT_MAX_DROPS = 1000n;
 const HEARTBEAT_DEFAULT_DROPS = "1";
 const HEARTBEAT_MAX_PER_DAY = 4;
 const HEARTBEAT_MIN_INTERVAL_MS = 6 * 60 * 60 * 1000;
+// No per-UTC-day outbound limit (owner, 2026-10-23). The daemon watch loop ticks every
+// 60s and on every W3 transaction, so autonomous outbound keeps a minimum gap instead.
+const OUTBOUND_MIN_GAP_MS = 10 * 60 * 1000;
 const HEARTBEAT_SOURCE_TAG = 202609280;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BANNED_TYPES = new Set(["Batch", "EscrowFinish", "EscrowCancel", "SetHook"]);
@@ -608,6 +611,22 @@ function readJsonl(file, io) {
 function paidOnUtcDay(rows, action, now) {
   const day = now.toISOString().slice(0, 10);
   return rows.some((row) => row && row.action === action && String(row.ts || "").startsWith(day));
+}
+
+function lastActionMs(rows, action) {
+  let last = null;
+  for (const row of rows || []) {
+    if (!row || row.action !== action) continue;
+    const ms = Date.parse(String(row.ts || ""));
+    if (Number.isFinite(ms) && (last == null || ms > last)) last = ms;
+  }
+  return last;
+}
+
+function outboundGapOpen(rows, now) {
+  const last = lastActionMs(rows, "x402_outbound");
+  if (last == null) return true;
+  return (now || new Date()).getTime() - last >= OUTBOUND_MIN_GAP_MS;
 }
 
 function namesOutbound(nextActions) {
@@ -1224,8 +1243,8 @@ function assertKnownIntent(tx, intent, opts) {
       network: "xrpl:1",
       index: options.index,
     });
-    if (paidOnUtcDay(options.history || [], "x402_outbound", options.now || new Date())) {
-      throw coded("refusing a second outbound on this UTC day", "DAY");
+    if (!outboundGapOpen(options.history || [], options.now || new Date())) {
+      throw coded("refusing outbound within 10 minutes of the last x402_outbound", "GAP");
     }
   }
   if (name === "grant_pay" || name === "aether-grant") {
@@ -1347,6 +1366,8 @@ module.exports = {
   regularKey,
   readJsonl,
   paidOnUtcDay,
+  outboundGapOpen,
+  OUTBOUND_MIN_GAP_MS,
   namesOutbound,
   redact,
   assertPrintSafe,

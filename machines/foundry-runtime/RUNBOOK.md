@@ -100,10 +100,10 @@ Both lines are dry-run. They exit 0 without a secrets file. `x402:outbound --dry
 Live signing stays on the daemon, with `FOUNDRY_DAEMON_LIVE=yes`:
 
 - one `grant_paid` per UTC day, from W6, at most `1000000` drops
-- one `x402_outbound` per UTC day, from W3, at most `500000` drops (0.5 XRP)
+- `x402_outbound` from W3, at most `500000` drops (0.5 XRP) each, no daily limit, at least 10 minutes after the last `x402_outbound` row
 - `payTo` is not W3 and is not an address in `WALLETS`
 - `npm run grants:pay` without `--dry-run` refuses CI and a second grant on the same UTC day before it reads `W6_REGULAR_SEED`
-- `npm run x402:outbound` without `--dry-run` refuses CI, a `payTo` of W3, an amount above `500000` drops, and a second outbound on the same UTC day
+- `npm run x402:outbound` without `--dry-run` refuses CI, a `payTo` of W3, and an amount above `500000` drops (no daily limit since 2026-10-23)
 
 `npm run grants:pay -- --record` and `npm run x402:outbound -- --record` append the public ledger only after `tesSUCCESS`, bump `market/pnl.md`, and refresh `lab/metrics.json` from that ledger. Hashes in the metrics file are copied from `lab/ledger-log.jsonl`. A missing heartbeat row leaves `last_heartbeat.hash` null.
 
@@ -148,6 +148,6 @@ MCP on the box may POST `/sign` only when `MCP_SIGN=on`, `FOUNDRY_AGENT_SIGN=yes
 - Any generic `Batch`. The daemon refuses `TransactionType` `Batch`. The agent path is only `npm run batch:heartbeat` on network id 1, and `--live` is not for CI.
 - Escrow finish or cancel on the Unix-epoch BUYER escrow.
 - A grant to STRANGER, BUYER, AMM, or W0–W6.
-- A second grant or a second outbound on the same UTC day.
+- A second grant on the same UTC day, or a daemon/signer outbound within 10 minutes of the last one.
 - An outbound `payTo` of W3, or an outbound above `500000` drops.
 - `npm run runtime:live` or `npm run grants:pay` from GitHub Actions.

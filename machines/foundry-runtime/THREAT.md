@@ -52,9 +52,9 @@ Adversary checks from the runtime activation list. This pack is Workstream 1. La
 
 ## Grant and outbound caps on the daily clock
 
-**Claim:** the Foundry-box crontab pays every candidate it prints, or an outbound invoice above 0.5 XRP, or a second grant the same UTC day.
+**Claim:** the Foundry-box crontab pays every candidate it prints, or an outbound invoice above 0.5 XRP, or a second grant the same UTC day, or an outbound buy on every daemon tick.
 
-**Check:** the crontab lines are `npm run grants:scan && npm run grants:pay -- --dry-run` at 10:15 America/Chicago and `npm run x402:outbound -- --dry-run` at 10:45. Dry-run does not load a seed. `x402:outbound --dry-run` with no URL prints `seed not loaded` and exits 0. Live `grants:pay` throws `DAY` when `lab/ledger-log.jsonl` already has a `grant_paid` row for that UTC day, before `loadSeed`. Live `x402:outbound` throws when an `x402_outbound` row exists for that UTC day, and throws `CAP` when the 402 amount is above `500000` drops. The daemon allowlist still caps a grant at `1000000` drops and an outbound at `500000` drops, one of each per UTC day. `.github/workflows/` does not contain `runtime:live`, `grants:pay`, or `x402:outbound`.
+**Check:** the crontab lines are `npm run grants:scan && npm run grants:pay -- --dry-run` at 10:15 America/Chicago and `npm run x402:outbound -- --dry-run` at 10:45. Dry-run does not load a seed. `x402:outbound --dry-run` with no URL prints `seed not loaded` and exits 0. Live `grants:pay` throws `DAY` when `lab/ledger-log.jsonl` already has a `grant_paid` row for that UTC day, before `loadSeed`. Live `x402:outbound` has no per-UTC-day limit since 2026-10-23 (one manual buy per invocation); it throws `CAP` when the 402 amount is above `500000` drops. The daemon allowlist still caps a grant at `1000000` drops and an outbound at `500000` drops. Grants stay one per UTC day. Outbound has no daily limit, but the daemon plan returns `NOT_DUE` and the signer throws `GAP` when the last `x402_outbound` row is under 10 minutes old (`OUTBOUND_MIN_GAP_MS`). The watch loop ticks every 60s and again on every W3 transaction, so without that gap a director state naming outbound could buy on every tick. `.github/workflows/` does not contain `runtime:live`, `grants:pay`, or `x402:outbound`.
 
 ## Unique inbound hygiene
 

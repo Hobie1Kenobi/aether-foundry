@@ -55,7 +55,7 @@ This shop does not submit `signedTxBlob`. The payer offers the presigned blob fi
 npm run x402:outbound -- --url https://example.test/resource --max-drops 10000 --record
 ```
 
-The URL must return 402 / `PAYMENT-REQUIRED` for `xrpl:1`. Foundry payTo is refused. Mainnet networks and mainnet XRPL hosts are refused. The payment amount must be at most `500000` drops. A second live outbound on the same UTC day is refused before `W3_SEED` is read.
+The URL must return 402 / `PAYMENT-REQUIRED` for `xrpl:1`. Foundry payTo is refused. Mainnet networks and mainnet XRPL hosts are refused. The payment amount must be at most `500000` drops. There is no per-UTC-day limit (owner, 2026-10-23); each invocation makes at most one buy.
 
 Foundry-box clock (dry-run, no URL, no seed), America/Chicago:
 

@@ -63,7 +63,7 @@ describe("citizen buyer", () => {
     assert.equal(report.fingerprint_memo, "aether-foundry:f11");
     assert.match(report.reason, /no foreign shop/);
     const filed = JSON.parse(fs.readFileSync(citizen.CANDIDATES, "utf8"));
-    assert.deepEqual(filed.urls, [
+    assert.deepEqual(filed.urls.slice(0, 4), [
       {
         url: "https://verify.sciphr.io/v1/credential/verify",
         method: "POST",
@@ -77,6 +77,16 @@ describe("citizen buyer", () => {
       "https://x402.cryptobuddy.com.au/crypto/australia/best?asset=XRP&amount=5000&side=buy",
       "https://agentxr.agentic-swarm-marketplace.com/sku/ledger-index",
     ]);
+    const sgw = filed.urls.slice(4);
+    assert.equal(sgw.length, 14);
+    for (const row of sgw) {
+      assert.match(row.url, /^https:\/\/api\.stablecoingateways\.com\/v1\//);
+      assert.equal(row.method, "GET");
+      assert.equal(row.network, "xrpl:1");
+      assert.equal(row.pay_to, "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs");
+      assert.ok(Number(row.drops) > 0 && Number(row.drops) <= 10000);
+    }
+    assert.equal(new Set(filed.urls.map((row) => (typeof row === "string" ? row : row.url))).size, filed.urls.length);
     assert.equal(filed.network, "xrpl:1");
     const loaded = citizen.loadCandidates(citizen.CANDIDATES);
     assert.equal(loaded[0].method, "POST");

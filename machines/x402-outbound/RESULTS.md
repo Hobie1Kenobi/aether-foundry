@@ -29,7 +29,7 @@ npm run x402:foreign
 npm run x402:outbound -- --url http://127.0.0.1:8787/foreign-oracle-ping --max-drops 10000 --record
 ```
 
-`--max-drops 10000` is required because stated DIY is 0. Desk self-buy remains refused (payTo W3). Cloud agent PR trial had no `W3_SEED`; this Foundry-box run is the first archived outbound Payment. `npm run x402:outbound -- --record` copies this same hash into `lab/metrics.json` `last_outbound_hash` when the ledger row is present. The flywheel cap for a later payment is `500000` drops and one outbound per UTC day.
+`--max-drops 10000` is required because stated DIY is 0. Desk self-buy remains refused (payTo W3). Cloud agent PR trial had no `W3_SEED`; this Foundry-box run is the first archived outbound Payment. `npm run x402:outbound -- --record` copies this same hash into `lab/metrics.json` `last_outbound_hash` when the ledger row is present. The flywheel cap for a later payment is `500000` drops (the per-UTC-day limit was removed 2026-10-23; the daemon keeps a 10-minute gap).
 
 ## Foreign account (faucet, not an x402 buy)
 

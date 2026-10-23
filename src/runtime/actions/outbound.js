@@ -3,6 +3,7 @@
 /**
  * W3 outbound x402. Wraps the outbound guard. Refuses W3 payTo, mainnet, and a missing 402.
  * Cap 500000 drops. Signer is W3_REGULAR_SEED, not W3_SEED.
+ * No daily limit; at least 10 minutes between x402_outbound rows (policy.OUTBOUND_MIN_GAP_MS).
  */
 
 const path = require("path");
@@ -70,8 +71,8 @@ function planFromInvoice(opts, invoice) {
   }
   const now = opts.now || new Date();
   const rows = opts.history || (opts.root ? policy.readJsonl(historyFile(opts.root), opts.io) : []);
-  if (policy.paidOnUtcDay(rows, "x402_outbound", now)) {
-    return policy.decision("x402_outbound", { code: "NOT_DUE", message: "an x402_outbound row already exists for this UTC day" });
+  if (!policy.outboundGapOpen(rows, now)) {
+    return policy.decision("x402_outbound", { code: "NOT_DUE", message: "last x402_outbound was under 10 minutes ago" });
   }
   if (!invoice || !invoice.required) {
     return policy.decision("x402_outbound", { code: "MISSING_402", message: "refusing outbound without a 402 invoice" });

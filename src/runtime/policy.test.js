@@ -458,3 +458,17 @@ describe("pack wiring", () => {
     assert.match(yml, /must not mint, sign, or load operator secrets/);
   });
 });
+
+describe("x402_outbound gap", () => {
+  it("has no UTC-day limit but keeps a 10-minute gap between outbound rows", () => {
+    const now = new Date("2026-10-23T16:00:00.000Z");
+    assert.equal(policy.OUTBOUND_MIN_GAP_MS, 10 * 60 * 1000);
+    assert.equal(policy.outboundGapOpen([], now), true);
+    const earlierToday = [{ action: "x402_outbound", ts: "2026-10-23T15:49:59.000Z", hash: "A".repeat(64) }];
+    assert.equal(policy.outboundGapOpen(earlierToday, now), true);
+    const recent = [{ action: "x402_outbound", ts: "2026-10-23T15:55:00.000Z", hash: "B".repeat(64) }];
+    assert.equal(policy.outboundGapOpen(recent, now), false);
+    const otherAction = [{ action: "heartbeat", ts: "2026-10-23T15:59:00.000Z" }];
+    assert.equal(policy.outboundGapOpen(otherAction, now), true);
+  });
+});

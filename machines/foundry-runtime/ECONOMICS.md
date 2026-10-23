@@ -9,7 +9,7 @@
 | `walk_in_remint` | W2 | sell offer `10000000` drops (10 XRP). Fee is the only extra. | Offer must be `sold_out` and `offer_count` 0. |
 | `grant_pay` | W6 | `1000000` drops (1 XRP) | W6 must keep `10000000` spendable drops. ≥ `50000000` drops is refused here even if `lab/motions/` matches. |
 | `heartbeat` | W5 | default `1` drop, hard max `1000` drops | At most 4 heartbeats in 24h, at least 6 hours apart. Worst case 4000 drops per UTC day plus fees. |
-| `x402_outbound` | W3 | `500000` drops (0.5 XRP) | One `x402_outbound` ledger row per UTC day. `payTo` is not W3 and not any `WALLETS` address. |
+| `x402_outbound` | W3 | `500000` drops (0.5 XRP) | No per-UTC-day limit (owner, 2026-10-23). The daemon and signer refuse a new `x402_outbound` within 10 minutes of the last one; worst case is 144 buys a day at the 0.5 XRP cap. `payTo` is not W3 and not any `WALLETS` address. |
 | `director_snapshot` | none | 0 | Read-only. |
 
 A Payment or NFToken amount at or above 50 XRP is a treasury motion, not a daemon action. The daemon cap sits under that line and does not spend W0.
