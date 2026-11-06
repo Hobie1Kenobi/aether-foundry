@@ -26,7 +26,7 @@ const DOCS = [
   "machines/missions/ensure-up.snippet.sh",
   "machines/missions/release/INSTALL.md",
 ];
-const BINS = ["start", "health", "stop", "arm"];
+const BINS = ["start", "health", "stop", "arm", "wake"];
 const EXTRA = ["src/runtime/allowlist.json", "src/missions/port-wait.js"];
 
 function walkRequires(root, rel, seen) {

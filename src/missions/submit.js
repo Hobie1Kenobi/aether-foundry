@@ -3,6 +3,7 @@
 const config = require("./config");
 const { exclusive, coded } = require("./ledger");
 const { fold, signedClaimMayRelease } = require("./engine");
+const { assertSequenceAvailable } = require("./sequence-hold");
 const missionPolicy = require("./policy");
 const anchors = require("../director/anchors");
 
@@ -48,6 +49,8 @@ function beginSubmit(dir, input) {
     }
     if (!state.spending_enabled || state.killed) throw coded("spending is not activated", "SPENDING_DISABLED");
     if (mission.status !== "ready_for_signer") throw coded("mission is not ready for the dedicated signer", "SIGN");
+    const nextAccount = mission.unsigned_tx && mission.unsigned_tx.Account;
+    assertSequenceAvailable(state, nextAccount, input);
     const tx = mission.unsigned_tx;
     if (!tx || tx.TransactionType !== "Payment" || Number(tx.NetworkID) !== 1) {
       throw coded("claim payment is not an xrpl:1 Payment", "TX");
