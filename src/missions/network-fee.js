@@ -52,7 +52,8 @@ async function quoteNetworkFee(options) {
   const opts = options || {};
   const now = opts.now || new Date().toISOString();
   const info = await rpc(opts.fetch, "server_info");
-  if (Number(networkId(info)) !== 1) throw coded("fee RPC is not network id 1", "MAINNET");
+  const id = networkId(info);
+  if (id == null || Number(id) !== 1) throw coded("fee RPC did not prove network id 1", "MAINNET");
   const fee = await rpc(opts.fetch, "fee");
   const open = feeDrops(fee);
   if (!open) throw coded("XRPL Labs fee result has no open_ledger_fee", "FEE");

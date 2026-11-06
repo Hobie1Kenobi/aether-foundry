@@ -67,10 +67,27 @@ FOUNDRY_MISSION_TOKEN='<box token>' FOUNDRY_MISSION_CONFIRM='ACTIVATE-XRPL1-MISS
 
 `./bin/arm` records the class and the authorized caps, 1000000 and 5000000 drops. It refuses a higher cap. `./bin/start` then loads the seed only from `account.json` inside the signer process and sets execute. A `{ "asleep": true }` file at `/workspace/foundry-ops/missions-runtime/worker.json` stops ticks without clearing the arm file.
 
-Discovery is `/workspace/foundry-ops/missions-runtime/discovery.json`. A service counts only when its seller, price, and fee are an xrpl:1 XRP offer, the seller is not a house account, and the fields are the service object itself. Extra fields are ignored as authority. The worker validates that payload and writes an artifact. `complete` is true only after that artifact. A payment without it stays incomplete. One item per tick. Default interval 60 seconds, floor 15 seconds.
+Discovery is `/workspace/foundry-ops/missions-runtime/discovery.json`. A candidate counts only as an x402 version 2 exact `xrpl:1` XRP accept with `payTo`, `amount`, a resource URL, `observed_at`, and `maxTimeoutSeconds`. The network fee is the XRPL Labs `open_ledger_fee`, not a merchant field. `payTo` does not widen the allowlist. A resource that cannot take a `PAYMENT-SIGNATURE` proof is blocked in public and is not a raw Payment. `complete` is set only after that proof returns HTTP 200 and the payload validates. One item per tick. Default interval 60 seconds, floor 15 seconds.
 
 A submit takes an exclusive ledger claim first. A second process gets `NO_RETRY`. If the process dies after the claim is handed to the signer, the hold stays uncertain and is not submitted again. The dedicated signer rejects a loopback request that does not match that reserved claim, even with the bearer token. EVM gas stays unauthorized.
 
-Publish with the GitHub contents API, path `lab/missions/public-status.json` only. The token stays in the parent environment. Nothing in this tree reads a credential file. A changed snapshot is uploaded at most once every 15 minutes. The desk stays `unavailable` until that file is on main. The content hash is not authentication.
+Automatic publishing needs `FOUNDRY_MISSION_GITHUB_TOKEN` in `/workspace/foundry-ops/missions-runtime/tokens.env`, mode `0600`, with permission to write only `lab/missions/public-status.json`. This tree does not contain that token and does not read undocumented credential files. Until the parent adds it, a recurring website update does not run. A one-file git snapshot on main is the sanctioned stand-in. That is not a continuous live feed. When the token exists, a changed snapshot uploads at most once every 15 minutes.
 
-`machines/missions/ensure-up.snippet.sh` is not sourced. The box has no cron. The snippet only restarts the already armed release if its pid is gone, and it does not install a publisher loop against that binary.
+`machines/missions/ensure-up.snippet.sh` is not installed. The parent may paste it into `/workspace/foundry-ops/ensure-up.sh`. It sources `tokens.env` only when that file is mode `0600`, keeps the seed in `account.json`, and restarts the worker and the dedicated signer as separate processes if their pids are dead. It does not signal `8787`, `8792`, or `8793`, and it does not add a cron.
+
+## Swap a release
+
+Stop only the dedicated pids. The ledger, arm file, and account file stay in `/workspace/foundry-ops/missions-runtime`, so pending and uncertain holds are kept.
+
+```bash
+OLD=/workspace/foundry-ops/releases/9e11391ed52d78261a7188881803ce0bad3b2bd0
+NEW=/workspace/foundry-ops/releases/<newsha>
+FOUNDRY_MISSION_HOME=/workspace/foundry-ops/missions-runtime "$OLD/bin/stop"
+install -d "$NEW"
+tar -xf foundry-missions-<newsha>.tar -C "$NEW"
+cd "$NEW"
+npm ci --omit=dev
+FOUNDRY_MISSION_HOME=/workspace/foundry-ops/missions-runtime "$NEW/bin/start"
+```
+
+Do this on the box when you choose. A cloud run must not replace the directory that is already armed.

@@ -14,8 +14,9 @@ const path = require("path");
 const config = require("./config");
 const { coded, readEvents } = require("./ledger");
 const { fold, startMission, blockMission, act, evaluate, view } = require("./engine");
-const { beginSubmit, finishSubmit, releasePrepared } = require("./submit");
+const { beginSubmit, finishSubmit, releasePrepared, notePresign } = require("./submit");
 const networkFee = require("./network-fee");
+const x402Deliver = require("./x402-deliver");
 const missionPolicy = require("./policy");
 const guard = require("./runtime-guard");
 const { uploadSnapshot } = require("./github-publish");
@@ -116,7 +117,7 @@ function payable(item, seller, amount) {
   };
 }
 
-function qualifyCandidate(item) {
+function qualifyCandidate(item, now) {
   if (!item || typeof item !== "object") return { skip: "invalid_item", key: "invalid-item" };
   if (item.kind && item.kind !== config.AUTONOMOUS_CLASS) return { skip: "novel_kind", key: candidateKey(item) };
   if (item.protocol && item.protocol !== "x402" && !item.service && !item.x402 && !item.paymentRequired && !item.accept) {
@@ -140,7 +141,18 @@ function qualifyCandidate(item) {
     if (typeof chosen.payTo !== "string" || !amount) {
       return blocked(item, "unsupported_protocol", "The xrpl:1 accept has no payTo amount.");
     }
-    return payable(item, chosen.payTo, amount);
+    const resource = x402Deliver.resourceOf(item, required);
+    if (!resource) {
+      return blocked(item, "undeliverable", "payTo is not a raw Payment. The 402 response has no resource to deliver.", chosen.payTo, amount);
+    }
+    const fresh = x402Deliver.challengeFresh(item, { maxTimeoutSeconds: chosen.maxTimeoutSeconds }, now);
+    if (!fresh.ok) return blocked(item, fresh.code, fresh.rationale, chosen.payTo, amount);
+    const row = payable(item, chosen.payTo, amount);
+    if (row.block) return row;
+    row.resource = resource;
+    row.accept = x402Deliver.acceptOf(chosen, amount);
+    row.required = { x402Version: 2, resource: resource.url, accepts: [row.accept] };
+    return row;
   }
   const service = item.service;
   if (!service || typeof service !== "object" || Array.isArray(service)) return { skip: "missing_service", key: candidateKey(item) };
@@ -157,7 +169,9 @@ function qualifyCandidate(item) {
   const amount = priceDrops(service.price_drops);
   if (!amount) return { skip: "missing_payment", key: candidateKey(item) };
   if (typeof service.seller !== "string") return { skip: "missing_accounts", key: candidateKey(item) };
-  return payable(item, service.seller, amount);
+  const seller = payable(item, service.seller, amount);
+  if (seller.block) return seller;
+  return blocked(item, "undeliverable", "A foreign payTo is not an instruction to send a raw Payment.", service.seller, amount);
 }
 
 async function quotedFee(opts, now) {
@@ -173,6 +187,10 @@ function withFee(built, quote) {
   }
   return {
     key: built.key,
+    seller: built.seller,
+    resource: built.resource,
+    accept: built.accept,
+    required: built.required,
     input: {
       idempotency_key: built.key,
       kind: config.AUTONOMOUS_CLASS,
@@ -213,6 +231,30 @@ async function publishIfAsked(ledger, env, now, deps) {
   } catch (error) {
     return { uploaded: false, reason: error.code || "PUBLISH" };
   }
+}
+
+async function defaultPresign(mission, env, opts) {
+  const fetchImpl = (opts && opts.signerFetch) || (opts && opts.fetch) || globalThis.fetch;
+  if (typeof fetchImpl !== "function") return null;
+  const port = guard.assertFreePort(env.FOUNDRY_MISSION_SIGNER_PORT, 8788);
+  const response = await fetchImpl(`http://127.0.0.1:${port}/sign`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${env.FOUNDRY_MISSION_SIGNER_TOKEN || ""}`,
+    },
+    body: JSON.stringify({
+      intent: "mission_spend",
+      execute: true,
+      presign: true,
+      dry_run: false,
+      mission_id: mission.id,
+      tx: mission.unsigned_tx,
+    }),
+  });
+  const body = await response.json();
+  if (!response.ok || !body.tx_blob || !body.hash) return null;
+  return { tx_blob: body.tx_blob, hash: body.hash };
 }
 
 async function maybeSubmit(mission, env, deps) {
@@ -276,7 +318,7 @@ async function tick(options) {
     writeState(files.ledger, { last_tick_at: now, last_reason: discovery.reason || "idle" });
     return Object.assign(base, { reason: discovery.reason || "idle" });
   }
-  let built = qualifyCandidate(pending);
+  let built = qualifyCandidate(pending, now);
   if (built.payable) {
     try {
       built = withFee(built, await quotedFee(opts, now));
@@ -369,6 +411,30 @@ async function tick(options) {
       });
       return Object.assign(base, { reason: mission.code, code: mission.code, mission_id: mission.id, worked: true, submitted: false, complete: false });
     }
+    const probe = opts.resourceFetch || (opts.fetch ? null : globalThis.fetch);
+    const live = await x402Deliver.preflight(built, probe);
+    if (!live.ok) {
+      const released = releasePrepared(files.ledger, {
+        mission_id: mission.id,
+        now,
+        code: live.code,
+        rationale: live.rationale,
+      });
+      writeState(files.ledger, {
+        last_tick_at: now,
+        last_reason: live.code,
+        consumed: { [built.key]: { at: now, reason: live.code } },
+      });
+      return Object.assign(base, {
+        reason: live.code,
+        code: live.code,
+        mission_id: released.mission.id,
+        worked: true,
+        submitted: false,
+        complete: false,
+      });
+    }
+    if (typeof opts.presign !== "function") opts.presign = (mission) => defaultPresign(mission, env, opts);
     let begun;
     try {
       begun = beginSubmit(files.ledger, { mission_id: mission.id, now });
@@ -381,18 +447,56 @@ async function tick(options) {
       return Object.assign(base, { reason: error.code || "NO_RETRY", mission_id: mission.id, worked: true, submitted: false, complete: false });
     }
     if (begun.proceed) {
-      let sent = { submitted: false, reason: "signer_uncertain" };
-      try {
-        sent = await maybeSubmit(begun.mission, env, opts);
-      } catch {
-        sent = { submitted: false, reason: "signer_uncertain" };
+      const signed = await opts.presign(begun.mission);
+      if (!signed || !signed.tx_blob || !signed.hash) {
+        writeState(files.ledger, {
+          last_tick_at: now,
+          last_reason: "undeliverable",
+          consumed: { [built.key]: { at: now, reason: "undeliverable" } },
+        });
+        return Object.assign(base, { reason: "undeliverable", code: "undeliverable", mission_id: mission.id, worked: true, submitted: false, complete: false });
       }
-      const finished = sent.submitted
-        ? finishSubmit(files.ledger, { mission_id: mission.id, now, result: sent.result })
-        : { mission: begun.mission, uncertain: true };
-      mission = finished.mission;
-      submitted = mission.submitted === true;
-      if (submitted) {
+      notePresign(files.ledger, mission.id, signed.hash);
+      let submittedOnce = false;
+      let delivered = { http_status: 0, submitted: false, hash: null, mode: "refused", parsed: null };
+      try {
+        delivered = await x402Deliver.deliverProof({
+          fetchImpl: probe,
+          resource: built.resource,
+          required: built.required,
+          accept: built.accept,
+          txBlob: signed.tx_blob,
+          hash: signed.hash,
+          sleep: async () => {},
+          submit: async () => {
+            if (submittedOnce) throw coded("refusing a second submit", "NO_RETRY");
+            submittedOnce = true;
+            const sent = await maybeSubmit(begun.mission, env, opts);
+            if (!sent.submitted) throw coded("signer did not submit", "SUBMIT");
+            return { hash: sent.result.hash, result: sent.result.engine_result, ledger_index: null };
+          },
+        });
+      } catch {
+        delivered = { http_status: 0, submitted: submittedOnce, hash: null, mode: "refused", parsed: null };
+      }
+      const resultBody = delivered.parsed && typeof delivered.parsed === "object" && !delivered.parsed.code ? delivered.parsed : null;
+      if (delivered.http_status === 200 && delivered.hash && resultBody) {
+        const finished = finishSubmit(files.ledger, {
+          mission_id: mission.id,
+          now,
+          result: {
+            hash: delivered.hash,
+            engine_result: "tesSUCCESS",
+            submitted: delivered.submitted === true,
+            network_id: 1,
+          },
+          delivery: {
+            mode: delivered.mode,
+            http_status: 200,
+            hash: delivered.hash,
+            result: resultBody,
+          },
+        });
         mission = evaluate(files.ledger, {
           mission_id: mission.id,
           now,
@@ -401,22 +505,26 @@ async function tick(options) {
             seller: mission.seller,
             network: config.NETWORK,
             network_id: config.NETWORK_ID,
-            hash: mission.proof_hash,
+            hash: finished.mission.proof_hash,
           },
         }).mission;
+        submitted = mission.submitted === true;
+      } else {
+        writeState(files.ledger, {
+          last_tick_at: now,
+          last_reason: "delivery_failed",
+          consumed: { [built.key]: { at: now, reason: "delivery_failed" } },
+        });
+        return Object.assign(base, {
+          reason: "delivery_failed",
+          code: "delivery_failed",
+          mission_id: mission.id,
+          worked: true,
+          submitted: delivered.submitted === true,
+          complete: false,
+        });
       }
     }
-  } else if (mission.status === "ready_for_signer") {
-    mission = evaluate(files.ledger, {
-      mission_id: mission.id,
-      now,
-      payload: {
-        qualified: true,
-        seller: mission.seller,
-        network: config.NETWORK,
-        network_id: config.NETWORK_ID,
-      },
-    }).mission;
   }
   writeState(files.ledger, {
     last_tick_at: now,
