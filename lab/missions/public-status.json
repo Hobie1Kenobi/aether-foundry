@@ -1,19 +1,19 @@
 {
   "schema": "aether.missions.public-status",
   "version": 1,
-  "sequence": 4,
-  "prev_sequence": 3,
-  "source_observed_at": "2026-11-06T18:53:53.388Z",
-  "published_at": "2026-11-06T18:54:05.608Z",
+  "sequence": 5,
+  "prev_sequence": 4,
+  "source_observed_at": "2026-11-06T19:12:17.953Z",
+  "published_at": "2026-11-06T19:12:33.537Z",
   "spending_enabled": true,
   "spending_enabled_source": "ledger",
   "signing_enabled": false,
   "authorized_per_mission_drops": "1000000",
   "authorized_daily_drops": "5000000",
   "timezone": "America/Chicago",
-  "live_spend_drops": "0",
+  "live_spend_drops": "1747",
   "reserved_drops": "0",
-  "uncertain_drops": "0",
+  "uncertain_drops": "1747",
   "accounted_spent_drops": "0",
   "killed": false,
   "missions": [
@@ -367,6 +367,33 @@
       "account_reserve_drops": "0",
       "network_fee_drops": "10",
       "bridge_custody_drops": "0"
+    },
+    {
+      "id": "msn5b5c3223e5e88526",
+      "status": "ready_for_signer",
+      "code": null,
+      "stage": "act",
+      "rationale": "Submit claim is open. A crash before a validated result stays uncertain and is not retried.",
+      "labels": {
+        "role": "agent",
+        "counterparty": "foreign",
+        "environment": "testnet",
+        "mode": "simulation",
+        "approval": "approved_unsigned",
+        "network": "xrpl:1"
+      },
+      "settlement": "submit_unknown",
+      "live": false,
+      "signed": false,
+      "submitted": false,
+      "complete": false,
+      "foreign_revenue_drops": "0",
+      "proof_hash": null,
+      "explorer": null,
+      "budget_drops": "1747",
+      "account_reserve_drops": "0",
+      "network_fee_drops": "10",
+      "bridge_custody_drops": "0"
     }
   ],
   "replays": {
@@ -566,9 +593,101 @@
         "rationale": "A fresh XRPL Labs fee is above the reserved network fee. Nothing was signed.",
         "live": false
       }
+    ],
+    "msn5b5c3223e5e88526": [
+      {
+        "type": "budget.reserved",
+        "at": "2026-11-06T19:12:16.314Z",
+        "code": null,
+        "status": null,
+        "settlement": null,
+        "rationale": null,
+        "live": false
+      },
+      {
+        "type": "mission.upsert",
+        "at": "2026-11-06T19:12:16.314Z",
+        "code": null,
+        "status": "approved_ready",
+        "settlement": null,
+        "rationale": "Class foreign-xrpl1-purchase is already approved within the caps. This purchase was not sent for a second approval. Nothing has been signed.",
+        "live": false
+      },
+      {
+        "type": "mission.upsert",
+        "at": "2026-11-06T19:12:16.314Z",
+        "code": null,
+        "status": "ready_for_signer",
+        "settlement": null,
+        "rationale": "Activated and approved. The signer dry-run accepted the Payment. No key was loaded and nothing was submitted.",
+        "live": false
+      },
+      {
+        "type": "act.prepared",
+        "at": "2026-11-06T19:12:16.314Z",
+        "code": null,
+        "status": null,
+        "settlement": null,
+        "rationale": null,
+        "live": false
+      },
+      {
+        "type": "budget.fee_narrowed",
+        "at": "2026-11-06T19:12:16.314Z",
+        "code": null,
+        "status": null,
+        "settlement": null,
+        "rationale": null,
+        "live": false
+      },
+      {
+        "type": "mission.upsert",
+        "at": "2026-11-06T19:12:16.314Z",
+        "code": null,
+        "status": "ready_for_signer",
+        "settlement": null,
+        "rationale": "Activated and approved. The signer dry-run accepted the Payment. No key was loaded and nothing was submitted.",
+        "live": false
+      },
+      {
+        "type": "budget.uncertain",
+        "at": "2026-11-06T19:12:16.314Z",
+        "code": null,
+        "status": null,
+        "settlement": "submit_unknown",
+        "rationale": null,
+        "live": true
+      },
+      {
+        "type": "mission.upsert",
+        "at": "2026-11-06T19:12:16.314Z",
+        "code": null,
+        "status": "ready_for_signer",
+        "settlement": "submit_unknown",
+        "rationale": "Submit claim is open. A crash before a validated result stays uncertain and is not retried.",
+        "live": false
+      },
+      {
+        "type": "mission.upsert",
+        "at": "2026-11-06T19:12:17.949Z",
+        "code": null,
+        "status": "ready_for_signer",
+        "settlement": "submit_unknown",
+        "rationale": "Submit claim is open. A crash before a validated result stays uncertain and is not retried.",
+        "live": false
+      },
+      {
+        "type": "mission.upsert",
+        "at": "2026-11-06T19:12:17.953Z",
+        "code": null,
+        "status": "ready_for_signer",
+        "settlement": "submit_unknown",
+        "rationale": "Submit claim is open. A crash before a validated result stays uncertain and is not retried.",
+        "live": false
+      }
     ]
   },
   "integrity_means": "sha256 of this document; detects corruption, not who wrote it",
   "sequence_means": "prev_sequence must equal sequence-1 inside this file. A stateless reader cannot tell a replaced chain from a real one.",
-  "integrity": "d5c657a44c7a8342cc15744ef37aa3f7ba74c96579646fe5c62544f31cb9e861"
+  "integrity": "d21d52aa7ad295ed5dc4da6398925ab5041617460262f2e1e8d5517459c80f02"
 }
