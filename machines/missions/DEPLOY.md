@@ -9,7 +9,9 @@ Vercel project settings already used by the desk:
 - Framework: Next.js
 - Production host: `https://aether-foundry-desk.vercel.app`
 
-This cloud run does not deploy and does not merge. After review:
+Do not deploy the website as a live mission feed. Vercel has no copy of `lab/missions/events.jsonl`. Until the Foundry box is the process serving `/api/missions`, or `FOUNDRY_MISSION_LEDGER` points at that directory on the same machine, the honest status is `source: unavailable`, `stale: true`, and `live_spend_drops: null`.
+
+This cloud run does not deploy. After review:
 
 1. Confirm `npm test` on the PR, including `src/missions/missions.test.js` and `src/desk/missions-public.test.ts`.
 2. Confirm the missions page shows authorized caps, spending disabled, and live spend 0 as separate figures.

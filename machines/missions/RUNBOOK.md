@@ -30,6 +30,33 @@ Use the Axelar testnet planner only as an unsigned description. This engine will
 
 `bridge_pending` and `dest_final` are different. A pending or uncertain bridge is not retried.
 
+## Activation on the Foundry box
+
+Spending stays off until an authenticated ledger event. Caps cannot be raised. This does not start a daemon and it does not submit.
+
+```bash
+cd /path/aether-foundry
+export FOUNDRY_MISSION_TOKEN='<box token, not committed>'
+node src/missions/cli.js status
+node -e 'require("./src/missions/engine").control("lab/missions",{action:"activate",confirm:"ACTIVATE-XRPL1-MISSION-SPEND",token:process.env.FOUNDRY_MISSION_TOKEN,now:new Date().toISOString()},{token:process.env.FOUNDRY_MISSION_TOKEN})'
+```
+
+The signer unit already loads `/workspace/aether-foundry-secrets/.env` via `foundry-signer.service`. Add only these names there, on the box, not in git:
+
+- `MISSION_XRPL_ADDRESS` — isolated classic address, not W0–W7
+- `MISSION_XRPL_SEED` — that account's seed
+
+Do not add `MISSION_XRPL_SEED` to the generic seed allowlist. Mission signing reads that environment variable only, and only when all of these are true: intent `mission_spend`, `FOUNDRY_AGENT_SIGN=yes`, `FOUNDRY_MISSION_EXECUTE=yes`, `execute: true`, and a submit hook. Otherwise `/sign` is a dry-run and loads no key. Payments to the Axelar gateway are refused on that path too.
+
+```bash
+curl -sS -X POST http://127.0.0.1:8787/dry-run \
+  -H "Authorization: Bearer $FOUNDRY_SIGNER_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"intent":"mission_spend","dry_run":true,"tx":{"TransactionType":"Payment","Account":"'"$MISSION_XRPL_ADDRESS"'","Destination":"<allowlisted foreign r-address>","Amount":"100","Fee":"12","NetworkID":1}}'
+```
+
+Expect `key_loaded: false` and `submitted: false`. Do not set `FOUNDRY_MISSION_EXECUTE` in this cloud environment.
+
 ## Public desk
 
 `GET /api/missions`, `GET /api/missions/status`, `GET /api/missions/:id`, and `GET /api/missions/:id/replay` are read-only. Other methods return `PUBLIC_WRITE`. The desk serves `machines/missions/public-feed.json`. It does not read the operator ledger and it does not accept a visitor command.

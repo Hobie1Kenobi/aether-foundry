@@ -4,7 +4,7 @@ Testnet mission engine for Aether Foundry. The loop is goal, plan, policy, act, 
 
 **Authorized caps:** 1 XRP (`1000000` drops) per mission and 5 XRP (`5000000` drops) per America/Chicago day, including network fees, bridge gas, bridge custody, failed transaction fees, and amounts still pending or uncertain.
 
-**Enabled:** no. `SPENDING_ENABLED` and `SIGNING_ENABLED` are false. Approval does not submit. Parent activation is a later change.
+**Enabled:** off until an authenticated `control.activate` event with the phrase `ACTIVATE-XRPL1-MISSION-SPEND`. That event cannot raise the caps. Kill forces it back off. This process still does not submit; the box signer dry-run is the next step, and live submit needs `FOUNDRY_MISSION_EXECUTE=yes` plus `MISSION_XRPL_SEED` on the box only.
 
 **Live spend:** 0. Simulation holds are not live spend. An XRPL account reserve is recorded separately and is not a fee and not available spend.
 

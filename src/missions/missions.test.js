@@ -9,10 +9,12 @@ const { Worker } = require("node:worker_threads");
 const anchors = require("../director/anchors");
 const config = require("./config");
 const { chicagoDay } = require("./clock");
-const { view, startMission, approve, observe, evaluate, kill, publicFeed, publicReplay } = require("./engine");
+const { view, startMission, approve, control, act, observe, evaluate, kill, publicFeed, publicReplay } = require("./engine");
 const { handlePublic } = require("./public");
+const { evaluateMissionSpend } = require("../runtime/signer");
 
 const FOREIGN = "rQsPPdwiBeVDqsdDnFcVmu7xTVHMjXRFqN";
+const ISOLATED = "r3JbqcVQ4Pov4MhFUMSdnro7s3VgpaqssZ";
 const TOKEN = "mission-internal-16";
 const NOW = "2026-11-06T18:00:00.000Z";
 const NOV5 = "2026-11-06T05:30:00.000Z";
@@ -69,8 +71,7 @@ function throwsCode(fn, code) {
 
 describe("mission caps and ledger", () => {
   it("uses the Chicago day and keeps authorized spend disabled", () => {
-    assert.equal(config.SPENDING_ENABLED, false);
-    assert.equal(config.SIGNING_ENABLED, false);
+    assert.equal(config.DEFAULT_SPENDING_ENABLED, false);
     assert.equal(config.PER_MISSION_DROPS, 1000000n);
     assert.equal(config.DAILY_DROPS, 5000000n);
     assert.equal(chicagoDay(NOV5), "2026-11-05");
@@ -322,5 +323,117 @@ describe("public mission interface", () => {
     const missing = handlePublic({ method: "GET", route: "status" }, dir());
     assert.equal(missing.body.source, "unavailable");
     assert.equal(missing.body.source_observed_at, null);
+    assert.equal(missing.body.stale, true);
+    assert.equal(missing.body.live_spend_drops, null);
+    assert.equal(missing.body.spending_enabled_source, "default_off");
+    const aged = handlePublic({ method: "GET", route: "status", served_at: "2026-11-07T18:00:00.000Z" }, root);
+    assert.equal(aged.body.source, "ledger");
+    assert.equal(aged.body.stale, true);
+    assert.equal(aged.body.live_spend_drops, "0");
+  });
+});
+
+describe("authenticated spend activation", () => {
+  const signerEnv = {
+    FOUNDRY_AGENT_SIGN: "yes",
+    FOUNDRY_SIGNER_TOKEN: "signer-token-value",
+    MISSION_XRPL_ADDRESS: ISOLATED,
+  };
+
+  it("stays off until the phrase and token match, and a dry-run does not load a key", () => {
+    const root = dir();
+    throwsCode(() => control(root, { action: "activate", token: "nope-token-value", confirm: config.ACTIVATE_PHRASE, now: NOW }, allow()), "AUTH");
+    throwsCode(() => control(root, { action: "activate", token: TOKEN, confirm: "no", now: NOW }, allow()), "APPROVAL");
+    throwsCode(() => control(root, { action: "activate", token: TOKEN, confirm: config.ACTIVATE_PHRASE, per_mission_drops: "2000000", now: NOW }, allow()), "CAP");
+    const turned = control(root, { action: "activate", token: TOKEN, confirm: config.ACTIVATE_PHRASE, now: NOW }, allow());
+    assert.equal(turned.spending_enabled, true);
+    const row = startMission(root, buy("activate-1", NOW, { payment_drops: "100", network_fee_drops: "12" }), allow());
+    throwsCode(() => act(root, { mission_id: row.mission.id, now: NOW }, { wallet: { address: ISOLATED } }), "APPROVAL");
+    const approved = approve(root, { mission_id: row.mission.id, token: TOKEN, now: NOW }, allow());
+    assert.equal(approved.mission.status, "approved_ready");
+    let seedReads = 0;
+    const acted = act(root, { mission_id: row.mission.id, now: NOW }, {
+      wallet: { address: ISOLATED },
+      loadSeed: () => {
+        seedReads += 1;
+        return "nope";
+      },
+    });
+    assert.equal(seedReads, 0);
+    assert.equal(acted.mission.status, "ready_for_signer");
+    assert.equal(acted.mission.signed, false);
+    assert.equal(acted.signer.key_loaded, false);
+    assert.equal(acted.mission.unsigned_tx.Destination, FOREIGN);
+    assert.equal(acted.mission.unsigned_tx.Account, ISOLATED);
+    assert.equal(view(root, NOW).live_spend_drops, "0");
+    assert.equal(view(root, NOW).spending_enabled, true);
+    assert.equal(view(root, NOW).accounted_spent_drops, "0");
+  });
+
+  it("refuses gateway, house, mainnet, over-cap, and execute without a seed", async () => {
+    const base = { intent: "mission_spend", dry_run: true };
+    const ctx = { skipAuth: true, dry: true, env: signerEnv };
+    const tx = {
+      TransactionType: "Payment",
+      Account: ISOLATED,
+      Destination: FOREIGN,
+      Amount: "100",
+      Fee: "12",
+      NetworkID: 1,
+    };
+    const dry = await evaluateMissionSpend(Object.assign({}, base, { tx }), ctx);
+    assert.equal(dry.body.key_loaded, false);
+    assert.equal(dry.body.submitted, false);
+    await assert.rejects(
+      () => evaluateMissionSpend(Object.assign({}, base, { tx: Object.assign({}, tx, { Destination: "rNrjh1KGZk2jBR3wPfAQnoidtFFYQKbQn2" }) }), ctx),
+      (error) => error.code === "BRIDGE"
+    );
+    await assert.rejects(
+      () => evaluateMissionSpend(Object.assign({}, base, { tx: Object.assign({}, tx, { Account: anchors.WALLETS.W0.address }) }), ctx),
+      (error) => error.code === "W0"
+    );
+    await assert.rejects(
+      () => evaluateMissionSpend(Object.assign({}, base, { tx: Object.assign({}, tx, { NetworkID: 0 }) }), ctx),
+      (error) => error.code === "MAINNET"
+    );
+    await assert.rejects(
+      () => evaluateMissionSpend(Object.assign({}, base, { tx: Object.assign({}, tx, { Amount: "1000000", Fee: "1" }) }), ctx),
+      (error) => error.code === "CAP"
+    );
+    const reads = [];
+    await assert.rejects(
+      () => evaluateMissionSpend({ intent: "mission_spend", tx, execute: true }, {
+        skipAuth: true,
+        execute: true,
+        env: Object.assign({}, signerEnv, { FOUNDRY_MISSION_EXECUTE: "yes" }),
+        io: { readFileSync: () => { reads.push("read"); return ""; } },
+      }),
+      (error) => error.code === "NO_SEED"
+    );
+    assert.equal(reads.length, 0);
+    const bridgeRoot = dir();
+    control(bridgeRoot, { action: "activate", token: TOKEN, confirm: config.ACTIVATE_PHRASE, now: NOW }, allow());
+    const bridged = startMission(bridgeRoot, buy("bridge-block", NOW, { payment_drops: "10", network_fee_drops: "0", bridge_gas_drops: "1" }), allow());
+    approve(bridgeRoot, { mission_id: bridged.mission.id, token: TOKEN, now: NOW }, allow());
+    throwsCode(() => act(bridgeRoot, { mission_id: bridged.mission.id, now: NOW }, { wallet: { address: ISOLATED } }), "NON_XRP");
+  });
+
+  it("keeps an uncertain hold in the next reservation's daily total after restart", () => {
+    const root = dir();
+    const row = startMission(root, buy("uncertain-cap", NOW, { payment_drops: "4000000", network_fee_drops: "0" }), allow());
+    assert.equal(row.mission.code, "CAP");
+    const held = startMission(root, buy("uncertain-ok", NOW, { payment_drops: "1000000", network_fee_drops: "0" }), allow());
+    observe(root, { mission_id: held.mission.id, now: NOW, observe_key: "obs-hold", report: {} });
+    const books = view(root, NOW);
+    assert.equal(books.uncertain_drops, "1000000");
+    assert.equal(books.live_spend_drops, "0");
+    for (let i = 0; i < 4; i += 1) {
+      const next = startMission(root, buy(`uncertain-more-${i}`, NOW, { payment_drops: "1000000", network_fee_drops: "0" }), allow());
+      assert.equal(next.mission.status, "awaiting_human_approval");
+    }
+    const overflow = startMission(root, buy("uncertain-over", NOW, { payment_drops: "1000000", network_fee_drops: "0" }), allow());
+    assert.equal(overflow.mission.code, "CAP");
+    assert.equal(view(root, NOW).days[chicagoDay(NOW)].uncertain, "1000000");
+    assert.equal(view(root, NOW).days[chicagoDay(NOW)].reserved, "4000000");
   });
 });

@@ -1299,6 +1299,28 @@ function assertNotAxelarPayment(tx, intent) {
   }
 }
 
+function assertMissionSpend(tx, env) {
+  assertNotCi(env || {});
+  assertNotAxelarPayment(tx, "mission_spend");
+  if (!tx || tx.TransactionType !== "Payment") throw coded("mission spend is a Payment", "TX");
+  if (tx.NetworkID !== anchors.XRPL_NETWORK_ID) throw coded("mission spend is network id 1 only", "MAINNET");
+  const account = tx.Account;
+  const destination = tx.Destination;
+  if (!account || !destination) throw coded("mission spend needs account and destination", "ACCOUNT");
+  for (const id of anchors.WALLET_IDS) {
+    if (account === anchors.WALLETS[id].address || destination === anchors.WALLETS[id].address) {
+      throw coded(`refusing house wallet ${id} on mission spend`, "W0");
+    }
+  }
+  const configured = env && env.MISSION_XRPL_ADDRESS;
+  if (!configured || configured !== account) throw coded("mission account is not the isolated wallet", "WALLET");
+  const amount = grants.dropsOf(tx.Amount);
+  const fee = tx.Fee == null ? 0n : grants.dropsOf(tx.Fee);
+  if (amount <= 0n) throw coded("mission amount must be positive", "CAP");
+  if (amount + fee > 1000000n) throw coded("mission spend exceeds 1000000 drops", "CAP");
+  return { amount: amount.toString(), fee: fee.toString(), total: (amount + fee).toString() };
+}
+
 function assertAgentRequest(opts) {
   const options = opts || {};
   assertAgentGate(options.env);
@@ -1411,6 +1433,7 @@ module.exports = {
   assertAgentRpc,
   assertAgentRequest,
   assertNotAxelarPayment,
+  assertMissionSpend,
   assertEpochScar,
   agentWallet,
   loadMotions,

@@ -13,5 +13,5 @@
   "source_observed_at": "2026-11-06T17:00:00.000Z",
   "killed": false,
   "missions": [],
-  "note": "Authorized caps are not live spend. Signing is disabled. This snapshot is not a live ledger."
+  "note": "Example schema only. The desk does not read this file. Live figures come from lab/missions/events.jsonl on the Foundry box."
 }

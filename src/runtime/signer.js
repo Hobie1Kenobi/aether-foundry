@@ -468,7 +468,73 @@ async function submitLive(tx, wallet, env, ctx, loadSeed) {
   }
 }
 
+async function evaluateMissionSpend(body, ctx) {
+  const options = ctx || {};
+  const env = options.env || {};
+  policy.assertNotCi(env);
+  policy.assertAgentGate(env);
+  if (!options.skipAuth) assertBearer(options.authorization, env.FOUNDRY_SIGNER_TOKEN);
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw policy.coded("refusing empty body", "ARGS");
+  if (body.intent !== "mission_spend") throw policy.coded("mission signer intent mismatch", "TX");
+  policy.assertNoSeedFields(body);
+  policy.assertMissionSpend(body.tx, env);
+  const execute = options.execute === true && body.execute === true && env.FOUNDRY_MISSION_EXECUTE === "yes";
+  if (!execute || options.dry === true || body.dry_run === true) {
+    return {
+      status: 200,
+      body: {
+        dry_run: true,
+        intent: "mission_spend",
+        key_loaded: false,
+        signed: false,
+        submitted: false,
+        live: false,
+        tx: body.tx,
+        network_id: 1,
+        account: env.MISSION_XRPL_ADDRESS,
+      },
+    };
+  }
+  const seed = typeof env.MISSION_XRPL_SEED === "string" ? env.MISSION_XRPL_SEED : "";
+  if (!seed) throw policy.coded("MISSION_XRPL_SEED is not loaded. Refusing to sign.", "NO_SEED");
+  if (options.io && options.io.readFileSync) {
+    throw policy.coded("mission signer does not read a secrets file", "SEED");
+  }
+  let key;
+  try {
+    key = options.openWallet ? options.openWallet(seed) : require("xrpl").Wallet.fromSeed(seed);
+  } catch (error) {
+    if (error && error.code) throw error;
+    throw policy.coded("MISSION_XRPL_SEED is not a usable seed", "NO_SEED");
+  }
+  const classic = key.classicAddress || key.address;
+  if (classic !== env.MISSION_XRPL_ADDRESS) throw policy.coded("isolated key does not match MISSION_XRPL_ADDRESS", "WALLET");
+  if (!options.submit) throw policy.coded("refusing live submit without an explicit box submit hook", "SUBMIT");
+  let submitted;
+  try {
+    submitted = await options.submit(body.tx, { classicAddress: classic, sign: (tx) => key.sign(tx) });
+  } catch (error) {
+    throw policy.coded(policy.redact(error && error.message ? error.message : "submit failed", [seed, env.FOUNDRY_SIGNER_TOKEN]), (error && error.code) || "SUBMIT");
+  }
+  const text = JSON.stringify(submitted || {});
+  if (seed && text.includes(seed)) throw policy.coded("refusing to return a seed", "SEED");
+  return {
+    status: 200,
+    body: {
+      dry_run: false,
+      intent: "mission_spend",
+      key_loaded: true,
+      signed: true,
+      submitted: true,
+      live: true,
+      network_id: 1,
+      result: submitted,
+    },
+  };
+}
+
 async function evaluate(body, ctx) {
+  if (body && body.intent === "mission_spend") return evaluateMissionSpend(body, ctx);
   const options = ctx || {};
   const env = options.env || {};
   policy.assertAgentGate(env);
@@ -837,6 +903,7 @@ if (require.main === module) {
 module.exports = {
   HELP,
   DEFAULT_BIND,
+  evaluateMissionSpend,
   DEFAULT_PORT,
   assertBind,
   assertPort,

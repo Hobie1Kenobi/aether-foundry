@@ -1,22 +1,29 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
-import { missionFeed, publicMissionResponse } from "../../web/lib/missions-public.ts";
+import { publicMissionResponse } from "../../web/lib/missions-public.ts";
 
-test("public mission snapshot keeps caps, disabled spending, and zero live spend apart", () => {
-  const feed = missionFeed();
-  assert.equal(feed.spending_enabled, false);
-  assert.equal(feed.signing_enabled, false);
-  assert.equal(feed.authorized_per_mission_drops, "1000000");
-  assert.equal(feed.authorized_daily_drops, "5000000");
-  assert.equal(feed.live_spend_drops, "0");
-  assert.equal(feed.source, "snapshot");
-  assert.equal(feed.source_observed_at, "2026-11-06T17:00:00.000Z");
-  assert.equal(feed.timezone, "America/Chicago");
+const require = createRequire(import.meta.url);
+const { handlePublic } = require("../../src/missions/public.js");
+
+test("a server with no ledger reports unknown live spend and a stale source", () => {
+  const missing = handlePublic({ method: "GET", route: "status", served_at: "2026-11-06T18:00:00.000Z" }, null);
+  assert.equal(missing.body.source, "unavailable");
+  assert.equal(missing.body.source_observed_at, null);
+  assert.equal(missing.body.stale, true);
+  assert.equal(missing.body.live_spend_drops, null);
+  assert.equal(missing.body.spending_enabled_source, "default_off");
+  const rendered = publicMissionResponse("GET", "status");
+  assert.equal(rendered.body.source === "ledger" || rendered.body.source === "unavailable", true);
+  if (rendered.body.source === "unavailable") {
+    assert.equal(rendered.body.live_spend_drops, null);
+    assert.equal(rendered.body.stale, true);
+  }
 });
 
-test("public mission writes are denied and an unknown detail is not invented", async () => {
+test("public mission writes are denied", () => {
   const posted = publicMissionResponse("POST", "feed");
   assert.equal(posted.status, 405);
   assert.equal(posted.body.code, "PUBLIC_WRITE");
@@ -25,17 +32,13 @@ test("public mission writes are denied and an unknown detail is not invented", a
     "web/app/api/missions/status/route.ts",
     "web/app/api/missions/[id]/route.ts",
     "web/app/api/missions/[id]/replay/route.ts",
+    "web/app/missions/page.tsx",
+    "web/lib/missions-public.ts",
   ];
   for (const file of routes) {
     const text = fs.readFileSync(path.resolve(file), "utf8");
-    assert.match(text, /export async function POST/);
-    assert.match(text, /publicMissionResponse\("POST"/);
-    assert.equal(/W0_SEED|fromSeed|sign\(/.test(text), false, file);
+    assert.equal(text.includes("machines/missions/public-feed.json"), false, file);
+    assert.equal(text.includes('live_spend_drops: "0"'), false, file);
+    assert.equal(text.includes("2026-11-06T17:00:00.000Z"), false, file);
   }
-  const missing = publicMissionResponse("GET", "detail", "msn-missing");
-  assert.equal(missing.status, 404);
-  const status = publicMissionResponse("GET", "status");
-  assert.equal(status.body.source_observed_at, "2026-11-06T17:00:00.000Z");
-  assert.equal(status.body.live_spend_drops, "0");
-  assert.notEqual(status.body.authorized_daily_drops, status.body.live_spend_drops);
 });

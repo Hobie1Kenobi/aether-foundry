@@ -29,22 +29,31 @@ function handlePublic(request, dir) {
       return { status: 404, body: { ok: false, code: "NOT_FOUND", error: "mission not found" } };
     }
   }
+  const clock = request.served_at || new Date().toISOString();
   if (route === "status") {
-    const status = dir ? view(dir) : null;
+    const status = view(dir, clock);
     return {
       status: 200,
       body: {
         ok: true,
-        spending_enabled: false,
+        spending_enabled: status ? status.spending_enabled : false,
+        spending_enabled_source: status ? status.spending_enabled_source : "default_off",
         signing_enabled: false,
         authorized_per_mission_drops: "1000000",
         authorized_daily_drops: "5000000",
         timezone: "America/Chicago",
-        live_spend_drops: "0",
-        source: status && status.source === "ledger" ? "ledger" : "unavailable",
+        live_spend_drops: status ? status.live_spend_drops : null,
+        reserved_drops: status ? status.reserved_drops : null,
+        uncertain_drops: status ? status.uncertain_drops : null,
+        accounted_spent_drops: status ? status.accounted_spent_drops : null,
+        source: status ? status.source : "unavailable",
         source_observed_at: status ? status.source_observed_at : null,
+        stale: status ? status.stale : true,
         served_at: request.served_at || null,
         killed: status ? status.killed : false,
+        note: status && status.source === "ledger"
+          ? "Figures are folded from the append-only mission ledger."
+          : "No mission ledger is visible to this process. Live spend is unknown, not zero.",
       },
     };
   }
@@ -56,7 +65,7 @@ function handlePublic(request, dir) {
   if (route === "replay") {
     return { status: 200, body: publicReplay(dir, request.id) };
   }
-  return { status: 200, body: publicFeed(dir) };
+  return { status: 200, body: publicFeed(dir, clock) };
 }
 
 module.exports = { handlePublic };

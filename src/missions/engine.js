@@ -28,8 +28,10 @@ function emptyState() {
     missions: {},
     days: {},
     killed: false,
+    spending_enabled: false,
     denials: [],
-    live_spend_drops: "0",
+    live_spent: 0n,
+    live_uncertain: 0n,
   };
 }
 
@@ -81,7 +83,17 @@ function fold(events) {
   const state = emptyState();
   for (const event of events) {
     if (!event || event.counted === false) continue;
-    if (event.type === "control.kill") state.killed = true;
+    if (event.type === "control.kill") {
+      state.killed = true;
+      state.spending_enabled = false;
+    }
+    if (event.type === "control.clear_kill") state.killed = false;
+    if (event.type === "control.activate" && !state.killed) {
+      const per = BigInt(event.per_mission_drops || "0");
+      const daily = BigInt(event.daily_drops || "0");
+      if (per === config.PER_MISSION_DROPS && daily === config.DAILY_DROPS) state.spending_enabled = true;
+    }
+    if (event.type === "control.deactivate") state.spending_enabled = false;
     if (event.type === "control.denial") state.denials.push(event);
     if (event.type === "mission.upsert") {
       state.missions[event.mission.id] = event.mission;
@@ -101,6 +113,7 @@ function fold(events) {
       const fee = BigInt(event.drops);
       sub(day, "reserved", fee);
       add(day, "spent", fee);
+      if (event.live === true) state.live_spent += fee;
       const mission = state.missions[event.mission_id];
       if (mission) mission.fee_spent_drops = event.drops;
     }
@@ -109,6 +122,7 @@ function fold(events) {
       const amount = BigInt(event.drops);
       sub(day, "reserved", amount);
       add(day, "uncertain", amount);
+      if (event.live === true) state.live_uncertain += amount;
       const mission = state.missions[event.mission_id];
       if (mission) {
         mission.hold = "uncertain";
@@ -309,15 +323,147 @@ function approve(dir, input, opts) {
       return { mission, replay: true };
     }
     mission.labels.approval = "approved_unsigned";
-    mission.status = "spending_disabled";
-    mission.stage = "act";
     mission.signed = false;
     mission.submitted = false;
-    mission.spending_enabled = config.SPENDING_ENABLED;
-    mission.rationale = "Human approval recorded. Spending and signing are still disabled, so nothing was submitted.";
+    mission.spending_enabled = state.spending_enabled === true;
+    mission.stage = "act";
+    if (state.spending_enabled) {
+      mission.status = "approved_ready";
+      mission.rationale = "Human approval recorded and XRPL Testnet spend is activated. Nothing has been signed yet.";
+    } else {
+      mission.status = "spending_disabled";
+      mission.rationale = "Human approval recorded. Runtime spend is not activated, so nothing was signed or submitted.";
+    }
     mission.updated_at = now;
     persist(api, mission);
     return { mission, replay: false };
+  });
+}
+
+function control(dir, input, opts) {
+  const options = opts || {};
+  const now = input.now || new Date().toISOString();
+  return exclusive(dir, (api) => {
+    if (!policy.tokenOk(input.token, options.token)) {
+      api.append({ type: "control.denial", at: now, mission_id: null, code: "AUTH", rationale: "Control authentication failed.", live: false });
+      throw coded("control token was refused", "AUTH");
+    }
+    const state = fold(api.read());
+    if (input.action === "activate") {
+      if (input.confirm !== config.ACTIVATE_PHRASE) throw coded("activation phrase mismatch", "APPROVAL");
+      if (state.killed) throw coded("hard stop is on", "killed");
+      if (input.per_mission_drops && input.per_mission_drops !== config.PER_MISSION_DROPS.toString()) {
+        throw coded("refusing to raise the per-mission cap", "CAP");
+      }
+      if (input.daily_drops && input.daily_drops !== config.DAILY_DROPS.toString()) {
+        throw coded("refusing to raise the daily cap", "CAP");
+      }
+      api.append({
+        type: "control.activate",
+        at: now,
+        per_mission_drops: config.PER_MISSION_DROPS.toString(),
+        daily_drops: config.DAILY_DROPS.toString(),
+        network: config.NETWORK,
+        live: false,
+      });
+      return { spending_enabled: true, at: now };
+    }
+    if (input.action === "deactivate") {
+      if (input.confirm !== config.DEACTIVATE_PHRASE) throw coded("deactivation phrase mismatch", "APPROVAL");
+      api.append({ type: "control.deactivate", at: now, live: false });
+      return { spending_enabled: false, at: now };
+    }
+    if (input.action === "clear_kill") {
+      if (input.confirm !== config.CLEAR_KILL_PHRASE) throw coded("clear-kill phrase mismatch", "APPROVAL");
+      api.append({ type: "control.clear_kill", at: now, live: false });
+      api.append({ type: "control.deactivate", at: now, live: false });
+      return { killed: false, spending_enabled: false, at: now };
+    }
+    throw coded("unknown control", "COMMAND");
+  });
+}
+
+function missionPayment(mission, wallet) {
+  if (!wallet || !wallet.address) throw coded("isolated wallet address is required", "WALLET");
+  if (policy.isHouse(wallet.address)) throw coded("isolated wallet is a house account", "W0");
+  if (mission.budget && (mission.budget.bridge_gas_drops !== "0" || mission.budget.bridge_custody_drops !== "0")) {
+    throw coded(
+      "Bridge and destination-chain gas are not authorized. The return leg stays blocked. This act pays only an XRPL Testnet foreign seller.",
+      "NON_XRP"
+    );
+  }
+  const tx = {
+    TransactionType: "Payment",
+    Account: wallet.address,
+    Destination: mission.seller,
+    Amount: mission.budget.payment_drops,
+    Fee: mission.budget.network_fee_drops,
+    NetworkID: config.NETWORK_ID,
+  };
+  if (policy.isHouse(tx.Destination)) throw coded("refusing a house payee", "W0");
+  return tx;
+}
+
+function drySigner(body) {
+  const runtimePolicy = require("../runtime/policy");
+  runtimePolicy.assertMissionSpend(body.tx, body.env || {});
+  return {
+    dry_run: true,
+    key_loaded: false,
+    signed: false,
+    submitted: false,
+    live: false,
+    tx: body.tx,
+  };
+}
+
+function act(dir, input, opts) {
+  const options = opts || {};
+  const now = input.now || new Date().toISOString();
+  return exclusive(dir, (api) => {
+    const state = fold(api.read());
+    expireHolds(api, state, now);
+    const mission = state.missions[input.mission_id];
+    if (!mission) throw coded("mission not found", "PLAN");
+    if (state.killed) throw coded("hard stop is on", "killed");
+    if (mission.retry_blocked) throw coded("refusing to retry an unknown or pending settlement", "NO_RETRY");
+    if (mission.labels.approval !== "approved_unsigned") throw coded("human approval is required", "APPROVAL");
+    if (!state.spending_enabled) throw coded("spending is not activated", "SPENDING_DISABLED");
+    if (mission.submitted) return { mission, replay: true };
+    const tx = missionPayment(mission, options.wallet);
+    const signer = options.signer || drySigner;
+    const result = signer({
+      intent: "mission_spend",
+      tx,
+      dry_run: true,
+      env: {
+        MISSION_XRPL_ADDRESS: options.wallet.address,
+        FOUNDRY_AGENT_SIGN: "yes",
+      },
+    });
+    if (!result || result.key_loaded || result.signed || result.submitted || result.live) {
+      throw coded("refusing a signer result that loaded a key or submitted", "SUBMIT");
+    }
+    mission.status = "ready_for_signer";
+    mission.stage = "act";
+    mission.unsigned_tx = result.tx || tx;
+    mission.signed = false;
+    mission.submitted = false;
+    mission.live = false;
+    mission.spending_enabled = true;
+    mission.rationale = "Activated and approved. The signer dry-run accepted the Payment. No key was loaded and nothing was submitted.";
+    mission.updated_at = now;
+    persist(api, mission);
+    api.append({
+      type: "act.prepared",
+      at: now,
+      mission_id: mission.id,
+      live: false,
+      signed: false,
+      submitted: false,
+      network_id: 1,
+    });
+    return { mission, signer: { dry_run: true, key_loaded: false, signed: false, submitted: false }, replay: false };
   });
 }
 
@@ -522,66 +668,111 @@ function kill(dir, input, opts) {
   });
 }
 
-function view(dir) {
-  const events = readEvents(dir);
+function ageStale(observed, now) {
+  if (!observed) return true;
+  const then = new Date(observed).getTime();
+  const clock = new Date(now || Date.now()).getTime();
+  if (Number.isNaN(then) || Number.isNaN(clock)) return true;
+  return clock - then > config.STALE_MS;
+}
+
+function view(dir, now) {
+  const events = dir ? readEvents(dir).filter((event) => event && event.counted !== false && event.type) : [];
+  const clock = now || new Date().toISOString();
+  if (!events.length) {
+    return {
+      spending_enabled: false,
+      spending_enabled_source: "default_off",
+      signing_enabled: false,
+      authorized_per_mission_drops: config.PER_MISSION_DROPS.toString(),
+      authorized_daily_drops: config.DAILY_DROPS.toString(),
+      timezone: config.TIMEZONE,
+      live_spend_drops: null,
+      reserved_drops: null,
+      uncertain_drops: null,
+      accounted_spent_drops: null,
+      killed: false,
+      source: "unavailable",
+      source_observed_at: null,
+      stale: true,
+      missions: {},
+      days: {},
+      denials: [],
+    };
+  }
   const state = fold(events);
   let observed = null;
   for (const event of events) {
-    if (event && event.at) observed = event.at;
+    if (event.at) observed = event.at;
   }
+  const day = state.days[chicagoDay(clock)] || { reserved: "0", spent: "0", uncertain: "0", released: "0" };
+  const live = state.live_spent + state.live_uncertain;
   return {
-    spending_enabled: config.SPENDING_ENABLED,
-    signing_enabled: config.SIGNING_ENABLED,
+    spending_enabled: state.spending_enabled === true,
+    spending_enabled_source: "ledger",
+    signing_enabled: false,
     authorized_per_mission_drops: config.PER_MISSION_DROPS.toString(),
     authorized_daily_drops: config.DAILY_DROPS.toString(),
     timezone: config.TIMEZONE,
-    live_spend_drops: "0",
+    live_spend_drops: live.toString(),
+    reserved_drops: day.reserved,
+    uncertain_drops: day.uncertain,
+    accounted_spent_drops: day.spent,
     killed: state.killed,
-    source: events.length ? "ledger" : "unavailable",
+    source: "ledger",
     source_observed_at: observed,
+    stale: ageStale(observed, clock),
     missions: state.missions,
     days: state.days,
     denials: state.denials,
   };
 }
 
-function publicFeed(dir) {
-  const full = dir ? view(dir) : null;
-  const missions = full
-    ? Object.values(full.missions).map((mission) => ({
-        id: mission.id,
-        status: mission.status,
-        code: mission.code,
-        stage: mission.stage,
-        rationale: mission.rationale,
-        labels: mission.labels,
-        settlement: mission.settlement,
-        live: false,
-        signed: false,
-        submitted: false,
-        foreign_revenue_drops: "0",
-        proof_hash: mission.proof_hash,
-        explorer: mission.explorer,
-        budget_drops: mission.budget ? mission.budget.budget_drops : "0",
-        account_reserve_drops: mission.budget ? mission.budget.account_reserve_drops : "0",
-        network_fee_drops: mission.budget ? mission.budget.network_fee_drops : "0",
-        bridge_custody_drops: mission.budget ? mission.budget.bridge_custody_drops : "0",
-      }))
-    : [];
+function publicFeed(dir, now) {
+  const full = view(dir, now);
+  const missions = Object.values(full.missions || {}).map((mission) => ({
+    id: mission.id,
+    status: mission.status,
+    code: mission.code,
+    stage: mission.stage,
+    rationale: mission.rationale,
+    labels: mission.labels,
+    settlement: mission.settlement,
+    live: mission.live === true,
+    signed: mission.signed === true,
+    submitted: mission.submitted === true,
+    foreign_revenue_drops: "0",
+    proof_hash: mission.proof_hash,
+    explorer: mission.explorer,
+    budget_drops: mission.budget ? mission.budget.budget_drops : "0",
+    account_reserve_drops: mission.budget ? mission.budget.account_reserve_drops : "0",
+    network_fee_drops: mission.budget ? mission.budget.network_fee_drops : "0",
+    bridge_custody_drops: mission.budget ? mission.budget.bridge_custody_drops : "0",
+  }));
+  const liveDrops = full.live_spend_drops;
   return assertPublic({
     schema: "aether.missions.public",
-    spending_enabled: false,
+    spending_enabled: full.spending_enabled,
+    spending_enabled_source: full.spending_enabled_source,
     signing_enabled: false,
-    authorized_per_mission_drops: config.PER_MISSION_DROPS.toString(),
-    authorized_daily_drops: config.DAILY_DROPS.toString(),
+    authorized_per_mission_drops: full.authorized_per_mission_drops,
+    authorized_daily_drops: full.authorized_daily_drops,
     authorized_per_mission_xrp: "1",
     authorized_daily_xrp: "5",
     timezone: config.TIMEZONE,
-    live_spend_drops: "0",
-    live_spend_xrp: "0",
-    source: full && full.source === "ledger" ? "ledger" : "snapshot",
-    source_observed_at: full ? full.source_observed_at : null,
-    killed: full ? full.killed : false,
+    live_spend_drops: liveDrops,
+    live_spend_xrp: liveDrops == null ? null : (Number(liveDrops) / 1000000).toString(),
+    reserved_drops: full.reserved_drops,
+    uncertain_drops: full.uncertain_drops,
+    accounted_spent_drops: full.accounted_spent_drops,
+    source: full.source,
+    source_observed_at: full.source_observed_at,
+    stale: full.stale,
+    killed: full.killed,
+    note:
+      full.source === "ledger"
+        ? "Figures are folded from the append-only mission ledger. Signing is still a separate box step."
+        : "No mission ledger is visible to this process. Live spend is unknown, not zero.",
     missions,
   });
 }
@@ -603,7 +794,7 @@ function publicReplay(dir, id) {
       status: event.mission ? event.mission.status : null,
       settlement: event.settlement || (event.mission && event.mission.settlement) || null,
       rationale: event.rationale || (event.mission && event.mission.rationale) || null,
-      live: false,
+      live: event.live === true,
     }));
   return assertPublic({ schema: "aether.missions.replay", id, events });
 }
@@ -613,6 +804,8 @@ module.exports = {
   missionId,
   startMission,
   approve,
+  control,
+  act,
   observe,
   evaluate,
   kill,
