@@ -793,6 +793,8 @@ describe("release pack", () => {
     assert.equal(sums.includes("src/missions/new-account.js"), true);
     assert.equal(sums.includes("src/missions/reconcile-claim.js"), true);
     assert.equal(names.some((name) => name.endsWith("bin/reconcile")), true);
+    assert.equal(sums.includes("src/missions/authorize-once.js"), true);
+    assert.equal(names.some((name) => name.endsWith("bin/authorize-once")), true);
     const clean = fs.mkdtempSync(path.join(os.tmpdir(), "mission-unpack-"));
     const extracted = spawnSync("tar", ["-xf", result.tarPath, "-C", clean], { encoding: "utf8" });
     assert.equal(extracted.status, 0, extracted.stderr);

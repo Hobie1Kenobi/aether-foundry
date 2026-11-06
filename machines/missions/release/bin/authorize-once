@@ -1,0 +1,12 @@
+#!/bin/sh
+# Issue one unused purchase generation. This does not sign or rewrite a lease.
+# The token, phrase, and note come from the environment.
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+cd "$ROOT"
+exec env \
+  -u W0_SEED -u W1_SEED -u W2_SEED -u W3_SEED -u W4_SEED -u W5_SEED -u W6_SEED -u W7_SEED \
+  -u W1_REGULAR_SEED -u W2_REGULAR_SEED -u W3_REGULAR_SEED -u W4_REGULAR_SEED -u W5_REGULAR_SEED -u W6_REGULAR_SEED \
+  -u AETHER_SECRETS -u FOUNDRY_AGENT_SIGN -u MISSION_XRPL_SEED \
+  -u FOUNDRY_MISSION_EXECUTE \
+  node src/missions/authorize-once.js
