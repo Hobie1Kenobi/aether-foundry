@@ -96,7 +96,7 @@ That command writes one audit line and does not sign. It does not clear any othe
 
 ## Open presign
 
-`msn5b5c3223e5e88526` has presign hash `6022D12A2FBA5C4321FB7A1CED1E10FFC91B75C521F402A725B0518B101A8FEC`. Do not retry it and do not release the 1747-drop hold. `expires_at` `2026-11-06T19:42:16.314Z` is not a release. The mission Payment is signed without `LastLedgerSequence`, so a later ledger index does not by itself make that blob unusable. A public `tx` read on 2026-11-06 returned `txnNotFound`. That is not a release either. The published snapshot does not contain the seller HTTP status or body. If a local worker log still has that response, keep only the status number and whether the body was a JSON object. Do not send the signed blob again to find out.
+`msn5b5c3223e5e88526` has presign hash `6022D12A2FBA5C4321FB7A1CED1E10FFC91B75C521F402A725B0518B101A8FEC`. Do not retry it and do not release the 1747-drop hold. `expires_at` `2026-11-06T19:42:16.314Z` is not a release. The mission Payment was signed without `Sequence` or `LastLedgerSequence`. A generated-wallet decode shows an omitted Sequence is not stored as 0. That does not prove why the seller refused, and it does not release this claim. Future signatures require the validated account sequence and a LastLedgerSequence at most 20 ledgers ahead. A clock time does not release a signed claim. A public `tx` read on 2026-11-06 returned `txnNotFound`. That is not a release either. The published snapshot does not contain the seller HTTP status or body. If a local worker log still has that response, keep only the status number and whether the body was a JSON object. Do not send the signed blob again to find out.
 
 ## Swap a release
 

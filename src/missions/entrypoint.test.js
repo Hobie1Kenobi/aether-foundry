@@ -10,7 +10,7 @@ const { spawn } = require("node:child_process");
 const xrpl = require("xrpl");
 const config = require("./config");
 const { control, view, blockMission, startMission, signedClaimMayRelease } = require("./engine");
-const { beginSubmit, notePresign, releaseUnsignedClaim, releasePrepared } = require("./submit");
+const { beginSubmit, notePresign, releaseUnsignedClaim, releasePrepared, releasePassedWindow } = require("./submit");
 const { retryPreSignFee } = require("./retry-fee");
 const deskFold = require("../../web/lib/mission-fold");
 
@@ -185,15 +185,14 @@ describe("production worker entrypoint", () => {
     await new Promise((resolve) => seller.close(resolve));
     assert.equal(result.code, 0, `${result.stderr}\n${result.stdout}`);
     const body = JSON.parse(result.stdout);
-    assert.equal(body.complete, true, JSON.stringify(body));
-    assert.equal(body.code, null);
-    assert.equal(proofs, 1);
+    assert.equal(body.code, "unsupported_delivery", JSON.stringify(body));
+    assert.equal(body.complete, false);
+    assert.equal(proofs, 0);
     const mission = view(ledger, now).missions[body.mission_id];
-    assert.equal(mission.artifact.seller, REVIEWED);
-    assert.equal(mission.budget.payment_drops, "5000");
-    assert.notEqual(mission.budget.network_fee_drops, "999999");
-    assert.equal(mission.resource_url, resource);
-    assert.notEqual(mission.signer_accepted, true);
+    assert.equal(mission.presigned_hash, undefined);
+    assert.equal(mission.signed, false);
+    assert.equal(mission.hold, "released");
+    assert.equal(mission.complete, false);
   });
 
   it("releases a claim when the signer process refuses under CI and does not submit", async () => {
@@ -265,7 +264,7 @@ describe("production worker entrypoint", () => {
     const body = JSON.parse(result.stdout);
     assert.equal(body.complete, false, JSON.stringify(body));
     assert.equal(body.submitted, false);
-    assert.equal(body.code, "CI");
+    assert.equal(body.code, "unsupported_delivery");
     assert.equal(proofs, 0);
     const mission = view(ledger, now).missions[body.mission_id];
     assert.equal(mission.status, "blocked");
@@ -373,14 +372,14 @@ describe("production worker entrypoint", () => {
     await new Promise((resolve) => seller.close(resolve));
     assert.equal(result.code, 0, `${result.stderr}\n${result.stdout}`);
     const body = JSON.parse(result.stdout);
-    assert.equal(body.complete, true, JSON.stringify(body));
-    assert.equal(proofs, 1);
+    assert.equal(body.code, "unsupported_delivery", JSON.stringify(body));
+    assert.equal(body.complete, false);
+    assert.equal(proofs, 0);
     const mission = view(ledger, now).missions[body.mission_id];
     assert.equal(mission.budget.payment_drops, "1737");
     assert.equal(mission.budget.network_fee_drops, "12");
-    assert.equal(mission.budget.budget_drops, "1749");
-    assert.equal(mission.unsigned_tx.Fee, "12");
-    assert.notEqual(mission.signer_accepted, true);
+    assert.equal(mission.presigned_hash, undefined);
+    assert.equal(mission.complete, false);
     const events = deskFold.readEvents(ledger);
     const reserved = events.find((event) => event.type === "budget.reserved" && event.mission_id === mission.id);
     const narrowed = events.find((event) => event.type === "budget.fee_narrowed" && event.mission_id === mission.id);
@@ -389,7 +388,8 @@ describe("production worker entrypoint", () => {
     assert.equal(narrowed.from, "1010");
     assert.equal(narrowed.to, "12");
     const desk = deskFold.fold(events, now);
-    assert.equal(desk.live_spend_drops, "1749");
+    assert.equal(desk.live_spend_drops, "0");
+    assert.equal(desk.accounted_spent_drops, "0");
   });
 
   it("releases the hold when the fresh open_ledger_fee exceeds the ceiling", async () => {
@@ -451,37 +451,40 @@ describe("production worker entrypoint", () => {
     const home = tmp();
     const ledger = path.join(home, "ledger");
     fs.mkdirSync(ledger);
+    const proofFile = path.join(home, "proofs.txt");
+    fs.writeFileSync(proofFile, "");
     fs.writeFileSync(path.join(home, "preload.js"), `
+      const fs = require("fs");
       const original = globalThis.fetch;
       globalThis.fetch = async (url, init) => {
-        if (String(url) === "https://testnet.xrpl-labs.com") {
+        const target = String(url);
+        if (target === "https://testnet.xrpl-labs.com") {
           const body = JSON.parse(init.body);
           if (body.method === "server_info") {
-            return new Response(JSON.stringify({ result: { info: { network_id: 1, load_factor: 1 } } }), { status: 200 });
+            return new Response(JSON.stringify({ result: { info: { network_id: 1, validated_ledger: { seq: 22118869 } } } }), { status: 200 });
           }
-          return new Response(JSON.stringify({ result: { drops: { base_fee: "10", median_fee: "5000", minimum_fee: "10", open_ledger_fee: "10" }, ledger_current_index: 1 } }), { status: 200 });
+          if (body.method === "account_info") {
+            return new Response(JSON.stringify({ result: { account_data: { Sequence: 22117391 } } }), { status: 200 });
+          }
+          return new Response(JSON.stringify({ result: { drops: { base_fee: "10", median_fee: "5000", minimum_fee: "10", open_ledger_fee: "10" }, ledger_current_index: 22118869 } }), { status: 200 });
+        }
+        if (target.startsWith("https://api.stablecoingateways.com/v1/fx/convert")) {
+          const header = init && init.headers && (init.headers["PAYMENT-SIGNATURE"] || init.headers["payment-signature"]);
+          if (!header) {
+            return new Response(JSON.stringify({
+              x402Version: 2,
+              accepts: [{ scheme: "exact", network: "xrpl:1", asset: "XRP", amount: "1737", payTo: ${JSON.stringify(REVIEWED)}, maxTimeoutSeconds: 300 }],
+            }), { status: 402, headers: { "content-type": "application/json" } });
+          }
+          fs.appendFileSync(process.env.PROOF_FILE, "1\\n");
+          return new Response(JSON.stringify({ error: "unrecognized" }), { status: 402, headers: { "content-type": "application/json" } });
         }
         return original(url, init);
       };
     `);
     const now = new Date().toISOString();
     const wallet = xrpl.Wallet.generate();
-    let proofs = 0;
-    const seller = http.createServer((req, res) => {
-      if (!req.headers["payment-signature"]) {
-        res.writeHead(402, { "content-type": "application/json" });
-        res.end(JSON.stringify({
-          x402Version: 2,
-          accepts: [{ scheme: "exact", network: "xrpl:1", asset: "XRP", amount: "1737", payTo: REVIEWED, maxTimeoutSeconds: 300 }],
-        }));
-        return;
-      }
-      proofs += 1;
-      res.writeHead(402, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: "unrecognized" }));
-    });
-    await new Promise((resolve) => seller.listen(0, "127.0.0.1", resolve));
-    const resource = `http://127.0.0.1:${seller.address().port}/ping`;
+    const resource = "https://api.stablecoingateways.com/v1/fx/convert?from=USD&to=EUR&amount=1";
     activate(ledger, now);
     fs.writeFileSync(path.join(home, "allowlist.json"), JSON.stringify({
       payees: [{ address: REVIEWED, resource }],
@@ -502,6 +505,8 @@ describe("production worker entrypoint", () => {
         FOUNDRY_MISSION_EXECUTE: "yes",
         MISSION_XRPL_ADDRESS: wallet.address,
         MISSION_XRPL_SEED: wallet.seed,
+        PROOF_FILE: proofFile,
+        NODE_OPTIONS: `--require ${path.join(home, "preload.js")}`,
       }),
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -523,23 +528,29 @@ describe("production worker entrypoint", () => {
       FOUNDRY_MISSION_SIGNER_TOKEN: TOKEN,
       FOUNDRY_MISSION_SIGNER_PORT: "18791",
       MISSION_XRPL_ADDRESS: wallet.address,
+      PROOF_FILE: proofFile,
       NODE_OPTIONS: `--require ${path.join(home, "preload.js")}`,
     }));
     signer.kill("SIGTERM");
-    await new Promise((resolve) => seller.close(resolve));
     assert.equal(result.code, 0, `${result.stderr}\n${result.stdout}`);
     const body = JSON.parse(result.stdout);
     assert.equal(body.code, "delivery_failed", JSON.stringify(body));
     assert.equal(body.http_status, 402);
     assert.equal(body.submitted, false);
     assert.equal(body.complete, false);
-    assert.equal(proofs, 1);
+    assert.equal(fs.readFileSync(proofFile, "utf8").trim().split("\n").filter(Boolean).length, 1);
     const mission = view(ledger, now).missions[body.mission_id];
     assert.equal(mission.status, "uncertain");
     assert.equal(mission.hold, "uncertain");
     assert.equal(mission.retry_blocked, true);
-    assert.equal(mission.signed, false);
+    assert.equal(mission.signed, true);
+    assert.equal(mission.presigned, true);
     assert.equal(mission.submitted, false);
+    assert.equal(mission.sequence, 22117391);
+    assert.equal(mission.last_ledger_sequence, 22118889);
+    const stored = fs.readFileSync(path.join(ledger, "events.jsonl"), "utf8");
+    assert.equal(stored.includes("tx_blob"), false);
+    assert.equal(stored.includes("TxnSignature"), false);
     assert.match(mission.presigned_hash, /^[0-9A-F]{64}$/);
     assert.equal(mission.delivery_http_status, 402);
     assert.throws(
@@ -791,5 +802,158 @@ describe("resource allowlist and fee retry", () => {
     assert.equal(signedClaimMayRelease({ lastLedgerSequence: 100, validatedLedgerIndex: 100, hashFound: false }), false);
     assert.equal(signedClaimMayRelease({ lastLedgerSequence: 100, validatedLedgerIndex: 101, hashFound: true }), false);
     assert.equal(signedClaimMayRelease({ lastLedgerSequence: 100, validatedLedgerIndex: 101, hashFound: false }), true);
+    const kept = releasePassedWindow(ledger, {
+      mission_id: ready.id,
+      now: later,
+      validatedLedger: 99999999,
+      hashFound: false,
+    });
+    assert.equal(kept.released, false);
+    assert.equal(kept.reason, "no_last_ledger_sequence");
+    assert.equal(view(ledger, later).missions[ready.id].hold, "uncertain");
+    assert.equal(view(ledger, later).missions[ready.id].complete, false);
+  });
+});
+
+describe("generated wallet sequence encoding", () => {
+  it("does not encode an omitted Sequence as zero", () => {
+    const wallet = xrpl.Wallet.generate();
+    const base = {
+      TransactionType: "Payment",
+      Account: wallet.address,
+      Destination: REVIEWED,
+      Amount: "1737",
+      Fee: "10",
+      NetworkID: 1,
+    };
+    const omitted = wallet.sign(base);
+    const zero = wallet.sign(Object.assign({}, base, { Sequence: 0 }));
+    const decoded = xrpl.decode(omitted.tx_blob);
+    assert.equal(Object.prototype.hasOwnProperty.call(decoded, "Sequence"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(decoded, "LastLedgerSequence"), false);
+    assert.notEqual(omitted.tx_blob, zero.tx_blob);
+    assert.equal(xrpl.decode(zero.tx_blob).Sequence, 0);
+    assert.equal(omitted.tx_blob.includes(wallet.seed), false);
+  });
+});
+
+describe("real signer sequence and last ledger bounds", () => {
+  it("rejects a missing or unbounded window and leaves an old claim open", async () => {
+    const home = tmp();
+    const ledger = path.join(home, "ledger");
+    fs.mkdirSync(ledger);
+    const now = "2026-11-06T19:12:16.314Z";
+    activate(ledger, now);
+    const wallet = xrpl.Wallet.generate();
+    const old = startMission(ledger, {
+      idempotency_key: "old-claim-open1",
+      now,
+      observation: { network: "xrpl:1", network_id: 1, accounts: [{ address: REVIEWED }] },
+      payment_drops: "1737",
+      network_fee_drops: "10",
+      resource_url: "https://shop.test/reviewed",
+    }, { allowlist: { payees: [REVIEWED] } });
+    const { act } = require("./engine");
+    const oldReady = act(ledger, { mission_id: old.mission.id, now }, { wallet: { address: wallet.address } }).mission;
+    beginSubmit(ledger, { mission_id: oldReady.id, now });
+    notePresign(ledger, oldReady.id, "CD".repeat(32));
+    const fresh = startMission(ledger, {
+      idempotency_key: "future-sign-01",
+      now,
+      observation: { network: "xrpl:1", network_id: 1, accounts: [{ address: REVIEWED }] },
+      payment_drops: "1737",
+      network_fee_drops: "10",
+      resource_url: "https://shop.test/reviewed",
+    }, { allowlist: { payees: [REVIEWED] } });
+    const freshReady = act(ledger, { mission_id: fresh.mission.id, now }, { wallet: { address: wallet.address } }).mission;
+    beginSubmit(ledger, { mission_id: freshReady.id, now });
+    fs.writeFileSync(path.join(home, "preload.js"), `
+      globalThis.fetch = async (url, init) => {
+        const body = JSON.parse(init.body);
+        if (body.method === "server_info") {
+          return new Response(JSON.stringify({ result: { info: { network_id: 1, validated_ledger: { seq: 22118869 } } } }), { status: 200 });
+        }
+        if (body.method === "account_info") {
+          return new Response(JSON.stringify({ result: { account_data: { Sequence: 22117391 } } }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ result: { error: "txnNotFound" } }), { status: 200 });
+      };
+    `);
+    const signer = spawn(process.execPath, ["src/missions/signer.js"], {
+      cwd: ROOT,
+      env: childEnv({
+        FOUNDRY_MISSION_HOME: home,
+        FOUNDRY_MISSION_LEDGER: ledger,
+        FOUNDRY_MISSION_SIGNER_TOKEN: TOKEN,
+        FOUNDRY_MISSION_SIGNER_PORT: "18792",
+        FOUNDRY_MISSION_EXECUTE: "yes",
+        MISSION_XRPL_ADDRESS: wallet.address,
+        MISSION_XRPL_SEED: wallet.seed,
+        NODE_OPTIONS: `--require ${path.join(home, "preload.js")}`,
+      }),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("signer did not listen")), 5000);
+      const wait = () => {
+        fetch("http://127.0.0.1:18792/health").then((res) => res.json()).then(() => {
+          clearTimeout(timer);
+          resolve();
+        }).catch(() => setTimeout(wait, 50));
+      };
+      wait();
+    });
+    async function post(tx) {
+      const res = await fetch("http://127.0.0.1:18792/sign", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${TOKEN}` },
+        body: JSON.stringify({
+          intent: "mission_spend",
+          execute: true,
+          presign: true,
+          dry_run: false,
+          mission_id: freshReady.id,
+          tx,
+        }),
+      });
+      return { status: res.status, body: await res.json() };
+    }
+    const payment = {
+      TransactionType: "Payment",
+      Account: wallet.address,
+      Destination: REVIEWED,
+      Amount: "1737",
+      Fee: "10",
+      NetworkID: 1,
+    };
+    const missing = await post(payment);
+    assert.equal(missing.status, 400);
+    assert.equal(missing.body.code, "TX");
+    const zero = await post(Object.assign({}, payment, { Sequence: 0, LastLedgerSequence: 22118889 }));
+    assert.equal(zero.status, 400);
+    const far = await post(Object.assign({}, payment, { Sequence: 22117391, LastLedgerSequence: 22118869 + 1000 }));
+    assert.equal(far.status, 400);
+    assert.equal(far.body.code, "LEDGER");
+    const badFee = await post(Object.assign({}, payment, { Sequence: 22117391, LastLedgerSequence: 22118889, Fee: "10.5" }));
+    assert.equal(badFee.status, 400);
+    const ok = await post(Object.assign({}, payment, { Sequence: 22117391, LastLedgerSequence: 22118889 }));
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    assert.match(ok.body.hash, /^[0-9A-F]{64}$/);
+    signer.kill("SIGTERM");
+    const prior = view(ledger, now).missions[oldReady.id];
+    assert.equal(prior.hold, "uncertain");
+    assert.equal(prior.presigned_hash, "CD".repeat(32));
+    assert.equal(prior.last_ledger_sequence, undefined);
+    assert.equal(prior.complete, false);
+    const saved = view(ledger, now).missions[freshReady.id];
+    assert.equal(saved.presigned, true);
+    assert.equal(saved.signed, true);
+    assert.equal(saved.submitted, false);
+    assert.equal(saved.sequence, 22117391);
+    assert.equal(saved.last_ledger_sequence, 22118889);
+    assert.equal(saved.complete, false);
+    const text = fs.readFileSync(path.join(ledger, "events.jsonl"), "utf8");
+    assert.equal(text.includes("tx_blob"), false);
+    assert.equal(text.includes(ok.body.tx_blob), false);
   });
 });

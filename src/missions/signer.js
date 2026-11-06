@@ -14,6 +14,7 @@ const policy = require("../runtime/policy");
 const guard = require("./runtime-guard");
 const { coded } = require("./ledger");
 const { acceptClaim, notePresign } = require("./submit");
+const ledgerWindow = require("./ledger-window");
 
 const DEFAULT_PORT = 8788;
 const DEFAULT_WS = "wss://testnet.xrpl-labs.com";
@@ -111,10 +112,13 @@ async function signOnly(tx, env, deps) {
   const classic = wallet.classicAddress || wallet.address;
   if (classic !== expected) throw coded("isolated key does not match MISSION_XRPL_ADDRESS", "WALLET");
   policy.assertMissionSpend(tx, Object.assign({}, env, { MISSION_XRPL_ADDRESS: expected }));
+  const account = options.validatedAccount
+    || await ledgerWindow.readValidatedAccount(options.fetch || globalThis.fetch, tx.Account);
+  const fields = ledgerWindow.assertPrepared(tx, account);
   const signed = wallet.sign(tx);
   const hash = String(signed.hash || "").toUpperCase();
   if (!signed.tx_blob || !hash) throw coded("presign did not produce a blob", "SUBMIT");
-  return { hash, tx_blob: signed.tx_blob };
+  return { hash, tx_blob: signed.tx_blob, fields };
 }
 
 async function submitPrepared(tx, env, deps) {
@@ -132,12 +136,18 @@ async function submitPrepared(tx, env, deps) {
   }
   const classic = wallet.classicAddress || wallet.address;
   if (classic !== expected) throw coded("isolated key does not match MISSION_XRPL_ADDRESS", "WALLET");
+  const account = options.validatedAccount
+    || await ledgerWindow.readValidatedAccount(options.fetch || globalThis.fetch, tx.Account);
+  const fields = ledgerWindow.assertPrepared(tx, account);
   if (options.submit) return options.submit(tx, { classicAddress: classic, sign: (body) => wallet.sign(body) });
   const ws = assertWs(env.FOUNDRY_MISSION_XRPL_WS);
   const client = options.client || new xrpl.Client(ws);
   try {
     await client.connect();
     const prepared = await client.autofill(tx);
+    if (prepared.Sequence !== fields.Sequence || prepared.LastLedgerSequence !== fields.LastLedgerSequence || Number(prepared.NetworkID) !== 1) {
+      throw coded("autofill changed the bounded payment", "LEDGER");
+    }
     policy.assertMissionSpend(prepared, env);
     const signed = wallet.sign(prepared);
     const submitted = await client.submitAndWait(signed.tx_blob);
@@ -185,7 +195,7 @@ async function evaluate(body, env, deps) {
   if (!signerArmed(source)) throw coded("MISSION_XRPL_SEED is not loaded. Refusing to sign.", "NO_SEED");
   if (body.presign === true) {
     const signed = await signOnly(body.tx, source, options);
-    notePresign(source.FOUNDRY_MISSION_LEDGER, body.mission_id, signed.hash);
+    notePresign(source.FOUNDRY_MISSION_LEDGER, body.mission_id, signed.hash, { tx: body.tx });
     return {
       dry_run: false,
       presigned: true,

@@ -146,7 +146,7 @@ function fold(events) {
       const next = prior > amount ? prior - amount : 0n;
       state.missionCommitted[event.mission_id] = next.toString();
     }
-    if (event.type === "budget.unsigned_released") {
+    if (event.type === "budget.unsigned_released" || event.type === "budget.ledger_expired") {
       const day = dayBucket(state, event.day);
       const amount = BigInt(event.drops || "0");
       sub(day, "uncertain", amount);
@@ -1025,6 +1025,16 @@ function publicFeed(dir, now) {
       ? String(mission.foreign_revenue_drops)
       : "0",
     proof_hash: mission.proof_hash,
+    presigned: mission.presigned === true,
+    presigned_hash: typeof mission.presigned_hash === "string" && /^[0-9A-F]{64}$/.test(mission.presigned_hash)
+      ? mission.presigned_hash
+      : null,
+    sequence: Number.isSafeInteger(mission.sequence) ? mission.sequence : null,
+    last_ledger_sequence: Number.isSafeInteger(mission.last_ledger_sequence) ? mission.last_ledger_sequence : null,
+    delivery_http_status: Number.isInteger(mission.delivery_http_status) ? mission.delivery_http_status : null,
+    delivery_error_code: typeof mission.delivery_error_code === "string" && /^[a-z0-9_]{1,40}$/.test(mission.delivery_error_code)
+      ? mission.delivery_error_code
+      : null,
     explorer: mission.explorer,
     budget_drops: mission.budget ? mission.budget.budget_drops : "0",
     account_reserve_drops: mission.budget ? mission.budget.account_reserve_drops : "0",
