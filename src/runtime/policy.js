@@ -1303,7 +1303,9 @@ function assertMissionSpend(tx, env) {
   assertNotCi(env || {});
   assertNotAxelarPayment(tx, "mission_spend");
   if (!tx || tx.TransactionType !== "Payment") throw coded("mission spend is a Payment", "TX");
-  if (tx.NetworkID !== anchors.XRPL_NETWORK_ID) throw coded("mission spend is network id 1 only", "MAINNET");
+  if (tx.NetworkID != null && Number(tx.NetworkID) !== anchors.XRPL_NETWORK_ID) {
+    throw coded("mission spend is network id 1 only", "MAINNET");
+  }
   const account = tx.Account;
   const destination = tx.Destination;
   if (!account || !destination) throw coded("mission spend needs account and destination", "ACCOUNT");

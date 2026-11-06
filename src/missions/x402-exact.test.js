@@ -18,7 +18,6 @@ function payment(extra) {
     Fee: "10",
     Sequence: 22121127,
     LastLedgerSequence: 22121554,
-    NetworkID: 1,
     SourceTag: 26100014,
   }, extra || {});
 }
@@ -41,6 +40,8 @@ describe("public exact xrpl binding", () => {
     assert.equal(exactXrplPayment(missing, { payTo: PAYTO, amount: "1753", sourceTag: 26100014, invoiceId: INVOICE }).code, "invoice_missing");
     const good = payment({ InvoiceID: bound.invoiceIdField });
     assert.equal(exactXrplPayment(good, { payTo: PAYTO, amount: "1753", sourceTag: 26100014, invoiceId: INVOICE }).ok, true);
+    const tagged = payment({ InvoiceID: bound.invoiceIdField, NetworkID: 1 });
+    assert.equal(exactXrplPayment(tagged, { payTo: PAYTO, amount: "1753", sourceTag: 26100014, invoiceId: INVOICE }).code, "network_id_present");
   });
 
   it("decodes a generated signature with InvoiceID and without Memos", () => {
@@ -54,7 +55,6 @@ describe("public exact xrpl binding", () => {
       Fee: "10",
       Sequence: 22121127,
       LastLedgerSequence: 22121554,
-      NetworkID: 1,
       SourceTag: 26100014,
       InvoiceID: invoiceField,
     });

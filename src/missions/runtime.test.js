@@ -419,6 +419,7 @@ describe("submit claims", () => {
     const mission = readyMission(files);
     beginSubmit(files.ledger, { mission_id: mission.id, now: NOW });
     const tx = Object.assign({}, mission.unsigned_tx, { Sequence: 22117391, LastLedgerSequence: 22118889 });
+    delete tx.NetworkID;
     let submits = 0;
     const env = {
       FOUNDRY_MISSION_EXECUTE: "yes",

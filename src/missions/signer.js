@@ -145,7 +145,11 @@ async function submitPrepared(tx, env, deps) {
   try {
     await client.connect();
     const prepared = await client.autofill(tx);
-    if (prepared.Sequence !== fields.Sequence || prepared.LastLedgerSequence !== fields.LastLedgerSequence || Number(prepared.NetworkID) !== 1) {
+    if (
+      prepared.Sequence !== fields.Sequence
+      || prepared.LastLedgerSequence !== fields.LastLedgerSequence
+      || prepared.NetworkID != null
+    ) {
       throw coded("autofill changed the bounded payment", "LEDGER");
     }
     policy.assertMissionSpend(prepared, env);

@@ -18,7 +18,7 @@ function fail(code) {
 function exactXrplPayment(tx, requirements) {
   if (!tx || tx.TransactionType !== "Payment") return fail("not_payment");
   if (tx.Memos != null) return fail("memos_not_allowed");
-  if (Number(tx.NetworkID) !== 1) return fail("network_id");
+  if (tx.NetworkID != null) return fail("network_id_present");
   if (tx.Destination !== requirements.payTo) return fail("destination");
   if (tx.Amount != null && tx.DeliverMax != null) return fail("amount_and_delivermax");
   const amount = tx.Amount != null ? tx.Amount : tx.DeliverMax;

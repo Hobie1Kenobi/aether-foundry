@@ -16,7 +16,7 @@ function dropsField(value, label) {
 
 function assertPrepared(tx, account) {
   if (!tx || tx.TransactionType !== "Payment") throw coded("mission spend is a Payment", "TX");
-  if (tx.NetworkID !== 1) throw coded("mission spend is network id 1 only", "MAINNET");
+  if (tx.NetworkID != null) throw coded("standard xrpl:1 payments must omit NetworkID", "MAINNET");
   dropsField(tx.Amount, "Amount");
   const fee = dropsField(tx.Fee, "Fee");
   if (fee > 10000) throw coded("Fee is outside the local bound", "FEE_CAP");
@@ -43,7 +43,6 @@ function assertPrepared(tx, account) {
     Destination: tx.Destination,
     Amount: String(tx.Amount),
     Fee: String(tx.Fee),
-    NetworkID: 1,
     Sequence: tx.Sequence,
     LastLedgerSequence: tx.LastLedgerSequence,
   };
