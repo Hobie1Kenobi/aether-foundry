@@ -79,14 +79,24 @@ Automatic publishing needs `FOUNDRY_MISSION_GITHUB_TOKEN` in `/workspace/foundry
 
 `/workspace/foundry-ops/missions-runtime/allowlist.json` is `{ "payees": [] }` until you edit it. A discovered `payTo` stays `payee_not_allowlisted` and is not added by the worker. After you review that candidate's resource and 402 body, add one object `{ "address", "resource" }` for that classic address and that exact URL. A string address still matches any resource; the reviewed seller `rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs` should be entered with its resource so a different URL cannot use it. The worker never writes this file. Class activation already covers the 1 XRP and 5 XRP caps. One reviewed address is not permission for any other seller.
 
-A pre-sign `FEE` block can be reopened only with `FOUNDRY_MISSION_CONFIRM=RETRY-PRE-SIGN-FEE-BLOCK` and the mission token. That command writes an audit line and does not sign. The old blocked mission stays in the ledger. Claims that were signed or left uncertain are not retried. Do not mint a new discovery id to skip a consumed candidate.
+A pre-sign `FEE` block can be reopened only with `FOUNDRY_MISSION_CONFIRM=RETRY-PRE-SIGN-FEE-BLOCK` and the mission token:
+
+```bash
+FOUNDRY_MISSION_HOME=/workspace/foundry-ops/missions-runtime \
+FOUNDRY_MISSION_LEDGER=/workspace/foundry-ops/missions-runtime/ledger \
+FOUNDRY_MISSION_TOKEN=... \
+FOUNDRY_MISSION_CONFIRM=RETRY-PRE-SIGN-FEE-BLOCK \
+node src/missions/retry-fee.js
+```
+
+That command writes an audit line and does not sign. The old blocked mission stays in the ledger. Claims that were signed or left uncertain are not retried. Do not mint a new discovery id to skip a consumed candidate. `cand-17-51ec932c8e` stays the same key; the worker opens a successor only after that audit.
 
 ## Swap a release
 
 Stop only the dedicated pids. The ledger, arm file, and account file stay in `/workspace/foundry-ops/missions-runtime`, so pending and uncertain holds are kept.
 
 ```bash
-OLD=/workspace/foundry-ops/releases/9e11391ed52d78261a7188881803ce0bad3b2bd0
+OLD=/workspace/foundry-ops/releases/276cf4951258aba0bb45bcb58a7b73b211881a6a
 NEW=/workspace/foundry-ops/releases/<newsha>
 FOUNDRY_MISSION_HOME=/workspace/foundry-ops/missions-runtime "$OLD/bin/stop"
 install -d "$NEW"
