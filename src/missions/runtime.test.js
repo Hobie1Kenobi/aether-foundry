@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { spawnSync } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 const anchors = require("../director/anchors");
 const config = require("./config");
 const { Worker } = require("node:worker_threads");
@@ -760,7 +760,7 @@ describe("dedicated port release", () => {
 });
 
 describe("release pack", () => {
-  it("packs runtime files and leaves out git, env, lab data, and seeds", () => {
+  it("packs runtime files and leaves out git, env, lab data, and seeds", async () => {
     const out = tmp();
     const result = pack({ outDir: out });
     const listed = spawnSync("tar", ["-tf", result.tarPath], { encoding: "utf8" });
@@ -787,15 +787,196 @@ describe("release pack", () => {
     assert.equal(manifest.base, "1116ce48a3128aa4ccfb8429c06841bf5cb844aa");
     const worker = manifest.files.find((row) => row.path === "src/missions/worker.js");
     assert.equal(worker.sha256, require("crypto").createHash("sha256").update(fs.readFileSync(path.join(result.stage, "src/missions/worker.js"))).digest("hex"));
+    const sums = fs.readFileSync(path.join(result.stage, "SHA256SUMS"), "utf8");
+    assert.equal(sums.includes("src/missions/execute-once.js"), true);
+    assert.equal(sums.includes("src/missions/publish-health.js"), true);
+    assert.equal(sums.includes("src/missions/new-account.js"), true);
+    const clean = fs.mkdtempSync(path.join(os.tmpdir(), "mission-unpack-"));
+    const extracted = spawnSync("tar", ["-xf", result.tarPath, "-C", clean], { encoding: "utf8" });
+    assert.equal(extracted.status, 0, extracted.stderr);
+    for (const rel of ["src/missions/execute-once.js", "src/missions/publish-health.js", "bin/execute", "bin/publish"]) {
+      assert.equal(fs.existsSync(path.join(clean, rel)), true, rel);
+    }
     const installed = spawnSync("npm", ["ci", "--omit=dev", "--ignore-scripts"], {
-      cwd: result.stage,
+      cwd: clean,
       encoding: "utf8",
     });
     assert.equal(installed.status, 0, installed.stderr);
-    const loaded = spawnSync(process.execPath, ["-e", "require('./src/missions/worker'); require('./src/missions/signer'); require('./src/missions/github-publish'); require('./src/missions/retry-fee');"], {
-      cwd: result.stage,
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "mission-bin-home-"));
+    const ledger = path.join(home, "ledger");
+    fs.mkdirSync(ledger);
+    function runBin(name, env) {
+      return spawnSync(path.join(clean, "bin", name), {
+        cwd: clean,
+        encoding: "utf8",
+        env,
+      });
+    }
+    const bare = {
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      FOUNDRY_MISSION_HOME: home,
+      FOUNDRY_MISSION_LEDGER: ledger,
+    };
+    const publishMiss = runBin("publish", bare);
+    assert.equal(publishMiss.status, 1);
+    assert.equal(publishMiss.stderr.trim(), "AUTH");
+    assert.equal(publishMiss.stderr.includes("MODULE_NOT_FOUND"), false);
+    assert.equal(publishMiss.stdout.includes("MODULE_NOT_FOUND"), false);
+    const executeMiss = runBin("execute", bare);
+    assert.equal(executeMiss.status, 1);
+    assert.equal(executeMiss.stderr.trim(), "AUTH");
+    assert.equal(executeMiss.stderr.includes("MODULE_NOT_FOUND"), false);
+    const generated = spawnSync(process.execPath, ["-e", "const xrpl=require('xrpl'); const old=xrpl.Wallet.generate(); const next=xrpl.Wallet.generate(); process.stdout.write(JSON.stringify({old:old.address,next:next.address,seed:next.seed}));"], {
+      cwd: clean,
       encoding: "utf8",
     });
-    assert.equal(loaded.status, 0, loaded.stderr);
+    assert.equal(generated.status, 0);
+    const wallets = JSON.parse(generated.stdout);
+    const redact = (text) => String(text || "").split(wallets.seed).join("[redacted]");
+    const idFile = path.join(home, "prior-id");
+    const setup = spawnSync(process.execPath, ["-e", `
+      const fs = require("fs");
+      const { control, startMission, act } = require("./src/missions/engine");
+      const { beginSubmit, notePresign } = require("./src/missions/submit");
+      const config = require("./src/missions/config");
+      const ledger = process.argv[1];
+      const oldAddress = process.argv[2];
+      const now = "2026-11-06T21:40:00.000Z";
+      control(ledger, { action: "activate", confirm: config.ACTIVATE_PHRASE, token: "mission-internal-16", now }, { token: "mission-internal-16" });
+      const opened = startMission(ledger, {
+        idempotency_key: "old-hold-1747",
+        now,
+        observation: { network: "xrpl:1", network_id: 1, accounts: [{ address: "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs" }] },
+        payment_drops: "1737",
+        network_fee_drops: "10",
+        resource_url: "https://shop.test/old",
+      }, { allowlist: { payees: ["rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs"] } });
+      const ready = act(ledger, { mission_id: opened.mission.id, now }, { wallet: { address: oldAddress } }).mission;
+      beginSubmit(ledger, { mission_id: ready.id, now });
+      notePresign(ledger, ready.id, "${"AB".repeat(32)}");
+      fs.writeFileSync(process.argv[3], ready.id);
+    `, ledger, wallets.old, idFile], { cwd: clean, encoding: "utf8" });
+    assert.equal(setup.status, 0, redact(setup.stderr));
+    const prior = fs.readFileSync(idFile, "utf8");
+    const accountRun = runBin("account", Object.assign({}, bare, {
+      FOUNDRY_MISSION_ACCOUNT_TOKEN: "account-decision-token-32chars-min",
+      FOUNDRY_MISSION_ACCOUNT_PHRASE: "USE-NEW-ISOLATED-ACCOUNT",
+      FOUNDRY_MISSION_PRIOR_CLAIM: prior,
+    }));
+    assert.equal(accountRun.status, 0, redact(`${accountRun.stderr}\n${accountRun.stdout}`));
+    const sanctions = "https://api.stablecoingateways.com/v1/sanctions/address?address=0x098B716B8Aaf21512996dC57EB0615e2383E2f96";
+    const invoice = "packedfresh100aabbcc01";
+    fs.writeFileSync(path.join(home, "allowlist.json"), JSON.stringify({
+      payees: [{ address: "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs", resource: sanctions }],
+    }));
+    fs.writeFileSync(path.join(home, "challenge.json"), JSON.stringify({
+      retrieved_at: new Date().toISOString(),
+      http_status: 402,
+      paid: false,
+      proof_sent: false,
+      resource_url_requested: sanctions,
+      resource_url_in_body: sanctions,
+      resource_url_exact_match: true,
+      x402Version: 2,
+      reviewed_row: {
+        scheme: "exact",
+        network: "xrpl:1",
+        asset: "XRP",
+        amount: "100",
+        payTo: "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs",
+        maxTimeoutSeconds: 600,
+        extra: { sourceTag: 26100014, invoiceId: invoice },
+      },
+    }));
+    const preload = path.join(home, "preload.js");
+    fs.writeFileSync(preload, `
+      const original = globalThis.fetch;
+      globalThis.fetch = async (url, init) => {
+        const target = String(url);
+        const body = init && init.body ? JSON.parse(init.body) : {};
+        if (target === "https://testnet.xrpl-labs.com") {
+          if (body.method === "server_info") {
+            return new Response(JSON.stringify({ result: { info: { network_id: 1, validated_ledger: { seq: 22118869 } } } }), { status: 200 });
+          }
+          if (body.method === "account_info") {
+            return new Response(JSON.stringify({ result: { validated: true, account_data: { Sequence: 22117391 } } }), { status: 200 });
+          }
+          return new Response(JSON.stringify({ result: { drops: { open_ledger_fee: "10", base_fee: "10", median_fee: "5000" }, ledger_current_index: 22118869 } }), { status: 200 });
+        }
+        if (target.startsWith("https://api.stablecoingateways.com/v1/sanctions/address")) {
+          const header = init && init.headers && (init.headers["PAYMENT-SIGNATURE"] || init.headers["payment-signature"]);
+          if (!header) {
+            return new Response(JSON.stringify({ x402Version: 2, accepts: [{ scheme: "exact", network: "xrpl:1", asset: "XRP", amount: "100", payTo: "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs", maxTimeoutSeconds: 600, extra: { invoiceId: ${JSON.stringify(invoice)}, sourceTag: 26100014 } }] }), { status: 402 });
+          }
+          return new Response(JSON.stringify({ data: { listed: false, query: { address: "0x098B716B8Aaf21512996dC57EB0615e2383E2f96" } } }), { status: 200 });
+        }
+        if (target.startsWith("http://127.0.0.1:") || target.startsWith("http://localhost:")) return original(url, init);
+        return new Response("{}", { status: 500 });
+      };
+    `);
+    const signer = spawn(process.execPath, ["src/missions/signer.js"], {
+      cwd: clean,
+      env: Object.assign({}, bare, {
+        CI: "",
+        GITHUB_ACTIONS: "",
+        FOUNDRY_MISSION_SIGNER_TOKEN: "mission-internal-16",
+        FOUNDRY_MISSION_SIGNER_PORT: "18796",
+        FOUNDRY_MISSION_EXECUTE: "yes",
+        MISSION_XRPL_ADDRESS: wallets.next,
+        MISSION_XRPL_SEED: wallets.seed,
+        NODE_OPTIONS: `--require ${preload}`,
+      }),
+      stdio: ["ignore", "ignore", "ignore"],
+    });
+    try {
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("signer did not listen")), 5000);
+        const wait = () => {
+          fetch("http://127.0.0.1:18796/health").then((res) => res.json()).then(() => {
+            clearTimeout(timer);
+            resolve();
+          }).catch(() => setTimeout(wait, 50));
+        };
+        wait();
+      });
+      const bought = runBin("execute", Object.assign({}, bare, {
+        CI: "",
+        GITHUB_ACTIONS: "",
+        FOUNDRY_MISSION_EXECUTE_TOKEN: "execute-one-shot-token-32chars-min",
+        FOUNDRY_MISSION_EXECUTE_PHRASE: "EXECUTE-ONE-FRESH-PURCHASE",
+        FOUNDRY_MISSION_CHALLENGE_FILE: path.join(home, "challenge.json"),
+        FOUNDRY_MISSION_SIGNER_TOKEN: "mission-internal-16",
+        FOUNDRY_MISSION_SIGNER_PORT: "18796",
+        MISSION_XRPL_ADDRESS: wallets.next,
+        NODE_OPTIONS: `--require ${preload}`,
+      }));
+      assert.equal(bought.status, 0, redact(`${bought.stderr}\n${bought.stdout}`));
+      assert.equal(bought.stderr.includes("MODULE_NOT_FOUND"), false);
+      assert.equal(bought.stdout.includes(wallets.seed), false);
+      const body = JSON.parse(bought.stdout);
+      assert.equal(body.complete, true);
+      assert.equal(body.prior_claim_id, prior);
+      const state = view(ledger, "2026-11-06T21:40:00.000Z");
+      assert.equal(state.missions[prior].hold, "uncertain");
+      assert.equal(state.missions[prior].budget.budget_drops, "1747");
+      const published = runBin("publish", Object.assign({}, bare, {
+        FOUNDRY_MISSION_PUBLISH_TOKEN: "publish-health-token-32chars-minimum",
+        FOUNDRY_MISSION_PUBLISH_PHRASE: "PUBLISH-HEALTH-SNAPSHOT",
+      }));
+      assert.equal(published.status, 0, redact(`${published.stderr}\n${published.stdout}`));
+      assert.equal(published.stderr.includes("MODULE_NOT_FOUND"), false);
+      const health = JSON.parse(published.stdout);
+      assert.equal(health.execute, false);
+      assert.equal(health.worker_asleep, true);
+      assert.equal(health.uploaded, false);
+      assert.equal(health.reason, "no_ingest_secret");
+      const snap = JSON.parse(fs.readFileSync(path.join(ledger, "public-status.json"), "utf8"));
+      assert.equal(snap.worker_asleep, true);
+      assert.equal(snap.execute, false);
+      assert.equal(snap.uncertain_drops, "1747");
+    } finally {
+      signer.kill("SIGTERM");
+    }
   });
 });
