@@ -24,6 +24,7 @@ const guard = require("./runtime-guard");
 const { uploadSnapshot } = require("./github-publish");
 const { uploadIngest } = require("./desk-publish");
 const { blockingClaim } = require("./sequence-hold");
+const { linkPriorClaim, requireDecision } = require("./new-account");
 const wake = require("./wake");
 const { check: checkArm } = require("./arm");
 
@@ -384,17 +385,42 @@ async function tick(options) {
         });
       }
     }
+    if (env.FOUNDRY_MISSION_PUBLISH === "yes" && env.FOUNDRY_MISSION_EXECUTE !== "yes") {
+      try {
+        await uploadIngest(files.ledger, { env, now, fetch: runtimeFetch(opts), heartbeat: true });
+      } catch {
+        /* A missed health upload does not start a purchase. */
+      }
+    }
     writeState(files.ledger, { last_tick_at: now, last_reason: base.reason });
     return base;
   }
   await expireProvenWindows(files.ledger, runtimeFetch(opts), now);
   const state = readJson(path.join(files.ledger, STATE_NAME)) || { consumed: {} };
   let discovery;
-  try {
-    discovery = loadDiscovery(files.discovery);
-  } catch (error) {
-    writeState(files.ledger, { last_tick_at: now, last_reason: error.code || "DISCOVERY" });
-    return Object.assign(base, { reason: error.code || "DISCOVERY" });
+  if (Array.isArray(opts.oneShotItems)) {
+    if (opts.oneShotItems.some((item) => /cand-17|fee-retry/.test(String(item && item.id || "")))) {
+      writeState(files.ledger, { last_tick_at: now, last_reason: "NO_RETRY" });
+      return Object.assign(base, { reason: "NO_RETRY", code: "NO_RETRY", submitted: false, complete: false });
+    }
+    if (opts.requireNewAccount) {
+      const open = blockingClaim(view(files.ledger, now), null);
+      try {
+        if (!open) throw coded("no unresolved claim is on file", "CLAIM");
+        requireDecision(files.ledger, open.mission_id);
+      } catch (error) {
+        writeState(files.ledger, { last_tick_at: now, last_reason: error.code || "AUTH" });
+        return Object.assign(base, { reason: error.code || "AUTH", code: error.code || "AUTH", submitted: false, complete: false });
+      }
+    }
+    discovery = { items: opts.oneShotItems, reason: null };
+  } else {
+    try {
+      discovery = loadDiscovery(files.discovery);
+    } catch (error) {
+      writeState(files.ledger, { last_tick_at: now, last_reason: error.code || "DISCOVERY" });
+      return Object.assign(base, { reason: error.code || "DISCOVERY" });
+    }
   }
   const pending = discovery.items.find((item) => item && !state.consumed[candidateKey(item)]);
   if (!pending) {
@@ -456,6 +482,7 @@ async function tick(options) {
   try {
     const started = startMission(files.ledger, Object.assign({ now }, built.input), { allowlist: allowlistOf(files.allowlist) });
     mission = started.mission;
+    if (opts.priorClaimId) mission = linkPriorClaim(files.ledger, mission.id, opts.priorClaimId, now).mission;
     if (mission.status === "approved_ready") {
       if (!guard.present(env.MISSION_XRPL_ADDRESS)) {
         writeState(files.ledger, {

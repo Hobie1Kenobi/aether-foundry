@@ -32,17 +32,48 @@ If `FOUNDRY_MISSION_CHALLENGE_FILE` points at an unpaid x402 version 2 file for 
 
 The desk ingest is `POST https://aether-foundry-desk.vercel.app/api/missions/ingest`. The body is the sanitized snapshot. The header is `Authorization: Bearer` plus `FOUNDRY_MISSION_INGEST_SECRET` (at least 32 characters). The private Blob store `aether-mission-snapshots` (`store_P9565xtEmQV5q207`) is connected to project `aether-foundry-desk`, and `BLOB_READ_WRITE_TOKEN` is set for production, preview, and development. The desk writes `missions/public-status.json` there and reads it before the git snapshot. A lower sequence is refused. The public status route stays read-only. No GitHub token is required. GitHub remains the fallback reader until the first stored snapshot exists. The ingest secret authorizes one desk path. It is not a git credential.
 
+## One-shot purchase
+
+The parent approved a new isolated Testnet account. The code path is separate from wake.
+
+`bin/wake` still cannot spend. `bin/start` still stays asleep and does not set execute. `bin/account` only appends `control.new_account`. `bin/execute` is the only purchase command. It allows one signature, then refuses a second call. It does not rewrite `discovery.json`, does not mint a `cand-17` or `fee-retry` key, and does not release the prior claim. The new mission records `prior_claim_id`. The payment uses a live x402 version 2 `xrpl:1` accept, a new invoice, the exact sanctions URL, and payTo `rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs`. Sequence and `LastLedgerSequence` come from a validated network-1 read and are stored before the blob is offered. The daily cap still includes the 1747-drop hold. Caps stay 1 XRP and 5 XRP.
+
+`bin/publish` writes a health snapshot with `worker_asleep: true` and `execute: false` while purchase execution is off. The asleep worker also refreshes that snapshot when `FOUNDRY_MISSION_PUBLISH=yes`, at most every four minutes, so an idle feed does not sit on an old observation time. Neither path signs. The Vercel ingest secret is still not approved for production. Until the same secret is on the desk and in mode-0600 `tokens.env`, publish writes the local snapshot and returns `no_ingest_secret`. No token is read from the desk.
+
 ## Exact next ops
 
-These are parent actions. This cloud run does not perform them.
+These are parent actions. This cloud run does not perform them, does not sign, and does not change either account file.
 
-1. Choose `hold` or `new_account`. Do not choose supersede.
-2. Keep the installed `ensure-up` block before `exit 0` when the release SHA changes. Take a backup of the script first. Do not add `exit 0` above the block.
-3. Install the new tar asleep. Run `./bin/start` only from that release. Do not set `FOUNDRY_MISSION_EXECUTE`. Do not delete `asleep`. Do not stop 8787, 8792, or 8793.
-4. Create one random ingest secret of at least 32 characters. Set it as sensitive Vercel env `FOUNDRY_MISSION_INGEST_SECRET` on project `aether-foundry-desk` for production. Put the same value in `tokens.env` mode 0600, with `FOUNDRY_MISSION_PUBLISH=yes`. The Blob store is already connected. Do not create a GitHub PAT for this. Until this secret exists on both sides, ingest stays unconfigured and the desk keeps the git snapshot.
-5. Optional control tick, still with execute off: source `tokens.env`, set the wake phrase, and run `bin/wake`. A challenge file admitted by that tick is not payable. The 20:56 invoice is already outside its 600-second window, so a purchase still needs a newer live 402.
-6. A purchase remains a separate decision after the sequence choice, a fresh 402, and execute still off until that decision is explicit. Do not retry `cand-17-51ec932c8e`. Do not cancel `msn5b5c3223e5e88526`.
+1. Keep the installed `ensure-up` block before `exit 0`. Do not add `bin/execute` to that hook. Do not stop 8787, 8792, or 8793.
+2. Install the new tar asleep with `./bin/start`. Do not set `FOUNDRY_MISSION_EXECUTE` in the asleep process. Do not delete `asleep`.
+3. Copy the current `account.json` to `account.held.json`, mode 0600, and leave that file unused. Put the new faucet wallet at `account.json`, mode 0600. Do not submit from the held account. Its sequence stays unused.
+4. Save a new unpaid 402 for the sanctions URL. Do not reuse invoice `1793992874-ebc1623318b14ea7-d1737-4c212402f35bab060de0ac45` or the expired `1793999217-8ff0cbc91cfe49c6-d1753-3be1077708929724e01824ae`. The file must be younger than `maxTimeoutSeconds` at the moment of `bin/execute`.
+5. Source `tokens.env`. Record the decision, naming the open claim. `FOUNDRY_MISSION_ACCOUNT_TOKEN` must already be in the environment and at least 32 characters. This command does not spend.
+
+```sh
+FOUNDRY_MISSION_ACCOUNT_PHRASE=USE-NEW-ISOLATED-ACCOUNT \
+FOUNDRY_MISSION_PRIOR_CLAIM=msn5b5c3223e5e88526 \
+./bin/account
+```
+
+6. One purchase. `FOUNDRY_MISSION_EXECUTE_TOKEN` must already be in the environment. A second run is refused. Do not run the `cand-17-51ec932c8e` fee retry.
+
+```sh
+FOUNDRY_MISSION_EXECUTE_PHRASE=EXECUTE-ONE-FRESH-PURCHASE \
+FOUNDRY_MISSION_CHALLENGE_FILE=/path/to/fresh-402.json \
+MISSION_XRPL_ADDRESS=<new isolated address> \
+./bin/execute
+```
+
+7. Health publish, with execute unset. `FOUNDRY_MISSION_PUBLISH_TOKEN` must already be in the environment. This uploads only when `FOUNDRY_MISSION_INGEST_SECRET` is present locally and on the desk. Do not create a GitHub PAT for it.
+
+```sh
+FOUNDRY_MISSION_PUBLISH_PHRASE=PUBLISH-HEALTH-SNAPSHOT \
+./bin/publish
+```
+
+8. EVM gas stays unauthorized. Do not cancel `msn5b5c3223e5e88526`.
 
 ## Not done
 
-The open claim has no seller body and no ledger window. No purchase has completed. EVM gas is not authorized. The ingest secret is not in this tree; until the parent sets it on both sides, the desk keeps reading the last git snapshot.
+The open claim has no seller body and no ledger window. This repository run did not execute the purchase. EVM gas is not authorized. The ingest secret is not in this tree; until the parent sets it on both sides, the desk keeps reading the last git snapshot.

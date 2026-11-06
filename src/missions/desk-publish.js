@@ -40,14 +40,18 @@ async function uploadIngest(dir, opts) {
   const ledger = guard.assertIsolated(dir);
   const clock = options.now || new Date().toISOString();
   const stateFile = path.join(ledger, STATE_NAME);
+  const heartbeat = options.heartbeat === true;
   const prior = readJson(stateFile);
-  if (prior && prior.ingested_at) {
+  if (!heartbeat && prior && prior.ingested_at) {
     const age = new Date(clock).getTime() - new Date(prior.ingested_at).getTime();
     if (Number.isFinite(age) && age >= 0 && age < THROTTLE_MS) {
       return { changed: false, uploaded: false, reason: "throttled", sequence: prior.sequence, transport: "ingest" };
     }
   }
-  const local = publish(ledger, clock);
+  const local = publish(ledger, clock, { heartbeat });
+  if (heartbeat && local.changed === false) {
+    return { changed: false, uploaded: false, reason: "fresh", sequence: local.sequence, transport: "ingest", execute: false };
+  }
   const secret = env.FOUNDRY_MISSION_INGEST_SECRET;
   if (typeof secret !== "string" || secret.length < 32) {
     return { changed: local.changed !== false, uploaded: false, reason: "no_ingest_secret", sequence: local.sequence, transport: "ingest" };
@@ -71,7 +75,15 @@ async function uploadIngest(dir, opts) {
   written.sequence = local.sequence;
   written.transport = "ingest";
   fs.writeFileSync(stateFile, `${JSON.stringify(written)}\n`);
-  return { changed: true, uploaded: true, sequence: local.sequence, transport: "ingest", path: "missions/public-status.json" };
+  return {
+    changed: true,
+    uploaded: true,
+    sequence: local.sequence,
+    transport: "ingest",
+    path: "missions/public-status.json",
+    execute: heartbeat ? false : undefined,
+    worker_asleep: heartbeat ? true : undefined,
+  };
 }
 
 module.exports = {

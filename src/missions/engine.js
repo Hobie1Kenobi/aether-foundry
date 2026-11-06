@@ -1036,6 +1036,9 @@ function publicFeed(dir, now) {
       ? mission.delivery_error_code
       : null,
     explorer: mission.explorer,
+    prior_claim_id: typeof mission.prior_claim_id === "string" && /^msn[a-f0-9]{16}$/.test(mission.prior_claim_id)
+      ? mission.prior_claim_id
+      : null,
     budget_drops: mission.budget ? mission.budget.budget_drops : "0",
     account_reserve_drops: mission.budget ? mission.budget.account_reserve_drops : "0",
     network_fee_drops: mission.budget ? mission.budget.network_fee_drops : "0",

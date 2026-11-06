@@ -75,6 +75,8 @@ export default async function MissionsPage() {
               {feed.source}
               {feed.source_observed_at ? ` · observed ${feed.source_observed_at}` : " · no source timestamp"}
               {feed.stale ? " · stale" : ""}
+              {feed.worker_asleep === true ? " · worker asleep" : ""}
+              {feed.execute === false ? " · execute off" : ""}
             </dd>
           </dl>
         </article>
@@ -85,14 +87,16 @@ export default async function MissionsPage() {
           Class approval is not a running worker. Signing on this server is{" "}
           {feed.signing_enabled ? "yes" : "no"}. No row is a completed purchase unless its complete flag is true.
           An uncertain hold is not accounted spend. A settlement of submit_unknown is an open claim, not a purchase
-          ready to run. This snapshot has no worker-asleep field.
+          ready to run. A health snapshot may say the worker was asleep and execute was off at the observation time.
+          That line is not a purchase.
         </p>
         <ul>
           {(feed.missions || []).map((mission) => (
             <li key={mission.id}>
               <code>{mission.id}</code> {mission.status}
               {mission.code ? ` · ${mission.code}` : ""}
-              {mission.settlement ? ` · ${mission.settlement}` : ""} · {mission.complete ? "complete" : "not complete"}
+              {mission.settlement ? ` · ${mission.settlement}` : ""}
+              {mission.prior_claim_id ? ` · prior ${mission.prior_claim_id}` : ""} · {mission.complete ? "complete" : "not complete"}
             </li>
           ))}
         </ul>
