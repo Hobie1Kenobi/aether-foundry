@@ -58,7 +58,6 @@ function sellerItem(id, serviceExtra, itemExtra) {
       asset: "XRP",
       seller: FOREIGN,
       price_drops: "100000",
-      fee_drops: "12",
     }, serviceExtra || {}),
   }, itemExtra || {});
 }
@@ -77,6 +76,10 @@ function workerEnv(extra) {
     FOUNDRY_MISSION_WORKER: "yes",
     MISSION_XRPL_ADDRESS: ISOLATED,
   }, extra || {});
+}
+
+function labsQuote(drops, at) {
+  return { fee_drops: drops || "12", quoted_at: at || NOW, source: "https://testnet.xrpl-labs.com" };
 }
 
 describe("mission worker", () => {
@@ -99,7 +102,7 @@ describe("mission worker", () => {
     assert.equal(fs.existsSync(path.join(files.ledger, "events.jsonl")), false);
     activate(files.ledger);
     fs.writeFileSync(files.allowlist, JSON.stringify({ payees: [FOREIGN] }));
-    const paid = await tick(Object.assign({}, files, { env: workerEnv(), now: NOW, fetch: () => { throw new Error("fetch"); } }));
+    const paid = await tick(Object.assign({}, files, { env: workerEnv(), now: NOW, quoteFee: async () => labsQuote(), fetch: () => { throw new Error("fetch"); } }));
     assert.equal(paid.reason, "complete");
     assert.equal(paid.complete, true);
     assert.equal(paid.submitted, false);
@@ -114,7 +117,7 @@ describe("mission worker", () => {
     activate(files.ledger);
     writeDiscovery(files.discovery, [
       sellerItem("house-only-1", { seller: anchors.WALLETS.W0.address }),
-      { id: "missing-pay-1", service: { network: "xrpl:1", network_id: 1, asset: "XRP", seller: FOREIGN, fee_drops: "12" } },
+      { id: "missing-pay-1", service: { network: "xrpl:1", network_id: 1, asset: "XRP", seller: FOREIGN } },
       sellerItem("novel-kind-1", {}, { kind: "bridge-return" }),
       sellerItem("untrusted-field-1", { bridge_gas_drops: "1" }),
     ]);
@@ -154,6 +157,7 @@ describe("mission worker", () => {
     const body = await tick(Object.assign({}, files, {
       env: workerEnv({ FOUNDRY_MISSION_EXECUTE: "yes", FOUNDRY_MISSION_SIGNER_TOKEN: TOKEN }),
       now: NOW,
+      quoteFee: async () => labsQuote(),
       fetch: fetchImpl,
     }));
     assert.equal(body.submitted, true);
@@ -297,7 +301,7 @@ describe("github contents publish", () => {
       fetch: fetchImpl,
     });
     assert.equal(second.uploaded, false);
-    assert.equal(second.reason, "unchanged");
+    assert.equal(second.reason, "throttled");
     assert.equal(calls.filter((call) => call.method === "PUT").length, 1);
     assert.throws(() => github.contentsUrl("other/repo", "main"), (error) => error.code === "PUBLISH");
   });
@@ -498,6 +502,114 @@ describe("authenticated arming", () => {
     assert.equal(ready.mission_signer_armed, true);
     assert.equal(ready.signing_disabled, false);
     assert.equal(ready.mission_spend_enabled, true);
+  });
+});
+
+describe("x402 qualification and network fee", () => {
+  it("uses an xrpl:1 payTo amount and a Labs fee, not a merchant fee", async () => {
+    const files = layout();
+    activate(files.ledger);
+    fs.writeFileSync(files.allowlist, JSON.stringify({ payees: [FOREIGN] }));
+    writeDiscovery(files.discovery, [{
+      id: "x402-accept-1",
+      x402: {
+        x402Version: 2,
+        accepts: [{ scheme: "exact", network: "xrpl:1", asset: "XRP", amount: "5000", payTo: FOREIGN }],
+      },
+    }]);
+    const calls = [];
+    const body = await tick(Object.assign({}, files, {
+      env: workerEnv(),
+      now: NOW,
+      quoteFee: async () => {
+        calls.push("quote");
+        return labsQuote("10");
+      },
+    }));
+    assert.equal(body.reason, "complete");
+    assert.equal(body.submitted, false);
+    assert.equal(calls.length, 1);
+    assert.equal(view(files.ledger, NOW).days["2026-11-06"].reserved, "5010");
+    const mission = view(files.ledger, NOW).missions[body.mission_id];
+    assert.equal(mission.complete, true);
+    assert.equal(mission.budget.network_fee_drops, "10");
+    assert.equal(mission.budget.payment_drops, "5000");
+  });
+
+  it("records an unsupported protocol instead of an empty discovery", async () => {
+    const files = layout();
+    activate(files.ledger);
+    writeDiscovery(files.discovery, [{
+      id: "stripe-item-1",
+      protocol: "stripe",
+    }, {
+      id: "evm-accept-01",
+      x402: { x402Version: 2, accepts: [{ scheme: "exact", network: "eip155:1", asset: "USDC", amount: "1", payTo: "0xabc" }] },
+    }]);
+    const first = await tick(Object.assign({}, files, { env: workerEnv(), now: NOW }));
+    assert.equal(first.reason, "unsupported_protocol");
+    assert.equal(first.code, "unsupported_protocol");
+    const second = await tick(Object.assign({}, files, { env: workerEnv(), now: NOW }));
+    assert.equal(second.reason, "unsupported_protocol");
+    const feed = require("./engine").publicFeed(files.ledger, NOW);
+    assert.equal(feed.missions.length, 2);
+    assert.equal(feed.missions.every((mission) => mission.code === "unsupported_protocol"), true);
+    assert.equal(feed.live_spend_drops, "0");
+  });
+
+  it("rejects a fee above the local bound and a stale requote before sign", async () => {
+    const files = layout();
+    activate(files.ledger);
+    fs.writeFileSync(files.allowlist, JSON.stringify({ payees: [FOREIGN] }));
+    writeDiscovery(files.discovery, [sellerItem("fee-bound-01")]);
+    const over = await tick(Object.assign({}, files, {
+      env: workerEnv(),
+      now: NOW,
+      quoteFee: async () => labsQuote("10001"),
+    }));
+    assert.equal(over.code, "FEE_CAP");
+    assert.equal(view(files.ledger, NOW).days["2026-11-06"], undefined);
+    const again = layout();
+    activate(again.ledger);
+    fs.writeFileSync(again.allowlist, JSON.stringify({ payees: [FOREIGN] }));
+    writeDiscovery(again.discovery, [sellerItem("fee-stale-01")]);
+    let n = 0;
+    let fetches = 0;
+    const stale = await tick(Object.assign({}, again, {
+      env: workerEnv({ FOUNDRY_MISSION_EXECUTE: "yes" }),
+      now: NOW,
+      quoteFee: async () => {
+        n += 1;
+        return n === 1 ? labsQuote("12") : labsQuote("12", "2026-11-06T17:00:00.000Z");
+      },
+      fetch: async () => {
+        fetches += 1;
+        throw new Error("should not submit");
+      },
+    }));
+    assert.equal(stale.code, "FEE_STALE");
+    assert.equal(fetches, 0);
+    assert.equal(view(again.ledger, NOW).days["2026-11-06"].reserved, "0");
+  });
+
+  it("reads the open ledger fee only from XRPL Labs network id 1", async () => {
+    const quoted = await require("./network-fee").quoteNetworkFee({
+      now: NOW,
+      fetch: async (url, init) => {
+        assert.equal(url, "https://testnet.xrpl-labs.com");
+        const body = JSON.parse(init.body);
+        if (body.method === "server_info") return { ok: true, json: async () => ({ result: { info: { network_id: 1 } } }) };
+        return { ok: true, json: async () => ({ result: { drops: { open_ledger_fee: "10", base_fee: "10" }, ledger_current_index: 4 } }) };
+      },
+    });
+    assert.equal(quoted.fee_drops, "10");
+    await assert.rejects(
+      () => require("./network-fee").quoteNetworkFee({
+        now: NOW,
+        fetch: async () => ({ ok: true, json: async () => ({ result: { info: { network_id: 2 } } }) }),
+      }),
+      (error) => error.code === "MAINNET"
+    );
   });
 });
 

@@ -71,4 +71,6 @@ Discovery is `/workspace/foundry-ops/missions-runtime/discovery.json`. A service
 
 A submit takes an exclusive ledger claim first. A second process gets `NO_RETRY`. If the process dies after the claim is handed to the signer, the hold stays uncertain and is not submitted again. The dedicated signer rejects a loopback request that does not match that reserved claim, even with the bearer token. EVM gas stays unauthorized.
 
-Publish with the GitHub contents API, path `lab/missions/public-status.json` only. The token is not in the tar. The desk stays `unavailable` until that file is on main. The content hash is not authentication.
+Publish with the GitHub contents API, path `lab/missions/public-status.json` only. The token stays in the parent environment. Nothing in this tree reads a credential file. A changed snapshot is uploaded at most once every 15 minutes. The desk stays `unavailable` until that file is on main. The content hash is not authentication.
+
+`machines/missions/ensure-up.snippet.sh` is not sourced. The box has no cron. The snippet only restarts the already armed release if its pid is gone, and it does not install a publisher loop against that binary.

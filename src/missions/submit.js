@@ -163,10 +163,40 @@ function acceptClaim(dir, missionId, tx) {
   });
 }
 
+function releasePrepared(dir, input) {
+  const now = input.now || new Date().toISOString();
+  return exclusive(dir, (api) => {
+    const mission = fold(api.read()).missions[input.mission_id];
+    if (!mission) throw coded("mission not found", "PLAN");
+    if (mission.submit_state || mission.submitted || mission.signer_accepted) {
+      throw coded("refusing to release a claim that may have been signed", "NO_RETRY");
+    }
+    if (mission.hold !== "unsubmitted" || !mission.budget) return { mission, replay: true };
+    api.append({
+      type: "budget.released",
+      at: now,
+      mission_id: mission.id,
+      day: mission.day,
+      drops: mission.budget.budget_drops,
+      reason: input.code || "fee_stale",
+      live: false,
+    });
+    mission.hold = "released";
+    mission.status = "blocked";
+    mission.code = input.code || "FEE_STALE";
+    mission.complete = false;
+    mission.rationale = input.rationale || "The XRPL network fee quote was stale or above the reserved bound. Nothing was signed.";
+    mission.updated_at = now;
+    api.append({ type: "mission.upsert", at: now, mission });
+    return { mission, replay: false };
+  });
+}
+
 module.exports = {
   reservedDrops,
   claimMatches,
   beginSubmit,
   finishSubmit,
   acceptClaim,
+  releasePrepared,
 };

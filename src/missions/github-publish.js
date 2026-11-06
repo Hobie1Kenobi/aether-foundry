@@ -15,6 +15,12 @@ const guard = require("./runtime-guard");
 const ALLOWED_REPO = "Hobie1Kenobi/aether-foundry";
 const ALLOWED_PATH = "lab/missions/public-status.json";
 const API = "https://api.github.com";
+const THROTTLE_MS = 15 * 60 * 1000;
+
+function readJson(file) {
+  if (!fs.existsSync(file)) return null;
+  return JSON.parse(fs.readFileSync(file, "utf8"));
+}
 
 function redactToken(message, token) {
   const text = message == null ? "" : String(message);
@@ -65,7 +71,16 @@ async function uploadSnapshot(dir, opts) {
   const env = options.env || {};
   guard.assertNoHouseSeeds(env);
   const ledger = guard.assertIsolated(dir);
-  const local = publish(ledger, options.now);
+  const clock = options.now || new Date().toISOString();
+  const stateFile = path.join(ledger, "publish-state.json");
+  const priorState = readJson(stateFile);
+  if (priorState && priorState.uploaded_at) {
+    const age = new Date(clock).getTime() - new Date(priorState.uploaded_at).getTime();
+    if (Number.isFinite(age) && age >= 0 && age < THROTTLE_MS) {
+      return { changed: false, uploaded: false, reason: "throttled", sequence: priorState.sequence };
+    }
+  }
+  const local = publish(ledger, clock);
   const file = path.join(ledger, SNAPSHOT_NAME);
   const bytes = fs.readFileSync(file);
   const token = env.FOUNDRY_MISSION_GITHUB_TOKEN;
@@ -97,6 +112,9 @@ async function uploadSnapshot(dir, opts) {
     }),
   });
   if (!put.ok) throw coded(redactToken(`GitHub contents write failed with ${put.status}`, token), "PUBLISH");
+  const written = readJson(stateFile) || {};
+  written.uploaded_at = clock;
+  fs.writeFileSync(stateFile, `${JSON.stringify(written)}\n`);
   return { changed: true, uploaded: true, sequence: local.sequence, path: ALLOWED_PATH };
 }
 
@@ -119,4 +137,5 @@ module.exports = {
   redactToken,
   contentsUrl,
   uploadSnapshot,
+  THROTTLE_MS,
 };
