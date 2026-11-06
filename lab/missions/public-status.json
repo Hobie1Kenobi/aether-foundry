@@ -1,10 +1,10 @@
 {
   "schema": "aether.missions.public-status",
   "version": 1,
-  "sequence": 1,
-  "prev_sequence": 0,
-  "source_observed_at": "2026-11-06T18:04:12.800Z",
-  "published_at": "2026-11-06T18:05:45.149Z",
+  "sequence": 2,
+  "prev_sequence": 1,
+  "source_observed_at": "2026-11-06T18:26:11.349Z",
+  "published_at": "2026-11-06T18:26:18.805Z",
   "spending_enabled": true,
   "spending_enabled_source": "ledger",
   "signing_enabled": false,
@@ -16,9 +16,134 @@
   "uncertain_drops": "0",
   "accounted_spent_drops": "0",
   "killed": false,
-  "missions": [],
-  "replays": {},
+  "missions": [
+    {
+      "id": "msne8b0d221d15198e9",
+      "status": "blocked",
+      "code": "payee_not_allowlisted",
+      "stage": "policy",
+      "rationale": "The foreign account is not an allowlisted payee.",
+      "labels": {
+        "role": "agent",
+        "counterparty": "foreign",
+        "environment": "testnet",
+        "mode": "simulation",
+        "approval": "denied",
+        "network": "xrpl:1"
+      },
+      "settlement": null,
+      "live": false,
+      "signed": false,
+      "submitted": false,
+      "complete": false,
+      "foreign_revenue_drops": "0",
+      "proof_hash": null,
+      "explorer": null,
+      "budget_drops": "0",
+      "account_reserve_drops": "0",
+      "network_fee_drops": "0",
+      "bridge_custody_drops": "0"
+    },
+    {
+      "id": "msn81d41a9ffc901459",
+      "status": "blocked",
+      "code": "FEE",
+      "stage": "policy",
+      "rationale": "The XRPL Labs network fee could not be used. A merchant fee was not invented.",
+      "labels": {
+        "role": "agent",
+        "counterparty": "unclassified",
+        "environment": "testnet",
+        "mode": "simulation",
+        "approval": "denied",
+        "network": "xrpl:1"
+      },
+      "settlement": null,
+      "live": false,
+      "signed": false,
+      "submitted": false,
+      "complete": false,
+      "foreign_revenue_drops": "0",
+      "proof_hash": null,
+      "explorer": null,
+      "budget_drops": "0",
+      "account_reserve_drops": "0",
+      "network_fee_drops": "0",
+      "bridge_custody_drops": "0"
+    },
+    {
+      "id": "msna0c8273531130a82",
+      "status": "blocked",
+      "code": "FEE",
+      "stage": "policy",
+      "rationale": "The XRPL Labs network fee could not be used. A merchant fee was not invented.",
+      "labels": {
+        "role": "agent",
+        "counterparty": "unclassified",
+        "environment": "testnet",
+        "mode": "simulation",
+        "approval": "denied",
+        "network": "xrpl:1"
+      },
+      "settlement": null,
+      "live": false,
+      "signed": false,
+      "submitted": false,
+      "complete": false,
+      "foreign_revenue_drops": "0",
+      "proof_hash": null,
+      "explorer": null,
+      "budget_drops": "0",
+      "account_reserve_drops": "0",
+      "network_fee_drops": "0",
+      "bridge_custody_drops": "0"
+    }
+  ],
+  "replays": {
+    "msne8b0d221d15198e9": [
+      {
+        "type": "mission.upsert",
+        "at": "2026-11-06T18:24:52.606Z",
+        "code": "payee_not_allowlisted",
+        "status": "blocked",
+        "settlement": null,
+        "rationale": "The foreign account is not an allowlisted payee.",
+        "live": false
+      },
+      {
+        "type": "control.denial",
+        "at": "2026-11-06T18:24:52.606Z",
+        "code": "payee_not_allowlisted",
+        "status": null,
+        "settlement": null,
+        "rationale": "The foreign account is not an allowlisted payee.",
+        "live": false
+      }
+    ],
+    "msn81d41a9ffc901459": [
+      {
+        "type": "mission.upsert",
+        "at": "2026-11-06T18:25:11.297Z",
+        "code": "FEE",
+        "status": "blocked",
+        "settlement": null,
+        "rationale": "The XRPL Labs network fee could not be used. A merchant fee was not invented.",
+        "live": false
+      }
+    ],
+    "msna0c8273531130a82": [
+      {
+        "type": "mission.upsert",
+        "at": "2026-11-06T18:26:11.349Z",
+        "code": "FEE",
+        "status": "blocked",
+        "settlement": null,
+        "rationale": "The XRPL Labs network fee could not be used. A merchant fee was not invented.",
+        "live": false
+      }
+    ]
+  },
   "integrity_means": "sha256 of this document; detects corruption, not who wrote it",
   "sequence_means": "prev_sequence must equal sequence-1 inside this file. A stateless reader cannot tell a replaced chain from a real one.",
-  "integrity": "c045d4f22fcea791791c2bd5e1b643d1fbba1864e827ae26d8ec2d6286b5e3b1"
+  "integrity": "a28099eb2aa38a7a6bb7cf9afe5f9831010d37caeb68885d1a08ef16179003eb"
 }
