@@ -3,6 +3,7 @@
 
 const path = require("path");
 const { view } = require("./engine");
+const { check } = require("./arm");
 
 function present(value) {
   return typeof value === "string" && value.length > 0;
@@ -11,10 +12,19 @@ function present(value) {
 function ready(env, dir) {
   const source = view(dir, new Date().toISOString());
   const run = env.FOUNDRY_MISSION_RUN === "yes";
+  let armed = false;
+  try {
+    armed = check(env || {}).mission_signer_armed === true;
+  } catch {
+    armed = false;
+  }
   return {
     schema: "aether.missions.ready",
     dormant: !run,
-    mission_spend_enabled: false,
+    mission_spend_enabled: armed,
+    mission_signer_armed: armed,
+    signing_disabled: !armed,
+    ordinary_signing: false,
     spending_enabled: source.spending_enabled === true,
     spending_enabled_source: source.spending_enabled_source,
     live_spend_drops: source.live_spend_drops,

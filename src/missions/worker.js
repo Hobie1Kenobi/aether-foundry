@@ -12,9 +12,12 @@ const http = require("http");
 const path = require("path");
 const config = require("./config");
 const { coded, readEvents } = require("./ledger");
-const { fold, startMission, act, recordSubmission, view } = require("./engine");
+const { fold, startMission, act, evaluate, view } = require("./engine");
+const { beginSubmit, finishSubmit } = require("./submit");
+const missionPolicy = require("./policy");
 const guard = require("./runtime-guard");
 const { uploadSnapshot } = require("./github-publish");
+const { check: checkArm } = require("./arm");
 
 const DEFAULT_PORT = 8794;
 const STATE_NAME = "worker-state.json";
@@ -71,36 +74,45 @@ function loadDiscovery(file) {
   return { items: body.items, reason: body.items.length ? null : "no_discovery" };
 }
 
-function accountOf(row) {
-  if (!row || typeof row !== "object") return null;
-  if (typeof row.address !== "string") return null;
-  const account = { address: row.address };
-  if (row.synthetic === true) account.synthetic = true;
-  if (typeof row.source === "string") account.source = row.source.slice(0, 40);
-  return account;
-}
+const SERVICE_KEYS = new Set(["seller", "asset", "price_drops", "fee_drops", "network", "network_id"]);
 
-function itemInput(item) {
+function qualifyService(item) {
   if (!item || typeof item !== "object") return { skip: "invalid_item" };
   if (!/^[a-z0-9][a-z0-9-]{7,63}$/.test(String(item.id || ""))) return { skip: "invalid_id" };
   if (item.kind && item.kind !== config.AUTONOMOUS_CLASS) return { skip: "novel_kind" };
-  if (typeof item.payment_drops !== "string" || !/^[0-9]+$/.test(item.payment_drops)) return { skip: "missing_payment" };
-  if (typeof item.network_fee_drops !== "string" || !/^[0-9]+$/.test(item.network_fee_drops)) return { skip: "missing_fee" };
-  if (!Array.isArray(item.accounts) || item.accounts.length === 0) return { skip: "missing_accounts" };
-  const accounts = item.accounts.map(accountOf).filter(Boolean);
-  if (accounts.length !== item.accounts.length) return { skip: "invalid_account" };
-  const input = {
-    idempotency_key: item.id,
-    kind: config.AUTONOMOUS_CLASS,
-    observation: { network: config.NETWORK, network_id: config.NETWORK_ID, accounts },
-    payment_drops: item.payment_drops,
-    network_fee_drops: item.network_fee_drops,
+  const service = item.service;
+  if (!service || typeof service !== "object" || Array.isArray(service)) return { skip: "missing_service" };
+  for (const key of Object.keys(service)) {
+    if (!SERVICE_KEYS.has(key)) return { skip: "untrusted_field" };
+  }
+  if (item.payment_drops != null && item.payment_drops !== service.price_drops) return { skip: "untrusted_field" };
+  if (item.network_fee_drops != null && item.network_fee_drops !== service.fee_drops) return { skip: "untrusted_field" };
+  if (service.network !== config.NETWORK || Number(service.network_id) !== config.NETWORK_ID) return { skip: "network" };
+  if (service.asset != null && service.asset !== "XRP") return { skip: "NON_XRP" };
+  if (typeof service.price_drops !== "string" || !/^[1-9][0-9]*$/.test(service.price_drops)) return { skip: "missing_payment" };
+  if (typeof service.fee_drops !== "string" || !/^[0-9]+$/.test(service.fee_drops)) return { skip: "missing_fee" };
+  if (typeof service.seller !== "string") return { skip: "missing_accounts" };
+  const found = missionPolicy.discover({
+    network: config.NETWORK,
+    network_id: config.NETWORK_ID,
+    accounts: [{ address: service.seller }],
+  });
+  if (found.foreign.length !== 1 || found.foreign[0] !== service.seller || missionPolicy.isHouse(service.seller)) {
+    return { skip: "no_foreign_seller", code: "no_foreign_seller" };
+  }
+  return {
+    input: {
+      idempotency_key: item.id,
+      kind: config.AUTONOMOUS_CLASS,
+      observation: {
+        network: config.NETWORK,
+        network_id: config.NETWORK_ID,
+        accounts: [{ address: service.seller, source: "service" }],
+      },
+      payment_drops: service.price_drops,
+      network_fee_drops: service.fee_drops,
+    },
   };
-  if (typeof item.account_reserve_drops === "string") input.account_reserve_drops = item.account_reserve_drops;
-  if (item.bridge_gas_drops != null) input.bridge_gas_drops = item.bridge_gas_drops;
-  if (item.bridge_custody_drops != null) input.bridge_custody_drops = item.bridge_custody_drops;
-  if (item.asset != null) input.asset = item.asset;
-  return { input };
 }
 
 function allowlistOf(file) {
@@ -146,6 +158,7 @@ async function maybeSubmit(mission, env, deps) {
       intent: "mission_spend",
       execute: true,
       dry_run: false,
+      mission_id: mission.id,
       tx: mission.unsigned_tx,
     }),
   });
@@ -191,14 +204,14 @@ async function tick(options) {
     writeState(files.ledger, { last_tick_at: now, last_reason: discovery.reason || "idle" });
     return Object.assign(base, { reason: discovery.reason || "idle" });
   }
-  const built = itemInput(pending);
+  const built = qualifyService(pending);
   if (built.skip) {
     writeState(files.ledger, {
       last_tick_at: now,
       last_reason: built.skip,
       consumed: { [String(pending.id || "invalid")]: { at: now, reason: built.skip } },
     });
-    return Object.assign(base, { reason: built.skip, worked: false });
+    return Object.assign(base, { reason: built.skip, code: built.code || null, worked: false });
   }
   let mission;
   try {
@@ -224,25 +237,55 @@ async function tick(options) {
     return Object.assign(base, { reason: error.code || "ERROR" });
   }
   let submitted = false;
-  if (mission.status === "ready_for_signer") {
-    let sent = { submitted: false, reason: "execute_off" };
+  if (mission.status === "ready_for_signer" && env.FOUNDRY_MISSION_EXECUTE === "yes") {
+    let begun;
     try {
-      sent = await maybeSubmit(mission, env, opts);
-    } catch {
-      sent = { submitted: false, reason: "signer_uncertain" };
-    }
-    if (sent.submitted) {
-      const recorded = recordSubmission(files.ledger, { mission_id: mission.id, now, result: sent.result });
-      mission = recorded.mission;
-      submitted = mission.submitted === true;
-    } else if (sent.reason === "signer_uncertain") {
+      begun = beginSubmit(files.ledger, { mission_id: mission.id, now });
+    } catch (error) {
       writeState(files.ledger, {
         last_tick_at: now,
-        last_reason: "signer_uncertain",
-        consumed: { [pending.id]: { at: now, reason: "signer_uncertain" } },
+        last_reason: error.code || "NO_RETRY",
+        consumed: { [pending.id]: { at: now, reason: error.code || "NO_RETRY" } },
       });
-      return Object.assign(base, { reason: "signer_uncertain", mission_id: mission.id, worked: true, submitted: false });
+      return Object.assign(base, { reason: error.code || "NO_RETRY", mission_id: mission.id, worked: true, submitted: false, complete: false });
     }
+    if (begun.proceed) {
+      let sent = { submitted: false, reason: "signer_uncertain" };
+      try {
+        sent = await maybeSubmit(begun.mission, env, opts);
+      } catch {
+        sent = { submitted: false, reason: "signer_uncertain" };
+      }
+      const finished = sent.submitted
+        ? finishSubmit(files.ledger, { mission_id: mission.id, now, result: sent.result })
+        : { mission: begun.mission, uncertain: true };
+      mission = finished.mission;
+      submitted = mission.submitted === true;
+      if (submitted) {
+        mission = evaluate(files.ledger, {
+          mission_id: mission.id,
+          now,
+          payload: {
+            qualified: true,
+            seller: mission.seller,
+            network: config.NETWORK,
+            network_id: config.NETWORK_ID,
+            hash: mission.proof_hash,
+          },
+        }).mission;
+      }
+    }
+  } else if (mission.status === "ready_for_signer") {
+    mission = evaluate(files.ledger, {
+      mission_id: mission.id,
+      now,
+      payload: {
+        qualified: true,
+        seller: mission.seller,
+        network: config.NETWORK,
+        network_id: config.NETWORK_ID,
+      },
+    }).mission;
   }
   writeState(files.ledger, {
     last_tick_at: now,
@@ -257,6 +300,7 @@ async function tick(options) {
     code: mission.code || null,
     submitted,
     signed: mission.signed === true,
+    complete: mission.complete === true,
     published,
   });
 }
@@ -266,6 +310,12 @@ function healthBody(env, ledger, configFile) {
   const events = ledger && fs.existsSync(path.join(ledger, "events.jsonl")) ? readEvents(ledger) : [];
   const status = events.length ? view(ledger) : null;
   const fileConfig = configFile ? readJson(configFile) : null;
+  let armed = false;
+  try {
+    armed = checkArm(source).mission_signer_armed === true && source.FOUNDRY_MISSION_EXECUTE === "yes";
+  } catch {
+    armed = false;
+  }
   return {
     role: "mission-worker",
     asleep: !scheduleOpen(source, fileConfig),
@@ -273,8 +323,10 @@ function healthBody(env, ledger, configFile) {
     loop: true,
     autonomous: source.FOUNDRY_MISSION_WORKER === "yes",
     execute_armed: source.FOUNDRY_MISSION_EXECUTE === "yes",
-    signing: false,
-    mission_spend_enabled: false,
+    ordinary_signing: false,
+    mission_signer_armed: armed,
+    mission_spend_enabled: armed,
+    signing_disabled: !armed,
     submitted: false,
     asset: "XRP",
     evm_gas: "not_authorized",

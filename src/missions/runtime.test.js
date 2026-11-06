@@ -8,9 +8,12 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 const anchors = require("../director/anchors");
 const config = require("./config");
-const { control, view } = require("./engine");
+const { Worker } = require("node:worker_threads");
+const { control, view, startMission, act } = require("./engine");
+const { beginSubmit } = require("./submit");
 const { tick, run } = require("./worker");
 const signer = require("./signer");
+const { arm } = require("./arm");
 const github = require("./github-publish");
 const wallet = require("./wallet-tool");
 const { pack } = require("../../machines/missions/release/pack");
@@ -46,13 +49,18 @@ function writeDiscovery(file, items, extra) {
   );
 }
 
-function sellerItem(id, extra) {
+function sellerItem(id, serviceExtra, itemExtra) {
   return Object.assign({
     id,
-    accounts: [{ address: FOREIGN, source: "parent" }],
-    payment_drops: "100000",
-    network_fee_drops: "12",
-  }, extra || {});
+    service: Object.assign({
+      network: "xrpl:1",
+      network_id: 1,
+      asset: "XRP",
+      seller: FOREIGN,
+      price_drops: "100000",
+      fee_drops: "12",
+    }, serviceExtra || {}),
+  }, itemExtra || {});
 }
 
 function activate(ledger) {
@@ -92,7 +100,8 @@ describe("mission worker", () => {
     activate(files.ledger);
     fs.writeFileSync(files.allowlist, JSON.stringify({ payees: [FOREIGN] }));
     const paid = await tick(Object.assign({}, files, { env: workerEnv(), now: NOW, fetch: () => { throw new Error("fetch"); } }));
-    assert.equal(paid.reason, "ready_for_signer");
+    assert.equal(paid.reason, "complete");
+    assert.equal(paid.complete, true);
     assert.equal(paid.submitted, false);
     assert.equal(paid.signed, false);
     const again = await tick(Object.assign({}, files, { env: workerEnv(), now: NOW }));
@@ -104,9 +113,10 @@ describe("mission worker", () => {
     const files = layout();
     activate(files.ledger);
     writeDiscovery(files.discovery, [
-      sellerItem("house-only-1", { accounts: [{ address: anchors.WALLETS.W0.address }] }),
-      { id: "missing-pay-1", accounts: [{ address: FOREIGN }] },
-      sellerItem("novel-kind-1", { kind: "bridge-return" }),
+      sellerItem("house-only-1", { seller: anchors.WALLETS.W0.address }),
+      { id: "missing-pay-1", service: { network: "xrpl:1", network_id: 1, asset: "XRP", seller: FOREIGN, fee_drops: "12" } },
+      sellerItem("novel-kind-1", {}, { kind: "bridge-return" }),
+      sellerItem("untrusted-field-1", { bridge_gas_drops: "1" }),
     ]);
     const first = await tick(Object.assign({}, files, { env: workerEnv(), now: NOW }));
     assert.equal(first.code, "no_foreign_seller");
@@ -115,6 +125,8 @@ describe("mission worker", () => {
     assert.equal(second.reason, "missing_payment");
     const third = await tick(Object.assign({}, files, { env: workerEnv(), now: NOW }));
     assert.equal(third.reason, "novel_kind");
+    const fourth = await tick(Object.assign({}, files, { env: workerEnv(), now: NOW }));
+    assert.equal(fourth.reason, "untrusted_field");
     assert.equal(view(files.ledger, NOW).live_spend_drops, "0");
   });
 
@@ -124,21 +136,20 @@ describe("mission worker", () => {
     fs.writeFileSync(files.allowlist, JSON.stringify({ payees: [FOREIGN] }));
     writeDiscovery(files.discovery, [sellerItem("live-item-01")]);
     const calls = [];
-    const fetchImpl = async (url) => {
+    const fetchImpl = async (url, init) => {
       calls.push(url);
       assert.equal(url, "http://127.0.0.1:8788/sign");
-      return {
-        ok: true,
-        json: async () => ({
-          dry_run: false,
-          signed: true,
-          submitted: true,
-          live: true,
-          hash: HASH,
-          engine_result: "tesSUCCESS",
-          network_id: 1,
-        }),
-      };
+      const incoming = JSON.parse(init.body);
+      const result = await signer.evaluate(incoming, {
+        FOUNDRY_MISSION_EXECUTE: "yes",
+        FOUNDRY_MISSION_LEDGER: files.ledger,
+        MISSION_XRPL_ADDRESS: ISOLATED,
+        MISSION_XRPL_SEED: "test-seed-value",
+      }, {
+        openWallet: () => ({ classicAddress: ISOLATED, sign: () => ({ tx_blob: "00" }) }),
+        submit: () => ({ hash: HASH, engine_result: "tesSUCCESS", network_id: 1 }),
+      });
+      return { ok: true, json: async () => result };
     };
     const body = await tick(Object.assign({}, files, {
       env: workerEnv({ FOUNDRY_MISSION_EXECUTE: "yes", FOUNDRY_MISSION_SIGNER_TOKEN: TOKEN }),
@@ -146,6 +157,7 @@ describe("mission worker", () => {
       fetch: fetchImpl,
     }));
     assert.equal(body.submitted, true);
+    assert.equal(body.complete, true);
     assert.equal(calls.length, 1);
     assert.equal(view(files.ledger, NOW).live_spend_drops, "100012");
     await tick(Object.assign({}, files, { env: workerEnv({ FOUNDRY_MISSION_EXECUTE: "yes" }), now: NOW, fetch: fetchImpl }));
@@ -192,9 +204,10 @@ describe("dedicated mission signer", () => {
     const port = server.address().port;
     assert.equal(port === 8787 || port === 8792 || port === 8793, false);
     const body = signer.health(env, port);
-    assert.equal(body.signing, false);
+    assert.equal(body.signing_disabled, true);
     assert.equal(body.mission_spend, false);
-    assert.equal(body.ordinary_signer, false);
+    assert.equal(body.mission_signer_armed, false);
+    assert.equal(body.ordinary_signing, false);
     let submits = 0;
     const dry = await signer.evaluate({
       intent: "mission_spend",
@@ -319,8 +332,172 @@ describe("isolated wallet tool", () => {
     const src = fs.readFileSync(path.join(__dirname, "wallet-tool.js"), "utf8");
     assert.match(src, /Wallet\.generate/);
     assert.match(src, /fundWallet/);
+    assert.match(src, /wss:\/\/testnet\.xrpl-labs\.com/);
     assert.match(src, /faucet\.altnet\.rippletest\.net/);
     assert.doesNotMatch(src, /sEd[1-9A-HJ-NP-Za-km-z]{15,}/);
+    const proved = await wallet.proveFaucet({
+      networkID: 1,
+      request: async () => ({ result: { info: { network_id: 1 } } }),
+    });
+    assert.equal(proved.websocket, wallet.LABS_WS);
+    assert.equal(proved.faucetHost, "faucet.altnet.rippletest.net");
+    assert.equal(proved.network_id, 1);
+    await assert.rejects(
+      () => wallet.proveFaucet({ networkID: 0, request: async () => ({ result: { info: { network_id: 0 } } }) }),
+      (error) => error.code === "MAINNET"
+    );
+  });
+});
+
+describe("submit claims", () => {
+  function readyMission(files) {
+    activate(files.ledger);
+    const started = startMission(files.ledger, {
+      idempotency_key: "claim-race-1",
+      now: NOW,
+      observation: { network: "xrpl:1", network_id: 1, accounts: [{ address: FOREIGN }] },
+      payment_drops: "100000",
+      network_fee_drops: "12",
+    }, { allowlist: { payees: [FOREIGN] } });
+    return act(files.ledger, { mission_id: started.mission.id, now: NOW }, { wallet: { address: ISOLATED } }).mission;
+  }
+
+  it("lets one process claim a submit and keeps a restart uncertain", async () => {
+    const files = layout();
+    const mission = readyMission(files);
+    const counter = path.join(files.home, "claims.txt");
+    fs.writeFileSync(counter, "");
+    const submitPath = require.resolve("./submit");
+    const results = await Promise.all([0, 1].map(() => new Promise((resolve, reject) => {
+      const worker = new Worker(
+        `
+          const fs = require("fs");
+          const { beginSubmit } = require(${JSON.stringify(submitPath)});
+          const { parentPort, workerData } = require("node:worker_threads");
+          try {
+            const result = beginSubmit(workerData.dir, { mission_id: workerData.id, now: workerData.now });
+            if (result.proceed) fs.appendFileSync(workerData.counter, "1\\n");
+            parentPort.postMessage({ proceed: result.proceed === true, code: null });
+          } catch (error) {
+            parentPort.postMessage({ proceed: false, code: error.code || "ERROR" });
+          }
+        `,
+        { eval: true, workerData: { dir: files.ledger, id: mission.id, now: NOW, counter } }
+      );
+      worker.on("message", resolve);
+      worker.on("error", reject);
+    })));
+    assert.equal(results.filter((row) => row.proceed).length, 1);
+    assert.equal(results.filter((row) => row.code === "NO_RETRY").length, 1);
+    assert.equal(fs.readFileSync(counter, "utf8").trim().split("\n").length, 1);
+    assert.throws(
+      () => beginSubmit(files.ledger, { mission_id: mission.id, now: NOW }),
+      (error) => error.code === "NO_RETRY"
+    );
+    const status = view(files.ledger, NOW);
+    assert.equal(status.days["2026-11-06"].uncertain, "100012");
+    assert.equal(status.days["2026-11-06"].reserved, "0");
+    assert.equal(status.live_spend_drops, "100012");
+  });
+
+  it("refuses a loopback signer that has a token but no matching claim", async () => {
+    const files = layout();
+    const mission = readyMission(files);
+    beginSubmit(files.ledger, { mission_id: mission.id, now: NOW });
+    const tx = mission.unsigned_tx;
+    let submits = 0;
+    const env = {
+      FOUNDRY_MISSION_EXECUTE: "yes",
+      FOUNDRY_MISSION_LEDGER: files.ledger,
+      FOUNDRY_MISSION_SIGNER_TOKEN: TOKEN,
+      MISSION_XRPL_ADDRESS: ISOLATED,
+      MISSION_XRPL_SEED: "test-seed-value",
+    };
+    const deps = {
+      openWallet: () => ({ classicAddress: ISOLATED, sign: () => ({ tx_blob: "00" }) }),
+      submit: () => {
+        submits += 1;
+        return { hash: HASH, engine_result: "tesSUCCESS", network_id: 1 };
+      },
+    };
+    await assert.rejects(
+      () => signer.evaluate({
+        intent: "mission_spend",
+        execute: true,
+        mission_id: mission.id,
+        tx: Object.assign({}, tx, { Amount: "1" }),
+      }, env, deps),
+      (error) => error.code === "CLAIM"
+    );
+    assert.equal(submits, 0);
+    const signed = await signer.evaluate({
+      intent: "mission_spend",
+      execute: true,
+      mission_id: mission.id,
+      tx,
+    }, env, deps);
+    assert.equal(signed.submitted, true);
+    assert.equal(submits, 1);
+    await assert.rejects(
+      () => signer.evaluate({ intent: "mission_spend", execute: true, mission_id: mission.id, tx }, env, deps),
+      (error) => error.code === "NO_RETRY"
+    );
+    assert.equal(submits, 1);
+    const server = signer.startServer({
+      env: {
+        FOUNDRY_MISSION_SIGNER_TOKEN: TOKEN,
+        FOUNDRY_MISSION_EXECUTE: "yes",
+        MISSION_XRPL_ADDRESS: ISOLATED,
+        MISSION_XRPL_SEED: "test-seed-value",
+      },
+      port: 0,
+    });
+    await new Promise((resolve) => server.once("listening", resolve));
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/sign`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify({ intent: "mission_spend", execute: true, tx }),
+    });
+    const denied = await response.json();
+    assert.equal(denied.code, "CLAIM");
+    server.close();
+  });
+});
+
+describe("authenticated arming", () => {
+  it("arms from a 0600 account file without raising caps or returning the seed", () => {
+    const files = layout();
+    const account = path.join(files.home, "account.json");
+    fs.writeFileSync(account, `${JSON.stringify({ address: ISOLATED, seed: "test-seed-value-not-printed" })}\n`, { mode: 0o600 });
+    fs.chmodSync(account, 0o600);
+    const result = arm({
+      env: { FOUNDRY_MISSION_HOME: files.home, FOUNDRY_MISSION_LEDGER: files.ledger, FOUNDRY_MISSION_TOKEN: TOKEN },
+      token: TOKEN,
+      confirm: "ACTIVATE-XRPL1-MISSION-SPEND",
+      now: NOW,
+    });
+    assert.equal(result.mission_signer_armed, true);
+    assert.equal(result.signing_disabled, false);
+    assert.equal(result.per_mission_drops, "1000000");
+    assert.equal(JSON.stringify(result).includes("test-seed"), false);
+    assert.equal((fs.statSync(path.join(files.home, "arm.json")).mode & 0o777), 0o600);
+    assert.throws(
+      () => arm({
+        env: { FOUNDRY_MISSION_HOME: files.home, FOUNDRY_MISSION_LEDGER: files.ledger, FOUNDRY_MISSION_TOKEN: TOKEN },
+        token: TOKEN,
+        confirm: "ACTIVATE-XRPL1-MISSION-SPEND",
+        per_mission_drops: "2000000",
+        now: NOW,
+      }),
+      (error) => error.code === "CAP"
+    );
+    const ready = require("./runner").ready({
+      FOUNDRY_MISSION_HOME: files.home,
+      FOUNDRY_MISSION_LEDGER: files.ledger,
+    }, files.ledger);
+    assert.equal(ready.mission_signer_armed, true);
+    assert.equal(ready.signing_disabled, false);
+    assert.equal(ready.mission_spend_enabled, true);
   });
 });
 

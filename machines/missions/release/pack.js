@@ -23,7 +23,7 @@ const DOCS = [
   "machines/missions/THREAT.md",
   "machines/missions/release/INSTALL.md",
 ];
-const BINS = ["start", "health", "stop"];
+const BINS = ["start", "health", "stop", "arm"];
 const EXTRA = ["src/runtime/allowlist.json"];
 
 function walkRequires(root, rel, seen) {

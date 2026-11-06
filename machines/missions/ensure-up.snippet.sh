@@ -7,3 +7,4 @@
 # cd /workspace/foundry-ops/releases/<sha>
 # npm ci --omit=dev
 # ./bin/start
+# Live submit stays off until ./bin/arm has been run with the isolated 0600 account.

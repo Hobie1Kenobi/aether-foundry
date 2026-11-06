@@ -155,6 +155,11 @@ function fold(events) {
       const amount = BigInt(event.drops);
       sub(day, event.from || "uncertain", amount);
       add(day, "spent", amount);
+      if (event.live === true) {
+        state.live_uncertain -= amount;
+        if (state.live_uncertain < 0n) state.live_uncertain = 0n;
+        state.live_spent += amount;
+      }
       const mission = state.missions[event.mission_id];
       if (mission) mission.hold = "spent";
     }
@@ -740,7 +745,7 @@ function evaluate(dir, input) {
     const state = fold(api.read());
     const mission = state.missions[input.mission_id];
     if (!mission) throw coded("mission not found", "PLAN");
-    if (mission.retry_blocked && mission.settlement !== "dest_final") {
+    if (mission.retry_blocked && mission.settlement !== "dest_final" && mission.settlement !== "xrpl_validated") {
       throw coded("refusing to evaluate a retry of an unknown outcome", "NO_RETRY");
     }
     const payload = input.payload || {};
@@ -773,17 +778,28 @@ function evaluate(dir, input) {
       amount_drops: mission.budget ? mission.budget.payment_drops : "0",
       proof_hash: hash,
       explorer: hash ? `${config.EXPLORER_TX}${hash}` : null,
-      live: false,
+      live: mission.live === true && Boolean(hash),
     };
     mission.proof_hash = hash;
     mission.explorer = mission.artifact.explorer;
-    mission.foreign_revenue_drops = "0";
-    mission.rationale = hash
-      ? "Artifact published with a proof hash. Foreign revenue stays zero until a live settlement exists, and signing is disabled."
-      : "Artifact published without a proof hash. No hash was invented. Foreign revenue stays zero.";
-    mission.updated_at = now;
-    if (mission.status === "spending_disabled" || mission.status === "awaiting_human_approval") {
-      mission.status = "published_simulation";
+    const qualified = payload.qualified === true && payload.network === config.NETWORK && payload.seller === mission.seller;
+    mission.complete = qualified;
+    if (qualified && mission.live === true && hash) {
+      mission.foreign_revenue_drops = mission.budget ? mission.budget.payment_drops : "0";
+      mission.status = "complete";
+      mission.rationale = "Validated artifact matches the qualified xrpl:1 service and the settled payment.";
+    } else if (qualified) {
+      mission.foreign_revenue_drops = "0";
+      mission.status = "complete";
+      mission.rationale = "Validated artifact matches the qualified xrpl:1 service. No live settlement is claimed.";
+    } else {
+      mission.foreign_revenue_drops = "0";
+      mission.rationale = hash
+        ? "Artifact recorded with a hash. It is not a qualified service result."
+        : "Artifact published without a proof hash. No hash was invented. Foreign revenue stays zero.";
+      if (mission.status === "spending_disabled" || mission.status === "awaiting_human_approval") {
+        mission.status = "published_simulation";
+      }
     }
     persist(api, mission);
     return { mission, replay: false };
@@ -876,6 +892,7 @@ function publicFeed(dir, now) {
     live: mission.live === true,
     signed: mission.signed === true,
     submitted: mission.submitted === true,
+    complete: mission.complete === true,
     foreign_revenue_drops: /^[0-9]+$/.test(String(mission.foreign_revenue_drops || ""))
       ? String(mission.foreign_revenue_drops)
       : "0",

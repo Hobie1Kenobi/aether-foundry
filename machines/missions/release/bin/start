@@ -1,6 +1,7 @@
 #!/bin/sh
-# Start the isolated mission worker and, when a token is present, its signer.
-# Does not signal the ordinary signer, scribe, or license processes.
+# Start the isolated worker. Live submit stays off unless ./bin/arm wrote a valid arm file.
+# The seed is read from the 0600 account file inside the signer process. It is not put on the command line.
+# W0–W6 seed variables are stripped. This does not signal 8787, 8792, or 8793.
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
@@ -10,28 +11,52 @@ if [ -f "$HOME_DIR/worker.pid" ] && kill -0 "$(cat "$HOME_DIR/worker.pid")" 2>/d
   echo "mission worker already running"
   exit 0
 fi
+ARMED=0
+if [ -f "$HOME_DIR/arm.json" ] && [ -f "$HOME_DIR/account.json" ]; then
+  mode=$(stat -c %a "$HOME_DIR/account.json" 2>/dev/null || true)
+  if [ "$mode" = "600" ]; then
+    decision=$(FOUNDRY_MISSION_HOME="$HOME_DIR" node src/missions/arm.js --check 2>/dev/null || echo off)
+    if [ "$decision" = "armed" ]; then
+      ARMED=1
+    fi
+  fi
+fi
+EXECUTE=0
+ADDRESS=""
+if [ "$ARMED" = "1" ] && [ -n "${FOUNDRY_MISSION_SIGNER_TOKEN:-}" ]; then
+  EXECUTE=1
+  ADDRESS=$(FOUNDRY_MISSION_HOME="$HOME_DIR" node -e 'process.stdout.write(require("./src/missions/arm").readAccount(process.env).address)')
+fi
 env \
   -u W0_SEED -u W1_SEED -u W2_SEED -u W3_SEED -u W4_SEED -u W5_SEED -u W6_SEED -u W7_SEED \
   -u W1_REGULAR_SEED -u W2_REGULAR_SEED -u W3_REGULAR_SEED -u W4_REGULAR_SEED -u W5_REGULAR_SEED -u W6_REGULAR_SEED \
-  -u AETHER_SECRETS -u FOUNDRY_AGENT_SIGN -u FOUNDRY_MISSION_EXECUTE -u MISSION_XRPL_SEED \
+  -u AETHER_SECRETS -u FOUNDRY_AGENT_SIGN -u MISSION_XRPL_SEED \
   FOUNDRY_MISSION_HOME="$HOME_DIR" \
   FOUNDRY_MISSION_LEDGER="$HOME_DIR/ledger" \
+  FOUNDRY_MISSION_WORKER="$([ "$EXECUTE" = "1" ] && echo yes || true)" \
+  FOUNDRY_MISSION_EXECUTE="$([ "$EXECUTE" = "1" ] && echo yes || true)" \
+  MISSION_XRPL_ADDRESS="$ADDRESS" \
   node src/missions/worker.js >> "$HOME_DIR/worker.log" 2>&1 &
 echo $! > "$HOME_DIR/worker.pid"
 if [ -n "${FOUNDRY_MISSION_SIGNER_TOKEN:-}" ]; then
   set -- env \
     -u W0_SEED -u W1_SEED -u W2_SEED -u W3_SEED -u W4_SEED -u W5_SEED -u W6_SEED -u W7_SEED \
     -u W1_REGULAR_SEED -u W2_REGULAR_SEED -u W3_REGULAR_SEED -u W4_REGULAR_SEED -u W5_REGULAR_SEED -u W6_REGULAR_SEED \
-    -u AETHER_SECRETS -u FOUNDRY_AGENT_SIGN -u FOUNDRY_MISSION_EXECUTE \
+    -u AETHER_SECRETS -u FOUNDRY_AGENT_SIGN -u MISSION_XRPL_SEED \
     FOUNDRY_MISSION_HOME="$HOME_DIR" \
+    FOUNDRY_MISSION_LEDGER="$HOME_DIR/ledger" \
     FOUNDRY_MISSION_SIGNER_TOKEN="$FOUNDRY_MISSION_SIGNER_TOKEN"
-  if [ -n "${MISSION_XRPL_ADDRESS:-}" ]; then
-    set -- "$@" MISSION_XRPL_ADDRESS="$MISSION_XRPL_ADDRESS"
-  fi
-  if [ -n "${MISSION_XRPL_SEED:-}" ]; then
-    set -- "$@" MISSION_XRPL_SEED="$MISSION_XRPL_SEED"
+  if [ "$EXECUTE" = "1" ]; then
+    set -- "$@" \
+      FOUNDRY_MISSION_EXECUTE=yes \
+      FOUNDRY_MISSION_ACCOUNT_FILE="$HOME_DIR/account.json" \
+      MISSION_XRPL_ADDRESS="$ADDRESS"
   fi
   "$@" node src/missions/signer.js >> "$HOME_DIR/signer.log" 2>&1 &
   echo $! > "$HOME_DIR/signer.pid"
 fi
-echo "started"
+if [ "$EXECUTE" = "1" ]; then
+  echo "started-armed"
+else
+  echo "started"
+fi

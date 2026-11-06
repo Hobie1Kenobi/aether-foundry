@@ -7,10 +7,13 @@
  */
 
 const crypto = require("crypto");
+const fs = require("fs");
 const http = require("http");
+const path = require("path");
 const policy = require("../runtime/policy");
 const guard = require("./runtime-guard");
 const { coded } = require("./ledger");
+const { acceptClaim } = require("./submit");
 
 const DEFAULT_PORT = 8788;
 const DEFAULT_WS = "wss://testnet.xrpl-labs.com";
@@ -43,11 +46,44 @@ function bearerOk(header, token) {
   return got.length === want.length && crypto.timingSafeEqual(got, want);
 }
 
+function accountFile(env) {
+  if (!env || !env.FOUNDRY_MISSION_ACCOUNT_FILE) return null;
+  if (guard.present(env.MISSION_XRPL_SEED)) throw coded("refusing an environment seed beside the account file", "SEED");
+  const home = env.FOUNDRY_MISSION_HOME || "/workspace/foundry-ops/missions-runtime";
+  const resolved = path.resolve(env.FOUNDRY_MISSION_ACCOUNT_FILE);
+  const expected = path.resolve(home, "account.json");
+  if (resolved !== expected) throw coded("refusing an account file outside the mission runtime home", "WALLET");
+  guard.assertIsolated(resolved);
+  const stat = fs.statSync(resolved);
+  if ((stat.mode & 0o777) !== 0o600) throw coded("account file must be mode 0600", "WALLET");
+  const body = JSON.parse(fs.readFileSync(resolved, "utf8"));
+  if (!body || typeof body.address !== "string" || typeof body.seed !== "string") {
+    throw coded("account file is missing the isolated address", "WALLET");
+  }
+  if (env.MISSION_XRPL_ADDRESS && body.address !== env.MISSION_XRPL_ADDRESS) {
+    throw coded("account file does not match the mission address", "WALLET");
+  }
+  return { address: body.address, seed: body.seed };
+}
+
+function signerArmed(env) {
+  const source = env || {};
+  if (source.FOUNDRY_MISSION_EXECUTE !== "yes") return false;
+  if (source.FOUNDRY_MISSION_ACCOUNT_FILE) {
+    try {
+      return Boolean(accountFile(source));
+    } catch {
+      return false;
+    }
+  }
+  return guard.present(source.MISSION_XRPL_ADDRESS) && guard.present(source.MISSION_XRPL_SEED);
+}
+
 function health(env, port) {
   const source = env || {};
   guard.assertNoHouseSeeds(source);
   const address = typeof source.MISSION_XRPL_ADDRESS === "string" ? source.MISSION_XRPL_ADDRESS : "";
-  const seedPresent = guard.present(source.MISSION_XRPL_SEED);
+  const armed = signerArmed(source);
   return {
     role: "mission-signer",
     bind: "127.0.0.1",
@@ -55,11 +91,12 @@ function health(env, port) {
     network_id: 1,
     asset: "XRP",
     evm_gas: "not_authorized",
-    signing: false,
-    ordinary_signer: false,
-    mission_spend: Boolean(address && seedPresent),
+    ordinary_signing: false,
+    mission_signer_armed: armed,
+    mission_spend: armed,
+    signing_disabled: !armed,
     execute_armed: source.FOUNDRY_MISSION_EXECUTE === "yes",
-    mission_account_configured: Boolean(address),
+    mission_account_configured: Boolean(address) || armed,
     house_seeds: "refused",
   };
 }
@@ -67,7 +104,9 @@ function health(env, port) {
 async function submitPrepared(tx, env, deps) {
   const options = deps || {};
   const xrpl = options.xrpl || require("xrpl");
-  const seed = env.MISSION_XRPL_SEED;
+  const loaded = accountFile(env);
+  const seed = loaded ? loaded.seed : env.MISSION_XRPL_SEED;
+  const expected = (loaded && loaded.address) || env.MISSION_XRPL_ADDRESS;
   let wallet;
   try {
     wallet = options.openWallet ? options.openWallet(seed) : xrpl.Wallet.fromSeed(seed);
@@ -76,7 +115,7 @@ async function submitPrepared(tx, env, deps) {
     throw coded("MISSION_XRPL_SEED is not a usable seed", "NO_SEED");
   }
   const classic = wallet.classicAddress || wallet.address;
-  if (classic !== env.MISSION_XRPL_ADDRESS) throw coded("isolated key does not match MISSION_XRPL_ADDRESS", "WALLET");
+  if (classic !== expected) throw coded("isolated key does not match MISSION_XRPL_ADDRESS", "WALLET");
   if (options.submit) return options.submit(tx, { classicAddress: classic, sign: (body) => wallet.sign(body) });
   const ws = assertWs(env.FOUNDRY_MISSION_XRPL_WS);
   const client = options.client || new xrpl.Client(ws);
@@ -125,8 +164,10 @@ async function evaluate(body, env, deps) {
       tx: body.tx,
     };
   }
-  if (!guard.present(source.MISSION_XRPL_SEED)) throw coded("MISSION_XRPL_SEED is not loaded. Refusing to sign.", "NO_SEED");
   if (options.io && options.io.readFileSync) throw coded("mission signer does not read a secrets file", "SEED");
+  if (!source.FOUNDRY_MISSION_LEDGER) throw coded("mission signer has no ledger claim", "CLAIM");
+  if (!signerArmed(source)) throw coded("MISSION_XRPL_SEED is not loaded. Refusing to sign.", "NO_SEED");
+  acceptClaim(source.FOUNDRY_MISSION_LEDGER, body.mission_id, body.tx);
   const submitted = await submitPrepared(body.tx, source, options);
   const text = JSON.stringify(submitted || {});
   if (source.MISSION_XRPL_SEED && text.includes(source.MISSION_XRPL_SEED)) throw coded("refusing to return a seed", "SEED");
@@ -232,6 +273,8 @@ module.exports = {
   DEFAULT_PORT,
   DEFAULT_WS,
   assertWs,
+  accountFile,
+  signerArmed,
   health,
   evaluate,
   startServer,

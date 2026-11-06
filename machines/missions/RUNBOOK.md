@@ -48,43 +48,27 @@ npm ci --omit=dev
 ./bin/stop
 ```
 
-`npm ci` installs locked `xrpl@5.3.0` from the public npm registry. Node must be `>=20.19`. No other service is required. `bin/start` writes pid files under `/workspace/foundry-ops/missions-runtime` and strips W0–W6 seed variables before the child starts. It does not set `FOUNDRY_MISSION_EXECUTE`. `bin/stop` signals only those pid files.
+`npm ci` installs locked `xrpl@5.3.0` from the public npm registry. Node must be `>=20.19`. `./bin/start` is off until `./bin/arm` succeeds. It strips W0–W6 seed variables. `./bin/stop` signals only its own pid files.
 
-Two health checks:
+`GET http://127.0.0.1:8787/health` with `signing: true` is the existing W1–W6 signer. That body keeps `mission_spend: false`. `./bin/health` reads `127.0.0.1:8794` and, when the signer is up, `127.0.0.1:8788`. After arming, those bodies set `mission_signer_armed: true` and `signing_disabled: false`. Before arming, `signing_disabled` is true. `ordinary_signing` stays false on both mission ports.
 
-- Ordinary signer `GET http://127.0.0.1:8787/health` field `signing: true` means the existing W1–W6 signer is armed. `mission_spend` on that body is `false`.
-- Release `./bin/health` reads `127.0.0.1:8794` (worker) and, if started, `127.0.0.1:8788` (dedicated signer). The dedicated signer reports `signing: false` always. Its `mission_spend` field is true only when `MISSION_XRPL_ADDRESS` and `MISSION_XRPL_SEED` are in that process. `execute_armed` is false under `bin/start`.
-
-The worker stays asleep until both `FOUNDRY_MISSION_WORKER=yes` and a ledger activate event for class `foreign-xrpl1-purchase`. A `worker.json` of `{ "asleep": true }` forces it back to sleep. It reads `/workspace/foundry-ops/missions-runtime/discovery.json`. If that file is missing or empty, it does not invent a seller or an amount. One discovery item is handled per tick. The default interval is 60 seconds and the floor is 15 seconds. A prepared dry-run is not submitted later just because execute is turned on; a new discovery id is required.
-
-Activate the class inside the isolated ledger, not the old checkout:
-
-```bash
-cd /workspace/foundry-ops/releases/<sha>
-export FOUNDRY_MISSION_TOKEN='<set on the box, not in git>'
-export FOUNDRY_MISSION_LEDGER=/workspace/foundry-ops/missions-runtime/ledger
-node -e 'require("./src/missions/engine").control(process.env.FOUNDRY_MISSION_LEDGER,{action:"activate",confirm:"ACTIVATE-XRPL1-MISSION-SPEND",token:process.env.FOUNDRY_MISSION_TOKEN,now:new Date().toISOString()},{token:process.env.FOUNDRY_MISSION_TOKEN})'
-```
-
-Create the isolated testnet account on the box after this code is in place. The tool uses `xrpl.Wallet.generate`. Funding uses `Client.fundWallet` on `wss://s.altnet.rippletest.net:51233` and `faucet.altnet.rippletest.net` only when `FOUNDRY_MISSION_FAUCET=yes`. XRPL Labs has no faucet.
+Create the account on the box. The client connects to `wss://testnet.xrpl-labs.com`, requires network id 1, and only then uses the SDK faucet host `faucet.altnet.rippletest.net`. Stdout is the address. The seed stays in the `0600` file.
 
 ```bash
 cd /workspace/foundry-ops/releases/<sha>
 FOUNDRY_MISSION_WALLET_TOOL=yes FOUNDRY_MISSION_FAUCET=yes \
   node src/missions/wallet-tool.js --out /workspace/foundry-ops/missions-runtime/account.json
+FOUNDRY_MISSION_TOKEN='<box token>' FOUNDRY_MISSION_CONFIRM='ACTIVATE-XRPL1-MISSION-SPEND' \
+  FOUNDRY_MISSION_SIGNER_TOKEN='<signer token>' ./bin/arm
+./bin/stop
+./bin/start
+./bin/health
 ```
 
-Stdout is the address only. The seed stays in that one file, mode 0600. Put `MISSION_XRPL_ADDRESS` and `MISSION_XRPL_SEED` in the dedicated signer environment. Do not copy them into `ensure-up.sh` and do not put W0–W6 seeds in the mission process.
+`./bin/arm` records the class and the authorized caps, 1000000 and 5000000 drops. It refuses a higher cap. `./bin/start` then loads the seed only from `account.json` inside the signer process and sets execute. A `{ "asleep": true }` file at `/workspace/foundry-ops/missions-runtime/worker.json` stops ticks without clearing the arm file.
 
-Publishing uses the GitHub contents API for `lab/missions/public-status.json` only. It does not run git in the dirty checkout. Set `FOUNDRY_MISSION_GITHUB_TOKEN` in the environment. The token is not in the tar.
+Discovery is `/workspace/foundry-ops/missions-runtime/discovery.json`. A service counts only when its seller, price, and fee are an xrpl:1 XRP offer, the seller is not a house account, and the fields are the service object itself. Extra fields are ignored as authority. The worker validates that payload and writes an artifact. `complete` is true only after that artifact. A payment without it stays incomplete. One item per tick. Default interval 60 seconds, floor 15 seconds.
 
-```bash
-cd /workspace/foundry-ops/releases/<sha>
-export FOUNDRY_MISSION_LEDGER=/workspace/foundry-ops/missions-runtime/ledger
-export FOUNDRY_MISSION_GITHUB_TOKEN='<parent token, not in git>'
-node src/missions/github-publish.js
-```
+A submit takes an exclusive ledger claim first. A second process gets `NO_RETRY`. If the process dies after the claim is handed to the signer, the hold stays uncertain and is not submitted again. The dedicated signer rejects a loopback request that does not match that reserved claim, even with the bearer token. EVM gas stays unauthorized.
 
-The desk reads that one path at the main SHA. The hash detects a corrupt file. It is not authentication. `prev_sequence` cannot show a rolled-back chain. Until that upload exists, production stays `unavailable` and live spend is null.
-
-Live submit stays off unless the parent starts the dedicated signer with `FOUNDRY_MISSION_EXECUTE=yes` outside `bin/start`, and the worker is also started with that variable. `bin/start` removes it. EVM gas stays `NON_XRP`. A lost signer response is not retried.
+Publish with the GitHub contents API, path `lab/missions/public-status.json` only. The token is not in the tar. The desk stays `unavailable` until that file is on main. The content hash is not authentication.

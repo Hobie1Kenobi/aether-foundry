@@ -3,7 +3,8 @@
 
 /**
  * Parent-only isolated XRPL Testnet wallet tool.
- * Uses xrpl.Wallet.generate and, only when asked, Client.fundWallet against the public altnet faucet.
+ * Uses xrpl.Wallet.generate. Funding connects to XRPL Labs first and pays the
+ * public faucet only after that server reports network id 1.
  * This file does not contain a seed. The cloud agent must not run it.
  */
 
@@ -13,7 +14,7 @@ const path = require("path");
 const guard = require("./runtime-guard");
 const { coded } = require("./ledger");
 
-const FAUCET_WS = "wss://s.altnet.rippletest.net:51233";
+const LABS_WS = "wss://testnet.xrpl-labs.com";
 const FAUCET_HOST = "faucet.altnet.rippletest.net";
 
 function assertOut(file, testRoot) {
@@ -50,7 +51,7 @@ async function createIsolated(options) {
   let funded = false;
   if (env.FOUNDRY_MISSION_FAUCET === "yes") {
     if (typeof opts.fund !== "function") throw coded("faucet caller is missing", "WALLET");
-    await opts.fund(wallet, { websocket: FAUCET_WS, faucetHost: FAUCET_HOST });
+    await opts.fund(wallet, { websocket: LABS_WS, faucetHost: FAUCET_HOST });
     funded = true;
   }
   fs.mkdirSync(path.dirname(out), { recursive: true });
@@ -69,14 +70,27 @@ function defaultGenerate() {
   return require("xrpl").Wallet.generate();
 }
 
-async function defaultFund(wallet) {
-  const xrpl = require("xrpl");
-  const client = new xrpl.Client(FAUCET_WS);
-  await client.connect();
+async function proveFaucet(client) {
+  if (!client || typeof client.request !== "function") throw coded("faucet proof needs the connected client", "HOST");
+  const info = await client.request({ command: "server_info" });
+  const networkId = info && info.result && info.result.info ? info.result.info.network_id : null;
+  if (Number(networkId) !== 1 || Number(client.networkID) !== 1) {
+    throw coded("refusing faucet until the server reports network id 1", "MAINNET");
+  }
+  return { websocket: LABS_WS, faucetHost: FAUCET_HOST, network_id: 1 };
+}
+
+async function defaultFund(wallet, deps) {
+  const options = deps || {};
+  const xrpl = options.xrpl || require("xrpl");
+  const client = options.client || new xrpl.Client(LABS_WS);
+  const opened = !options.client;
+  if (opened) await client.connect();
   try {
-    await client.fundWallet(wallet, { faucetHost: FAUCET_HOST, usageContext: "aether-foundry-mission" });
+    const proof = await proveFaucet(client);
+    await client.fundWallet(wallet, { faucetHost: proof.faucetHost, usageContext: "aether-foundry-mission" });
   } finally {
-    await client.disconnect();
+    if (opened) await client.disconnect();
   }
 }
 
@@ -99,8 +113,9 @@ if (require.main === module) {
 }
 
 module.exports = {
-  FAUCET_WS,
+  LABS_WS,
   FAUCET_HOST,
+  proveFaucet,
   createIsolated,
   defaultGenerate,
   defaultFund,
