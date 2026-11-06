@@ -37,8 +37,11 @@ function writeAtomic(file, value) {
   fs.renameSync(tmp, file);
 }
 
-function publish(dir, now) {
+const HEARTBEAT_MS = 4 * 60 * 1000;
+
+function publish(dir, now, opts) {
   const clock = now || new Date().toISOString();
+  const heartbeat = Boolean(opts && opts.heartbeat);
   return exclusive(dir, () => {
     const status = publicFeed(dir, clock);
     if (status.source !== "ledger") throw coded("refusing to publish without a ledger", "UNAVAILABLE");
@@ -68,7 +71,34 @@ function publish(dir, now) {
       missions: status.missions,
       replays,
     });
-    if (state.content_hash && state.content_hash === fingerprint && previous) {
+    const healthFingerprint = integrityOf({
+      spending_enabled: status.spending_enabled,
+      live_spend_drops: status.live_spend_drops,
+      reserved_drops: status.reserved_drops,
+      uncertain_drops: status.uncertain_drops,
+      accounted_spent_drops: status.accounted_spent_drops,
+      killed: status.killed,
+      missions: status.missions,
+      replays,
+      worker_asleep: heartbeat ? true : null,
+      execute: heartbeat ? false : null,
+    });
+    const observedAge = previous && previous.source_observed_at
+      ? new Date(clock).getTime() - new Date(previous.source_observed_at).getTime()
+      : Number.POSITIVE_INFINITY;
+    if (!heartbeat && state.content_hash && state.content_hash === fingerprint && previous) {
+      return Object.assign({ changed: false }, previous);
+    }
+    if (
+      heartbeat
+      && previous
+      && previous.worker_asleep === true
+      && previous.execute === false
+      && state.content_hash === healthFingerprint
+      && Number.isFinite(observedAge)
+      && observedAge >= 0
+      && observedAge < HEARTBEAT_MS
+    ) {
       return Object.assign({ changed: false }, previous);
     }
     const body = {
@@ -76,8 +106,9 @@ function publish(dir, now) {
       version: VERSION,
       sequence,
       prev_sequence: Number(state.sequence),
-      source_observed_at: status.source_observed_at,
+      source_observed_at: heartbeat ? clock : status.source_observed_at,
       published_at: clock,
+      ...(heartbeat ? { worker_asleep: true, execute: false, health: "asleep" } : {}),
       spending_enabled: status.spending_enabled,
       spending_enabled_source: "ledger",
       signing_enabled: false,
@@ -97,7 +128,7 @@ function publish(dir, now) {
     assertPublic(body);
     body.integrity = integrityOf(body);
     writeAtomic(snapFile, body);
-    writeAtomic(stateFile, { version: VERSION, sequence, integrity: body.integrity, content_hash: fingerprint });
+    writeAtomic(stateFile, { version: VERSION, sequence, integrity: body.integrity, content_hash: heartbeat ? healthFingerprint : fingerprint });
     return Object.assign({ changed: true }, body);
   });
 }
@@ -133,4 +164,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { VERSION, SNAPSHOT_NAME, integrityOf, publish, follow };
+module.exports = { VERSION, SNAPSHOT_NAME, HEARTBEAT_MS, integrityOf, publish, follow };

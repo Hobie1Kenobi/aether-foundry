@@ -25,6 +25,9 @@ export type MissionStatus = {
   source_observed_at: string | null;
   stale?: boolean;
   killed?: boolean;
+  worker_asleep?: boolean;
+  execute?: boolean;
+  health?: string;
   note?: string;
   missions?: Array<{
     id: string;
@@ -33,6 +36,7 @@ export type MissionStatus = {
     complete?: boolean;
     rationale?: string;
     settlement?: string | null;
+    prior_claim_id?: string | null;
   }>;
 };
 

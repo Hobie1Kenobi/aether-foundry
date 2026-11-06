@@ -7,6 +7,8 @@
 # This is one flocked bashrc hook for a new shell, not a five-minute service.
 # Do not add a cron entry. Do not signal 127.0.0.1:8787, 8792, or 8793.
 # Does not print tokens.env or account.json.
+# Do not call bin/execute, bin/account, or bin/publish from this hook.
+# Those commands are explicit and separate. This hook only starts the asleep worker.
 
 HOME_DIR=/workspace/foundry-ops/missions-runtime
 # This release's unpack directory. bin/stop waits for 8794 and 8788 to be free
