@@ -764,6 +764,10 @@ describe("release pack", () => {
     assert.equal(names.some((name) => name.endsWith("src/missions/worker.js")), true);
     assert.equal(names.some((name) => name.endsWith("machines/missions/ensure-up.snippet.sh")), true);
     assert.equal(names.some((name) => name.endsWith("src/missions/port-wait.js")), true);
+    assert.equal(names.some((name) => name.endsWith("src/missions/retry-fee.js")), true);
+    const snippet = fs.readFileSync(path.join(result.stage, "machines/missions/ensure-up.snippet.sh"), "utf8");
+    assert.equal(snippet.includes("REPLACE_WITH_RELEASE_SHA"), false);
+    assert.equal(snippet.includes(result.gitSha), true);
     const manifest = JSON.parse(fs.readFileSync(path.join(result.stage, "manifest.json"), "utf8"));
     assert.equal(manifest.base, "1116ce48a3128aa4ccfb8429c06841bf5cb844aa");
     const worker = manifest.files.find((row) => row.path === "src/missions/worker.js");
@@ -773,7 +777,7 @@ describe("release pack", () => {
       encoding: "utf8",
     });
     assert.equal(installed.status, 0, installed.stderr);
-    const loaded = spawnSync(process.execPath, ["-e", "require('./src/missions/worker'); require('./src/missions/signer'); require('./src/missions/github-publish');"], {
+    const loaded = spawnSync(process.execPath, ["-e", "require('./src/missions/worker'); require('./src/missions/signer'); require('./src/missions/github-publish'); require('./src/missions/retry-fee');"], {
       cwd: result.stage,
       encoding: "utf8",
     });

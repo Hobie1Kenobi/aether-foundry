@@ -17,6 +17,7 @@ const ENTRIES = [
   "src/missions/cli.js",
   "src/missions/publish.js",
   "src/missions/engine.js",
+  "src/missions/retry-fee.js",
 ];
 const DOCS = [
   "machines/missions/RUNBOOK.md",
@@ -54,7 +55,7 @@ function sha256(file) {
 function installText(gitSha) {
   return `# Install this release beside the existing checkout
 
-Release ${gitSha}, based on merged 1116ce48. Do not unpack it inside /workspace/aether-foundry. Do not pull, reset, stash, or restart the signer on 127.0.0.1:8787, scribe on 8792, or license on 8793.
+Release ${gitSha}. Do not unpack it inside /workspace/aether-foundry. Do not pull, reset, stash, or restart the signer on 127.0.0.1:8787, scribe on 8792, or license on 8793.
 
 \`\`\`bash
 install -d /workspace/foundry-ops/releases/${gitSha}
