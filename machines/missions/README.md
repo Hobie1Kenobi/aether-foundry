@@ -18,4 +18,4 @@ This pack is AI-assisted. It is not an audit.
 npm run missions:status
 ```
 
-Operator ledger: `lab/missions/` (gitignored). Public snapshot: `machines/missions/public-feed.json`.
+Operator ledger: `lab/missions/events.jsonl` on the box. `npm run missions:publish` writes the sanitized `lab/missions/public-status.json`. The desk reads that file at the current main commit. Until it is pushed, the site reports unavailable.
