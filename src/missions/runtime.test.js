@@ -10,7 +10,7 @@ const anchors = require("../director/anchors");
 const config = require("./config");
 const { Worker } = require("node:worker_threads");
 const { control, view, startMission, act } = require("./engine");
-const { beginSubmit } = require("./submit");
+const { beginSubmit, notePresign } = require("./submit");
 const { tick, run } = require("./worker");
 const signer = require("./signer");
 const { arm } = require("./arm");
@@ -49,14 +49,15 @@ function writeDiscovery(file, items, extra) {
   );
 }
 
-function x402Item(id, acceptExtra) {
+function x402Item(id, acceptExtra, url) {
+  const resource = url || "https://shop.test/ping";
   return {
     id,
     observed_at: NOW,
-    resource: { url: "https://shop.test/ping", method: "GET" },
+    resource: { url: resource, method: "GET" },
     x402: {
       x402Version: 2,
-      resource: "https://shop.test/ping",
+      resource,
       accepts: [Object.assign({
         scheme: "exact",
         network: "xrpl:1",
@@ -417,7 +418,7 @@ describe("submit claims", () => {
     const files = layout();
     const mission = readyMission(files);
     beginSubmit(files.ledger, { mission_id: mission.id, now: NOW });
-    const tx = mission.unsigned_tx;
+    const tx = Object.assign({}, mission.unsigned_tx, { Sequence: 22117391, LastLedgerSequence: 22118889 });
     let submits = 0;
     const env = {
       FOUNDRY_MISSION_EXECUTE: "yes",
@@ -427,6 +428,7 @@ describe("submit claims", () => {
       MISSION_XRPL_SEED: "test-seed-value",
     };
     const deps = {
+      validatedAccount: { validated: 22118869, sequence: 22117391 },
       openWallet: () => ({ classicAddress: ISOLATED, sign: () => ({ tx_blob: "00" }) }),
       submit: () => {
         submits += 1;
@@ -662,15 +664,16 @@ describe("x402 qualification and network fee", () => {
     const allowPath = files.allowlist;
     fs.writeFileSync(allowPath, JSON.stringify({ payees: [FOREIGN] }));
     const outside = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
+    const supported = "https://api.stablecoingateways.com/v1/fx/convert?from=USD&to=EUR&amount=1";
     writeDiscovery(files.discovery, [
-      x402Item("deliver-item-1"),
-      x402Item("outside-scope1", { payTo: outside, amount: "1000" }),
+      x402Item("deliver-item-1", {}, supported),
+      x402Item("outside-scope1", { payTo: outside, amount: "1000" }, supported),
     ]);
     let phase = "challenge";
     let submits = 0;
     const proofHashes = [];
     const resourceFetch = async (url, init) => {
-      assert.equal(url, "https://shop.test/ping");
+      assert.equal(url, "https://api.stablecoingateways.com/v1/fx/convert?from=USD&to=EUR&amount=1");
       const header = init && init.headers && (init.headers["PAYMENT-SIGNATURE"] || init.headers["payment-signature"]);
       if (!header) {
         return { status: 402, json: async () => x402Item("deliver-item-1").x402 };
@@ -687,7 +690,9 @@ describe("x402 qualification and network fee", () => {
       }
       return {
         status: 200,
-        text: async () => JSON.stringify({ ok: true, service: "ping" }),
+        text: async () => JSON.stringify({
+          data: { from: "USD", amount: 1, rate_date: "2026-11-06", conversions: { EUR: { amount: 1 } } },
+        }),
         headers: { get() { return ""; } },
       };
     };
@@ -695,8 +700,12 @@ describe("x402 qualification and network fee", () => {
       env: workerEnv({ FOUNDRY_MISSION_EXECUTE: "yes", FOUNDRY_MISSION_SIGNER_TOKEN: TOKEN }),
       now: NOW,
       quoteFee: async () => labsQuote("12"),
+      preparedAccount: { validated: 22118869, sequence: 22117391 },
       resourceFetch,
-      presign: async () => ({ tx_blob: "BLOB", hash: HASH }),
+      presign: async (mission) => {
+        notePresign(files.ledger, mission.id, HASH, { tx: mission.unsigned_tx });
+        return { tx_blob: "BLOB", hash: HASH };
+      },
       fetch: async (_url, init) => {
         submits += 1;
         const incoming = JSON.parse(init.body);
@@ -706,6 +715,7 @@ describe("x402 qualification and network fee", () => {
           MISSION_XRPL_ADDRESS: ISOLATED,
           MISSION_XRPL_SEED: "test-seed-value",
         }, {
+          validatedAccount: { validated: 22118869, sequence: 22117391 },
           openWallet: () => ({ classicAddress: ISOLATED, sign: () => ({ tx_blob: "BLOB", hash: HASH }) }),
           submit: () => ({ hash: HASH, engine_result: "tesSUCCESS", network_id: 1 }),
         });

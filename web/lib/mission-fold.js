@@ -120,7 +120,7 @@ function fold(events, now) {
       bucket.reserved -= amount;
       if (bucket.reserved < 0n) bucket.reserved = 0n;
       bucket.released += amount;
-    } else if (event.type === "budget.unsigned_released") {
+    } else if (event.type === "budget.unsigned_released" || event.type === "budget.ledger_expired") {
       const bucket = dayBucket(event.day);
       const amount = BigInt(event.drops || "0");
       bucket.uncertain -= amount;

@@ -74,7 +74,13 @@ async function preflight(built, fetchImpl) {
     return { ok: false, code: "undeliverable", rationale: "The resource did not repeat an HTTP 402 challenge." };
   }
   const body = typeof response.json === "function" ? await response.json() : null;
-  const accepts = body && Array.isArray(body.accepts) ? body.accepts : [];
+  if (!body || body.x402Version !== 2) {
+    return { ok: false, code: "unsupported_protocol", rationale: "The live challenge is not x402 version 2 on xrpl:1." };
+  }
+  const accepts = Array.isArray(body.accepts) ? body.accepts : [];
+  if (accepts.some((row) => row && (row.network === "xrpl:0" || row.network === "xrpl-mainnet")) && !accepts.some((row) => row && row.network === "xrpl:1")) {
+    return { ok: false, code: "MAINNET", rationale: "The live challenge is not an xrpl:1 accept." };
+  }
   const live = accepts.find((row) => sameAccept(built.accept, row));
   if (!live) {
     return { ok: false, code: "stale_challenge", rationale: "The live 402 no longer matches the qualified xrpl:1 accept." };

@@ -2,7 +2,7 @@
 
 const config = require("./config");
 const { exclusive, coded } = require("./ledger");
-const { fold } = require("./engine");
+const { fold, signedClaimMayRelease } = require("./engine");
 const missionPolicy = require("./policy");
 const anchors = require("../director/anchors");
 
@@ -90,16 +90,76 @@ function beginSubmit(dir, input) {
   });
 }
 
-function notePresign(dir, missionId, hash) {
+function signedFields(tx) {
+  if (!tx || typeof tx !== "object") return null;
+  return {
+    TransactionType: "Payment",
+    Account: tx.Account,
+    Destination: tx.Destination,
+    Amount: String(tx.Amount),
+    Fee: String(tx.Fee),
+    NetworkID: 1,
+    Sequence: Number.isSafeInteger(tx.Sequence) ? tx.Sequence : null,
+    LastLedgerSequence: Number.isSafeInteger(tx.LastLedgerSequence) ? tx.LastLedgerSequence : null,
+  };
+}
+
+function notePresign(dir, missionId, hash, fields) {
   const now = new Date().toISOString();
   const upper = String(hash || "").toUpperCase();
   if (!anchors.HASH_RE.test(upper)) throw coded("presign hash is not a ledger hash", "SUBMIT");
+  const meta = signedFields(fields && fields.tx);
   return exclusive(dir, (api) => {
     const mission = fold(api.read()).missions[missionId];
     if (!mission || mission.submit_state !== "signing") throw coded("no open signing claim", "CLAIM");
     if (mission.signer_accepted === true) throw coded("claim already handed to the signer", "NO_RETRY");
     if (mission.presigned_hash && mission.presigned_hash !== upper) throw coded("refusing a second presign", "NO_RETRY");
+    if (
+      Number.isInteger(mission.last_ledger_sequence)
+      && meta
+      && meta.LastLedgerSequence != null
+      && meta.LastLedgerSequence !== mission.last_ledger_sequence
+    ) {
+      throw coded("refusing to refresh LastLedgerSequence after it was stored", "NO_RETRY");
+    }
     mission.presigned_hash = upper;
+    mission.presigned = true;
+    mission.signed = true;
+    mission.submitted = false;
+    mission.live = false;
+    mission.complete = false;
+    if (meta) mission.signed_fields = meta;
+    if (meta && meta.Sequence != null) mission.sequence = meta.Sequence;
+    if (meta && meta.LastLedgerSequence != null) mission.last_ledger_sequence = meta.LastLedgerSequence;
+    mission.rationale = "A signature is stored. It has not been submitted. The claim stays open until a supported result is recorded, or a future signature's validated ledger window has passed and the hash is absent.";
+    mission.updated_at = now;
+    api.append({ type: "mission.upsert", at: now, mission });
+    return { mission };
+  });
+}
+
+function stampPrepared(dir, input) {
+  const now = input.now || new Date().toISOString();
+  return exclusive(dir, (api) => {
+    const mission = fold(api.read()).missions[input.mission_id];
+    if (!mission || mission.hold !== "unsubmitted" || !mission.unsigned_tx) {
+      throw coded("no unsubmitted payment to prepare", "TX");
+    }
+    if (mission.presigned_hash || mission.submit_state || Number.isInteger(mission.last_ledger_sequence)) {
+      throw coded("refusing to refresh LastLedgerSequence after it was stored", "NO_RETRY");
+    }
+    const tx = Object.assign({}, mission.unsigned_tx, {
+      Sequence: input.sequence,
+      LastLedgerSequence: input.lastLedgerSequence,
+      NetworkID: 1,
+    });
+    mission.unsigned_tx = tx;
+    mission.signed_fields = signedFields(tx);
+    mission.sequence = tx.Sequence;
+    mission.last_ledger_sequence = tx.LastLedgerSequence;
+    mission.presigned = false;
+    mission.signed = false;
+    mission.submitted = false;
     mission.updated_at = now;
     api.append({ type: "mission.upsert", at: now, mission });
     return { mission };
@@ -195,15 +255,17 @@ function noteDeliveryFailure(dir, input) {
       throw coded("claim is not an open presign", "NO_RETRY");
     }
     mission.status = "uncertain";
-    mission.code = "delivery_failed";
+    mission.code = input.code === "unsupported_delivery" ? "unsupported_delivery" : "delivery_failed";
     mission.settlement = "submit_unknown";
     mission.retry_blocked = true;
     mission.complete = false;
-    mission.signed = false;
     mission.submitted = false;
     mission.live = false;
     mission.delivery_http_status = Number.isInteger(status) ? status : null;
-    mission.rationale = "The seller did not return HTTP 200 with a usable result body. The presigned claim stays uncertain and is not released or retried.";
+    mission.delivery_error_code = typeof input.error_code === "string" && /^[a-z0-9_]{1,40}$/.test(input.error_code)
+      ? input.error_code
+      : "unparsed";
+    mission.rationale = "The seller response did not match a supported purchase result. The presigned claim stays uncertain and is not released or retried.";
     mission.updated_at = now;
     api.append({ type: "mission.upsert", at: now, mission });
     return { mission };
@@ -333,12 +395,59 @@ function releasePrepared(dir, input) {
   });
 }
 
+function releasePassedWindow(dir, input) {
+  const now = input.now || new Date().toISOString();
+  return exclusive(dir, (api) => {
+    const events = api.read();
+    const mission = fold(events).missions[input.mission_id];
+    if (!mission) throw coded("mission not found", "PLAN");
+    if (!Number.isInteger(mission.last_ledger_sequence)) {
+      return { released: false, reason: "no_last_ledger_sequence", mission };
+    }
+    if (!signedClaimMayRelease({
+      lastLedgerSequence: mission.last_ledger_sequence,
+      validatedLedgerIndex: input.validatedLedger,
+      hashFound: input.hashFound,
+    })) {
+      return { released: false, reason: "not_proven", mission };
+    }
+    const drops = mission.claim
+      ? (BigInt(mission.claim.amount) + BigInt(mission.claim.fee)).toString()
+      : mission.budget.budget_drops;
+    const live = events.some((event) => event
+      && event.type === "budget.uncertain"
+      && event.mission_id === mission.id
+      && event.live === true);
+    api.append({
+      type: "budget.ledger_expired",
+      at: now,
+      mission_id: mission.id,
+      day: mission.day,
+      drops,
+      live,
+    });
+    mission.hold = "released";
+    mission.status = "blocked";
+    mission.code = "LEDGER_EXPIRED";
+    mission.complete = false;
+    mission.submitted = false;
+    mission.live = false;
+    mission.retry_blocked = true;
+    mission.rationale = "The validated ledger passed LastLedgerSequence and the hash was absent. The hold was released. This is not a completed purchase.";
+    mission.updated_at = now;
+    api.append({ type: "mission.upsert", at: now, mission });
+    return { released: true, mission };
+  });
+}
+
 module.exports = {
   reservedDrops,
   claimMatches,
   beginSubmit,
   finishSubmit,
   notePresign,
+  stampPrepared,
+  releasePassedWindow,
   acceptClaim,
   noteDeliveryFailure,
   releaseUnsignedClaim,

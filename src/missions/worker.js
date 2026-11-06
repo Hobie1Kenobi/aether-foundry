@@ -14,8 +14,10 @@ const path = require("path");
 const config = require("./config");
 const { coded, readEvents } = require("./ledger");
 const { fold, startMission, blockMission, act, evaluate, view } = require("./engine");
-const { beginSubmit, finishSubmit, releasePrepared, releaseUnsignedClaim, narrowUnsubmittedFee, noteDeliveryFailure, notePresign } = require("./submit");
+const { beginSubmit, finishSubmit, releasePrepared, releaseUnsignedClaim, narrowUnsubmittedFee, noteDeliveryFailure, notePresign, stampPrepared, releasePassedWindow } = require("./submit");
 const networkFee = require("./network-fee");
+const ledgerWindow = require("./ledger-window");
+const serviceResult = require("./service-result");
 const x402Deliver = require("./x402-deliver");
 const missionPolicy = require("./policy");
 const guard = require("./runtime-guard");
@@ -302,6 +304,36 @@ async function maybeSubmit(mission, env, deps) {
   return { submitted: true, result };
 }
 
+async function expireProvenWindows(ledger, fetchImpl, now) {
+  if (!fetchImpl || !fs.existsSync(path.join(ledger, "events.jsonl"))) return;
+  const state = view(ledger, now);
+  for (const mission of Object.values(state.missions || {})) {
+    if (!Number.isInteger(mission.last_ledger_sequence) || !mission.presigned_hash) continue;
+    if (mission.complete === true || mission.hold === "released" || mission.hold === "spent") continue;
+    const account = mission.signed_fields && mission.signed_fields.Account;
+    if (!account) continue;
+    let found;
+    let validated;
+    try {
+      found = await ledgerWindow.hashFound(fetchImpl, mission.presigned_hash);
+      if (found !== false) continue;
+      validated = (await ledgerWindow.readValidatedAccount(fetchImpl, account)).validated;
+    } catch {
+      continue;
+    }
+    try {
+      releasePassedWindow(ledger, {
+        mission_id: mission.id,
+        now,
+        validatedLedger: validated,
+        hashFound: false,
+      });
+    } catch {
+      /* An unproven window stays open. */
+    }
+  }
+}
+
 async function tick(options) {
   const opts = options || {};
   const env = opts.env || {};
@@ -326,6 +358,7 @@ async function tick(options) {
     writeState(files.ledger, { last_tick_at: now, last_reason: base.reason });
     return base;
   }
+  await expireProvenWindows(files.ledger, runtimeFetch(opts), now);
   const state = readJson(path.join(files.ledger, STATE_NAME)) || { consumed: {} };
   let discovery;
   try {
@@ -441,6 +474,27 @@ async function tick(options) {
       });
       return Object.assign(base, { reason: mission.code, code: mission.code, mission_id: mission.id, worked: true, submitted: false, complete: false });
     }
+    if (!serviceResult.supportsResource(built.resource && built.resource.url)) {
+      const released = releasePrepared(files.ledger, {
+        mission_id: mission.id,
+        now,
+        code: "unsupported_delivery",
+        rationale: "This resource has no supported purchase-result validator. Nothing was signed.",
+      });
+      writeState(files.ledger, {
+        last_tick_at: now,
+        last_reason: "unsupported_delivery",
+        consumed: { [built.key]: { at: now, reason: "unsupported_delivery" } },
+      });
+      return Object.assign(base, {
+        reason: "unsupported_delivery",
+        code: "unsupported_delivery",
+        mission_id: released.mission.id,
+        worked: true,
+        submitted: false,
+        complete: false,
+      });
+    }
     const probe = opts.resourceFetch || (opts.fetch ? null : globalThis.fetch);
     const live = await x402Deliver.preflight(built, probe);
     if (!live.ok) {
@@ -464,6 +518,15 @@ async function tick(options) {
         complete: false,
       });
     }
+    const account = opts.preparedAccount
+      || await ledgerWindow.readValidatedAccount(runtimeFetch(opts), env.MISSION_XRPL_ADDRESS);
+    const bound = ledgerWindow.bindWindow(account.validated, account.sequence);
+    mission = stampPrepared(files.ledger, {
+      mission_id: mission.id,
+      now,
+      sequence: bound.sequence,
+      lastLedgerSequence: bound.lastLedgerSequence,
+    }).mission;
     if (typeof opts.presign !== "function") opts.presign = (mission) => defaultPresign(mission, env, opts);
     let begun;
     try {
@@ -511,7 +574,29 @@ async function tick(options) {
         });
         return Object.assign(base, { reason: "undeliverable", code: "undeliverable", mission_id: mission.id, worked: true, submitted: false, complete: false });
       }
-      notePresign(files.ledger, mission.id, signed.hash);
+      const storedBefore = view(files.ledger, now).missions[mission.id];
+      if (
+        !storedBefore
+        || storedBefore.presigned !== true
+        || storedBefore.signed !== true
+        || storedBefore.presigned_hash !== signed.hash
+        || !storedBefore.signed_fields
+        || !Number.isInteger(storedBefore.last_ledger_sequence)
+      ) {
+        writeState(files.ledger, {
+          last_tick_at: now,
+          last_reason: "persistence_missing",
+          consumed: { [built.key]: { at: now, reason: "persistence_missing" } },
+        });
+        return Object.assign(base, {
+          reason: "persistence_missing",
+          code: "persistence_missing",
+          mission_id: mission.id,
+          worked: true,
+          submitted: false,
+          complete: false,
+        });
+      }
       let submittedOnce = false;
       let delivered = { http_status: 0, submitted: false, hash: null, mode: "refused", parsed: null };
       try {
@@ -534,8 +619,12 @@ async function tick(options) {
       } catch {
         delivered = { http_status: 0, submitted: submittedOnce, hash: null, mode: "refused", parsed: null };
       }
-      const resultBody = delivered.parsed && typeof delivered.parsed === "object" && !delivered.parsed.code ? delivered.parsed : null;
-      if (delivered.http_status === 200 && delivered.hash && resultBody) {
+      const verdict = serviceResult.validatePurchasedService(
+        built.resource && built.resource.url,
+        delivered.http_status,
+        delivered.parsed
+      );
+      if (verdict.useful === true && delivered.hash) {
         const finished = finishSubmit(files.ledger, {
           mission_id: mission.id,
           now,
@@ -549,7 +638,7 @@ async function tick(options) {
             mode: delivered.mode,
             http_status: 200,
             hash: delivered.hash,
-            result: resultBody,
+            result: { schema: verdict.schema },
           },
         });
         mission = evaluate(files.ledger, {
@@ -570,6 +659,8 @@ async function tick(options) {
             mission_id: mission.id,
             now,
             http_status: delivered.http_status,
+            code: verdict.code,
+            error_code: serviceResult.boundedErrorCode(delivered.parsed, delivered.http_status),
           });
         } catch {
           /* The presigned claim stays as it is. */
