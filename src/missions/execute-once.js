@@ -104,12 +104,13 @@ async function signerReady(port) {
   }
 }
 
-function startSigner(env, home) {
+function startSigner(env, home, ledger) {
   const port = guard.assertFreePort(env.FOUNDRY_MISSION_SIGNER_PORT, 8788);
   const child = spawn(process.execPath, [path.join("src", "missions", "signer.js")], {
     cwd: process.cwd(),
     env: Object.assign({}, env, {
       FOUNDRY_MISSION_HOME: home,
+      FOUNDRY_MISSION_LEDGER: ledger,
       FOUNDRY_MISSION_EXECUTE: "yes",
       FOUNDRY_MISSION_ACCOUNT_FILE: path.join(home, "account.json"),
       CI: "",
@@ -149,7 +150,7 @@ async function executeOnce(env, opts) {
   let signer = null;
   const port = guard.assertFreePort(source.FOUNDRY_MISSION_SIGNER_PORT, 8788);
   if (options.spawnSigner !== false && !(await signerReady(port)) && fs.existsSync(path.join(home, "account.json"))) {
-    signer = startSigner(source, home);
+    signer = startSigner(source, home, ledger);
     const started = Date.now();
     while (!(await signerReady(port))) {
       if (Date.now() - started > 5000) throw coded("dedicated signer did not listen", "SIGNER");

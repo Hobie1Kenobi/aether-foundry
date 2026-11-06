@@ -214,6 +214,7 @@ describe("production one-shot entrypoint", () => {
       items: [{ id: "cand-17-51ec932c8e", observed_at: "2026-11-06T19:00:00.000Z" }],
     });
     fs.writeFileSync(path.join(home, "discovery.json"), discovery);
+    fs.writeFileSync(path.join(home, "worker.json"), JSON.stringify({ asleep: true }));
     fs.writeFileSync(path.join(home, "allowlist.json"), JSON.stringify({ payees: [{ address: REVIEWED, resource: SANCTIONS }] }));
     const freshAt = new Date().toISOString();
     fs.writeFileSync(path.join(home, "challenge.json"), JSON.stringify(challenge(INVOICE, "1753", freshAt)));
@@ -327,6 +328,7 @@ describe("production one-shot entrypoint", () => {
     assert.equal(text.includes(next.seed), false);
     assert.equal(fs.readFileSync(path.join(home, "discovery.json"), "utf8"), discovery);
     assert.equal(fs.readFileSync(proof, "utf8").trim(), "sent");
+    assert.equal(JSON.parse(fs.readFileSync(path.join(home, "worker.json"), "utf8")).asleep, true);
     assert.equal(policy.dayUsed(state, "2026-11-06") > 1747n, true);
     assert.equal(policy.dayUsed(state, "2026-11-06") <= 5000000n, true);
     const again = spawn(process.execPath, ["src/missions/execute-once.js"], { cwd: ROOT, env: childEnv });
@@ -335,5 +337,95 @@ describe("production one-shot entrypoint", () => {
     const againCode = await new Promise((resolve) => again.on("exit", resolve));
     assert.equal(againCode, 1);
     assert.match(againErr, /NO_RETRY/);
+  });
+});
+
+describe("spawned signer ledger and asleep latch", () => {
+  it("signs against the named ledger while worker.json stays asleep", async () => {
+    const home = tmp();
+    const ledger = path.join(home, "separate");
+    fs.mkdirSync(ledger);
+    activate(ledger);
+    const oldWallet = xrpl.Wallet.generate();
+    const next = xrpl.Wallet.generate();
+    const prior = hold(ledger, oldWallet.address);
+    decideNewAccount(ledger, accountEnv(home, ledger, { FOUNDRY_MISSION_PRIOR_CLAIM: prior }), NOW);
+    fs.writeFileSync(path.join(home, "worker.json"), JSON.stringify({ asleep: true }));
+    fs.writeFileSync(path.join(home, "account.json"), JSON.stringify({ address: next.address, seed: next.seed }), { mode: 0o600 });
+    fs.chmodSync(path.join(home, "account.json"), 0o600);
+    fs.writeFileSync(path.join(home, "allowlist.json"), JSON.stringify({ payees: [{ address: REVIEWED, resource: SANCTIONS }] }));
+    const freshAt = new Date().toISOString();
+    fs.writeFileSync(path.join(home, "challenge.json"), JSON.stringify(challenge("spawnfresh100aabbcc02", "100", freshAt)));
+    const preload = path.join(home, "preload.js");
+    fs.writeFileSync(preload, `
+      const original = globalThis.fetch;
+      globalThis.fetch = async (url, init) => {
+        const target = String(url);
+        const body = init && init.body ? JSON.parse(init.body) : {};
+        if (target === "https://testnet.xrpl-labs.com") {
+          if (body.method === "server_info") {
+            return new Response(JSON.stringify({ result: { info: { network_id: 1, validated_ledger: { seq: 22118869 } } } }), { status: 200 });
+          }
+          if (body.method === "account_info") {
+            return new Response(JSON.stringify({ result: { validated: true, account_data: { Sequence: 11 } } }), { status: 200 });
+          }
+          return new Response(JSON.stringify({ result: { drops: { open_ledger_fee: "10" } } }), { status: 200 });
+        }
+        if (target.startsWith("https://api.stablecoingateways.com/")) {
+          const header = init && init.headers && (init.headers["PAYMENT-SIGNATURE"] || init.headers["payment-signature"]);
+          if (!header) {
+            return new Response(JSON.stringify({ x402Version: 2, accepts: [{ scheme: "exact", network: "xrpl:1", asset: "XRP", amount: "100", payTo: ${JSON.stringify(REVIEWED)}, maxTimeoutSeconds: 600, extra: { invoiceId: "spawnfresh100aabbcc02", sourceTag: 26100014 } }] }), { status: 402 });
+          }
+          return new Response(JSON.stringify({ code: "verify_failed" }), { status: 402 });
+        }
+        if (String(url).startsWith("http://127.0.0.1:")) return original(url, init);
+        return new Response("{}", { status: 500 });
+      };
+    `);
+    const redact = (text) => String(text || "").split(next.seed).join("[redacted]");
+    const realFetch = globalThis.fetch;
+    let result;
+    try {
+      result = await executeOnce({
+        FOUNDRY_MISSION_HOME: home,
+        FOUNDRY_MISSION_LEDGER: ledger,
+        FOUNDRY_MISSION_EXECUTE_TOKEN: EXECUTE_TOKEN,
+        FOUNDRY_MISSION_EXECUTE_PHRASE: "EXECUTE-ONE-FRESH-PURCHASE",
+        FOUNDRY_MISSION_CHALLENGE_FILE: path.join(home, "challenge.json"),
+        FOUNDRY_MISSION_SIGNER_TOKEN: TOKEN,
+        FOUNDRY_MISSION_SIGNER_PORT: "18798",
+        MISSION_XRPL_ADDRESS: next.address,
+        NODE_OPTIONS: `--require ${preload}`,
+      }, {
+        now: freshAt,
+        fetch: async (url, init) => {
+          const target = String(url);
+          if (target.startsWith("http://127.0.0.1:") || target.startsWith("http://localhost:")) return realFetch(url, init);
+          const body = init && init.body ? JSON.parse(init.body) : {};
+          if (target === "https://testnet.xrpl-labs.com") {
+            if (body.method === "server_info") return new Response(JSON.stringify({ result: { info: { network_id: 1, validated_ledger: { seq: 22118869 } } } }), { status: 200 });
+            if (body.method === "account_info") return new Response(JSON.stringify({ result: { validated: true, account_data: { Sequence: 11 } } }), { status: 200 });
+            return new Response(JSON.stringify({ result: { drops: { open_ledger_fee: "10" } } }), { status: 200 });
+          }
+          const header = init && init.headers && (init.headers["PAYMENT-SIGNATURE"] || init.headers["payment-signature"]);
+          if (!header) {
+            return new Response(JSON.stringify({ x402Version: 2, accepts: [{ scheme: "exact", network: "xrpl:1", asset: "XRP", amount: "100", payTo: REVIEWED, maxTimeoutSeconds: 600, extra: { invoiceId: "spawnfresh100aabbcc02", sourceTag: 26100014 } }] }), { status: 402 });
+          }
+          return new Response(JSON.stringify({ code: "verify_failed" }), { status: 402 });
+        },
+      });
+    } catch (error) {
+      assert.fail(redact(error && error.stack));
+    }
+    assert.equal(result.reason, "delivery_failed");
+    assert.equal(result.complete, false);
+    assert.equal(result.signed, true);
+    assert.equal(result.execute_lease_used, true);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(home, "worker.json"), "utf8")).asleep, true);
+    const text = fs.readFileSync(path.join(ledger, "events.jsonl"), "utf8");
+    assert.equal(/[0-9A-F]{64}/.test(text), true);
+    assert.equal(text.includes(next.seed), false);
+    assert.equal(fs.existsSync(path.join(home, "ledger", "events.jsonl")), false);
+    assert.equal(view(ledger, freshAt).missions[prior].hold, "uncertain");
   });
 });

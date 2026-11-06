@@ -150,10 +150,12 @@ function applyChallenge(dir, input) {
       throw coded("no unsubmitted payment to bind", "TX");
     }
     if (mission.presigned_hash || mission.submit_state) throw coded("refusing to bind a claim that may have been signed", "NO_RETRY");
-    mission.unsigned_tx = Object.assign({}, mission.unsigned_tx, {
+    const tx = Object.assign({}, mission.unsigned_tx, {
       SourceTag: input.sourceTag,
-      Memos: [input.memo],
+      InvoiceID: input.invoiceIdField,
     });
+    delete tx.Memos;
+    mission.unsigned_tx = tx;
     mission.invoice_id = input.invoiceId;
     mission.source_tag = input.sourceTag;
     mission.updated_at = now;
