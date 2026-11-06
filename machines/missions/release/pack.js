@@ -26,10 +26,15 @@ const DOCS = [
   "machines/missions/ensure-up.snippet.sh",
   "machines/missions/release/INSTALL.md",
 ];
-const BINS = ["start", "health", "stop", "arm", "wake", "account", "execute", "publish"];
+const BINS = ["start", "health", "stop", "arm", "wake", "account", "execute", "publish", "reconcile"];
 const EXTRA = ["src/runtime/allowlist.json", "src/missions/port-wait.js"];
 
 function scriptsFromBins(root) {
+  const binDir = path.join(root, "machines/missions/release/bin");
+  const present = fs.readdirSync(binDir).filter((name) => fs.statSync(path.join(binDir, name)).isFile());
+  for (const name of present) {
+    if (!BINS.includes(name)) throw new Error(`bin/${name} is not in the pack list`);
+  }
   const scripts = new Set();
   for (const name of BINS) {
     const text = fs.readFileSync(path.join(root, "machines/missions/release/bin", name), "utf8");
