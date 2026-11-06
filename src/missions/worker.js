@@ -31,7 +31,10 @@ const { check: checkArm } = require("./arm");
 const DEFAULT_PORT = 8794;
 const STATE_NAME = "worker-state.json";
 
-function scheduleOpen(env, fileConfig) {
+function scheduleOpen(env, fileConfig, opts) {
+  if (opts && Array.isArray(opts.oneShotItems)) {
+    return Boolean(env && env.FOUNDRY_MISSION_EXECUTE === "yes");
+  }
   if (!env || env.FOUNDRY_MISSION_WORKER !== "yes") return false;
   if (fileConfig && fileConfig.asleep === true) return false;
   return true;
@@ -352,7 +355,7 @@ async function tick(options) {
   const now = opts.now || new Date().toISOString();
   const files = pathsOf(opts);
   const fileConfig = readJson(files.config);
-  const schedule = scheduleOpen(env, fileConfig);
+  const schedule = scheduleOpen(env, fileConfig, opts);
   const events = fs.existsSync(path.join(files.ledger, "events.jsonl")) ? readEvents(files.ledger) : [];
   const enabled = classOpen(events);
   const base = {
@@ -618,7 +621,7 @@ async function tick(options) {
       now,
       sourceTag: challenge.sourceTag,
       invoiceId: challenge.invoiceId,
-      memo: challenge.memo,
+      invoiceIdField: challenge.invoiceIdField,
     }).mission;
     const account = opts.preparedAccount
       || await ledgerWindow.readValidatedAccount(runtimeFetch(opts), env.MISSION_XRPL_ADDRESS);
@@ -779,6 +782,7 @@ async function tick(options) {
           mission_id: mission.id,
           worked: true,
           submitted: delivered.submitted === true,
+          signed: true,
           complete: false,
         });
       }

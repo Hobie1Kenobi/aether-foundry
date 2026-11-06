@@ -88,7 +88,12 @@ async function preflight(built, fetchImpl) {
   return { ok: true, accept: live };
 }
 
+const crypto = require("crypto");
 const RETAINED_INVOICE = "1793992874-ebc1623318b14ea7-d1737-4c212402f35bab060de0ac45";
+
+function invoiceIdField(invoiceId) {
+  return crypto.createHash("sha256").update(String(invoiceId), "utf8").digest("hex").toUpperCase();
+}
 
 function bindChallenge(accept) {
   if (!accept || accept.scheme !== "exact" || accept.network !== "xrpl:1" || accept.asset !== "XRP") {
@@ -109,12 +114,7 @@ function bindChallenge(accept) {
   return {
     sourceTag: tag,
     invoiceId,
-    memo: {
-      Memo: {
-        MemoType: Buffer.from("invoice", "utf8").toString("hex").toUpperCase(),
-        MemoData: Buffer.from(invoiceId, "utf8").toString("hex").toUpperCase(),
-      },
-    },
+    invoiceIdField: invoiceIdField(invoiceId),
   };
 }
 
@@ -143,6 +143,7 @@ module.exports = {
   sameAccept,
   preflight,
   RETAINED_INVOICE,
+  invoiceIdField,
   bindChallenge,
   deliverProof,
   buildSignaturePayload: x402.buildSignaturePayload,
