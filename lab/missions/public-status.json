@@ -1,10 +1,10 @@
 {
   "schema": "aether.missions.public-status",
   "version": 1,
-  "sequence": 2,
-  "prev_sequence": 1,
-  "source_observed_at": "2026-11-06T18:26:11.349Z",
-  "published_at": "2026-11-06T18:26:18.805Z",
+  "sequence": 3,
+  "prev_sequence": 2,
+  "source_observed_at": "2026-11-06T18:35:14.030Z",
+  "published_at": "2026-11-06T18:35:58.047Z",
   "spending_enabled": true,
   "spending_enabled_source": "ledger",
   "signing_enabled": false,
@@ -97,6 +97,249 @@
       "account_reserve_drops": "0",
       "network_fee_drops": "0",
       "bridge_custody_drops": "0"
+    },
+    {
+      "id": "msn98197d80d5c55bf0",
+      "status": "blocked",
+      "code": "unsupported_protocol",
+      "stage": "policy",
+      "rationale": "No exact xrpl:1 XRP accept in the payment requirement.",
+      "labels": {
+        "role": "agent",
+        "counterparty": "unclassified",
+        "environment": "testnet",
+        "mode": "simulation",
+        "approval": "denied",
+        "network": "xrpl:1"
+      },
+      "settlement": null,
+      "live": false,
+      "signed": false,
+      "submitted": false,
+      "complete": false,
+      "foreign_revenue_drops": "0",
+      "proof_hash": null,
+      "explorer": null,
+      "budget_drops": "0",
+      "account_reserve_drops": "0",
+      "network_fee_drops": "0",
+      "bridge_custody_drops": "0"
+    },
+    {
+      "id": "msna20e2fcd26d4add7",
+      "status": "blocked",
+      "code": "MAINNET",
+      "stage": "policy",
+      "rationale": "Refusing an xrpl:0 payment requirement.",
+      "labels": {
+        "role": "agent",
+        "counterparty": "unclassified",
+        "environment": "testnet",
+        "mode": "simulation",
+        "approval": "denied",
+        "network": "xrpl:1"
+      },
+      "settlement": null,
+      "live": false,
+      "signed": false,
+      "submitted": false,
+      "complete": false,
+      "foreign_revenue_drops": "0",
+      "proof_hash": null,
+      "explorer": null,
+      "budget_drops": "0",
+      "account_reserve_drops": "0",
+      "network_fee_drops": "0",
+      "bridge_custody_drops": "0"
+    },
+    {
+      "id": "msn74d27ef83953eca0",
+      "status": "blocked",
+      "code": "MAINNET",
+      "stage": "policy",
+      "rationale": "Refusing an xrpl:0 payment requirement.",
+      "labels": {
+        "role": "agent",
+        "counterparty": "unclassified",
+        "environment": "testnet",
+        "mode": "simulation",
+        "approval": "denied",
+        "network": "xrpl:1"
+      },
+      "settlement": null,
+      "live": false,
+      "signed": false,
+      "submitted": false,
+      "complete": false,
+      "foreign_revenue_drops": "0",
+      "proof_hash": null,
+      "explorer": null,
+      "budget_drops": "0",
+      "account_reserve_drops": "0",
+      "network_fee_drops": "0",
+      "bridge_custody_drops": "0"
+    },
+    {
+      "id": "msn76733bc83c6df023",
+      "status": "blocked",
+      "code": "MAINNET",
+      "stage": "policy",
+      "rationale": "Refusing an xrpl:0 payment requirement.",
+      "labels": {
+        "role": "agent",
+        "counterparty": "unclassified",
+        "environment": "testnet",
+        "mode": "simulation",
+        "approval": "denied",
+        "network": "xrpl:1"
+      },
+      "settlement": null,
+      "live": false,
+      "signed": false,
+      "submitted": false,
+      "complete": false,
+      "foreign_revenue_drops": "0",
+      "proof_hash": null,
+      "explorer": null,
+      "budget_drops": "0",
+      "account_reserve_drops": "0",
+      "network_fee_drops": "0",
+      "bridge_custody_drops": "0"
+    },
+    {
+      "id": "msn65f5822ce2e2ea6a",
+      "status": "blocked",
+      "code": "MAINNET",
+      "stage": "policy",
+      "rationale": "Refusing an xrpl:0 payment requirement.",
+      "labels": {
+        "role": "agent",
+        "counterparty": "unclassified",
+        "environment": "testnet",
+        "mode": "simulation",
+        "approval": "denied",
+        "network": "xrpl:1"
+      },
+      "settlement": null,
+      "live": false,
+      "signed": false,
+      "submitted": false,
+      "complete": false,
+      "foreign_revenue_drops": "0",
+      "proof_hash": null,
+      "explorer": null,
+      "budget_drops": "0",
+      "account_reserve_drops": "0",
+      "network_fee_drops": "0",
+      "bridge_custody_drops": "0"
+    },
+    {
+      "id": "msn98283e2ef774d331",
+      "status": "blocked",
+      "code": "MAINNET",
+      "stage": "policy",
+      "rationale": "Refusing an xrpl:0 payment requirement.",
+      "labels": {
+        "role": "agent",
+        "counterparty": "unclassified",
+        "environment": "testnet",
+        "mode": "simulation",
+        "approval": "denied",
+        "network": "xrpl:1"
+      },
+      "settlement": null,
+      "live": false,
+      "signed": false,
+      "submitted": false,
+      "complete": false,
+      "foreign_revenue_drops": "0",
+      "proof_hash": null,
+      "explorer": null,
+      "budget_drops": "0",
+      "account_reserve_drops": "0",
+      "network_fee_drops": "0",
+      "bridge_custody_drops": "0"
+    },
+    {
+      "id": "msn0325ebbcfdc13dd9",
+      "status": "blocked",
+      "code": "MAINNET",
+      "stage": "policy",
+      "rationale": "Refusing an xrpl:0 payment requirement.",
+      "labels": {
+        "role": "agent",
+        "counterparty": "unclassified",
+        "environment": "testnet",
+        "mode": "simulation",
+        "approval": "denied",
+        "network": "xrpl:1"
+      },
+      "settlement": null,
+      "live": false,
+      "signed": false,
+      "submitted": false,
+      "complete": false,
+      "foreign_revenue_drops": "0",
+      "proof_hash": null,
+      "explorer": null,
+      "budget_drops": "0",
+      "account_reserve_drops": "0",
+      "network_fee_drops": "0",
+      "bridge_custody_drops": "0"
+    },
+    {
+      "id": "msn98faf8c7eacae9c6",
+      "status": "blocked",
+      "code": "FEE",
+      "stage": "policy",
+      "rationale": "The XRPL Labs network fee could not be used. A merchant fee was not invented.",
+      "labels": {
+        "role": "agent",
+        "counterparty": "unclassified",
+        "environment": "testnet",
+        "mode": "simulation",
+        "approval": "denied",
+        "network": "xrpl:1"
+      },
+      "settlement": null,
+      "live": false,
+      "signed": false,
+      "submitted": false,
+      "complete": false,
+      "foreign_revenue_drops": "0",
+      "proof_hash": null,
+      "explorer": null,
+      "budget_drops": "0",
+      "account_reserve_drops": "0",
+      "network_fee_drops": "0",
+      "bridge_custody_drops": "0"
+    },
+    {
+      "id": "msna2ba40b55fea8fe2",
+      "status": "blocked",
+      "code": "FEE",
+      "stage": "policy",
+      "rationale": "The XRPL Labs network fee could not be used. A merchant fee was not invented.",
+      "labels": {
+        "role": "agent",
+        "counterparty": "unclassified",
+        "environment": "testnet",
+        "mode": "simulation",
+        "approval": "denied",
+        "network": "xrpl:1"
+      },
+      "settlement": null,
+      "live": false,
+      "signed": false,
+      "submitted": false,
+      "complete": false,
+      "foreign_revenue_drops": "0",
+      "proof_hash": null,
+      "explorer": null,
+      "budget_drops": "0",
+      "account_reserve_drops": "0",
+      "network_fee_drops": "0",
+      "bridge_custody_drops": "0"
     }
   ],
   "replays": {
@@ -141,9 +384,108 @@
         "rationale": "The XRPL Labs network fee could not be used. A merchant fee was not invented.",
         "live": false
       }
+    ],
+    "msn98197d80d5c55bf0": [
+      {
+        "type": "mission.upsert",
+        "at": "2026-11-06T18:27:11.383Z",
+        "code": "unsupported_protocol",
+        "status": "blocked",
+        "settlement": null,
+        "rationale": "No exact xrpl:1 XRP accept in the payment requirement.",
+        "live": false
+      }
+    ],
+    "msna20e2fcd26d4add7": [
+      {
+        "type": "mission.upsert",
+        "at": "2026-11-06T18:28:11.406Z",
+        "code": "MAINNET",
+        "status": "blocked",
+        "settlement": null,
+        "rationale": "Refusing an xrpl:0 payment requirement.",
+        "live": false
+      }
+    ],
+    "msn74d27ef83953eca0": [
+      {
+        "type": "mission.upsert",
+        "at": "2026-11-06T18:29:11.430Z",
+        "code": "MAINNET",
+        "status": "blocked",
+        "settlement": null,
+        "rationale": "Refusing an xrpl:0 payment requirement.",
+        "live": false
+      }
+    ],
+    "msn76733bc83c6df023": [
+      {
+        "type": "mission.upsert",
+        "at": "2026-11-06T18:30:11.450Z",
+        "code": "MAINNET",
+        "status": "blocked",
+        "settlement": null,
+        "rationale": "Refusing an xrpl:0 payment requirement.",
+        "live": false
+      }
+    ],
+    "msn65f5822ce2e2ea6a": [
+      {
+        "type": "mission.upsert",
+        "at": "2026-11-06T18:31:11.465Z",
+        "code": "MAINNET",
+        "status": "blocked",
+        "settlement": null,
+        "rationale": "Refusing an xrpl:0 payment requirement.",
+        "live": false
+      }
+    ],
+    "msn98283e2ef774d331": [
+      {
+        "type": "mission.upsert",
+        "at": "2026-11-06T18:32:11.500Z",
+        "code": "MAINNET",
+        "status": "blocked",
+        "settlement": null,
+        "rationale": "Refusing an xrpl:0 payment requirement.",
+        "live": false
+      }
+    ],
+    "msn0325ebbcfdc13dd9": [
+      {
+        "type": "mission.upsert",
+        "at": "2026-11-06T18:33:11.528Z",
+        "code": "MAINNET",
+        "status": "blocked",
+        "settlement": null,
+        "rationale": "Refusing an xrpl:0 payment requirement.",
+        "live": false
+      }
+    ],
+    "msn98faf8c7eacae9c6": [
+      {
+        "type": "mission.upsert",
+        "at": "2026-11-06T18:34:11.543Z",
+        "code": "FEE",
+        "status": "blocked",
+        "settlement": null,
+        "rationale": "The XRPL Labs network fee could not be used. A merchant fee was not invented.",
+        "live": false
+      }
+    ],
+    "msna2ba40b55fea8fe2": [
+      {
+        "type": "mission.upsert",
+        "at": "2026-11-06T18:35:14.030Z",
+        "code": "FEE",
+        "status": "blocked",
+        "settlement": null,
+        "rationale": "The XRPL Labs network fee could not be used. A merchant fee was not invented.",
+        "live": false
+      }
     ]
   },
   "integrity_means": "sha256 of this document; detects corruption, not who wrote it",
   "sequence_means": "prev_sequence must equal sequence-1 inside this file. A stateless reader cannot tell a replaced chain from a real one.",
-  "integrity": "a28099eb2aa38a7a6bb7cf9afe5f9831010d37caeb68885d1a08ef16179003eb"
+  "integrity": "a02f0a0aa65ed070202884212573955f0982b2e485d518a5478fe8f0fad551a4"
 }
