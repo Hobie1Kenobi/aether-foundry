@@ -9,11 +9,11 @@ const HEADERS = {
 };
 
 export async function GET() {
-  const result = publicMissionResponse("GET", "status");
+  const result = await publicMissionResponse("GET", "status");
   return Response.json(result.body, { status: result.status, headers: HEADERS });
 }
 
 export async function POST() {
-  const result = publicMissionResponse("POST", "status");
+  const result = await publicMissionResponse("POST", "status");
   return Response.json(result.body, { status: result.status, headers: HEADERS });
 }

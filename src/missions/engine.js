@@ -32,6 +32,7 @@ function emptyState() {
     denials: [],
     live_spent: 0n,
     live_uncertain: 0n,
+    missionCommitted: {},
   };
 }
 
@@ -53,6 +54,8 @@ function applyReserve(state, event) {
   const amount = BigInt(event.budget_drops);
   const day = dayBucket(state, event.day);
   add(day, "reserved", amount);
+  const prior = BigInt(state.missionCommitted[event.mission_id] || "0");
+  state.missionCommitted[event.mission_id] = (prior + amount).toString();
   const mission = state.missions[event.mission_id];
   if (!mission) return;
   mission.budget = event.components;
@@ -273,8 +276,12 @@ function startMission(dir, input, opts) {
     }
     const day = chicagoDay(now);
     const used = policy.dayUsed(state, day);
+    const committed = BigInt(state.missionCommitted[mission.id] || "0");
+    if (committed + BigInt(priced.budget_drops) > config.PER_MISSION_DROPS) {
+      return { mission: deny(api, mission, "CAP", "Per-mission cap of 1000000 drops includes every step.", now), replay: false };
+    }
     if (used + BigInt(priced.budget_drops) > config.DAILY_DROPS) {
-      return { mission: deny(api, mission, "CAP", "Chicago-day cap of 5000000 drops would be exceeded.", now), replay: false };
+      return { mission: deny(api, mission, "CAP", "Chicago-day cap of 5000000 drops would be exceeded. Unresolved uncertain holds still count.", now), replay: false };
     }
     api.append({
       type: "budget.reserved",
@@ -286,6 +293,7 @@ function startMission(dir, input, opts) {
       live: false,
     });
     mission.budget = priced;
+    mission.committed_drops = (committed + BigInt(priced.budget_drops)).toString();
     mission.day = day;
     mission.hold = "unsubmitted";
     mission.stage = "policy";
@@ -335,6 +343,55 @@ function approve(dir, input, opts) {
       mission.rationale = "Human approval recorded. Runtime spend is not activated, so nothing was signed or submitted.";
     }
     mission.updated_at = now;
+    persist(api, mission);
+    return { mission, replay: false };
+  });
+}
+
+function addStep(dir, input, opts) {
+  const options = opts || {};
+  const now = input.now || new Date().toISOString();
+  const key = String(input.idempotency_key || "");
+  if (!/^[a-z0-9][a-z0-9-]{7,63}$/.test(key)) throw coded("idempotency_key is missing", "IDEMPOTENCY");
+  return exclusive(dir, (api) => {
+    const state = fold(api.read());
+    expireHolds(api, state, now);
+    const prior = Object.values(state.missions).find((mission) => mission.step_key === key);
+    if (prior) return { mission: prior, replay: true };
+    const mission = state.missions[input.mission_id];
+    if (!mission) throw coded("mission not found", "PLAN");
+    if (state.killed) throw coded("hard stop is on", "killed");
+    let priced;
+    try {
+      priced = policy.quote(input);
+    } catch (error) {
+      throw error;
+    }
+    const committed = BigInt(state.missionCommitted[mission.id] || "0");
+    const extra = BigInt(priced.budget_drops);
+    if (committed + extra > config.PER_MISSION_DROPS) {
+      api.append({ type: "control.denial", at: now, mission_id: mission.id, code: "CAP", rationale: "Per-mission cap of 1000000 drops includes every step.", live: false });
+      throw coded("per-mission cap includes every step", "CAP");
+    }
+    const day = chicagoDay(now);
+    if (policy.dayUsed(state, day) + extra > config.DAILY_DROPS) {
+      api.append({ type: "control.denial", at: now, mission_id: mission.id, code: "CAP", rationale: "Chicago-day cap would be exceeded.", live: false });
+      throw coded("daily cap would be exceeded", "CAP");
+    }
+    api.append({
+      type: "budget.reserved",
+      at: now,
+      mission_id: mission.id,
+      day,
+      budget_drops: priced.budget_drops,
+      components: priced,
+      live: false,
+      step_key: key,
+    });
+    mission.committed_drops = (committed + extra).toString();
+    mission.step_key = key;
+    mission.updated_at = now;
+    mission.rationale = "Another step was reserved against the same mission. The 1 XRP cap is the sum of the steps.";
     persist(api, mission);
     return { mission, replay: false };
   });
@@ -803,6 +860,7 @@ module.exports = {
   fold,
   missionId,
   startMission,
+  addStep,
   approve,
   control,
   act,

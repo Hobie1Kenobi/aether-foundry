@@ -57,6 +57,22 @@ curl -sS -X POST http://127.0.0.1:8787/dry-run \
 
 Expect `key_loaded: false` and `submitted: false`. Do not set `FOUNDRY_MISSION_EXECUTE` in this cloud environment.
 
+## Publish the sanitized snapshot
+
+The box ledger `lab/missions/events.jsonl` stays on the box and is gitignored. The desk on Vercel does not have that disk. It uses the same GitHub read as `/api/status`: resolve `commits/main` to a 40-character SHA, then fetch `lab/missions/public-status.json` at that SHA. A missing file, HTTP error, timeout, bad integrity, unknown version, or a sequence that does not follow `prev_sequence` is `unavailable`. Live spend stays null.
+
+On the box, after missions have been recorded:
+
+```bash
+cd /path/aether-foundry
+npm run missions:publish
+git add lab/missions/public-status.json
+git commit -m "Publish sanitized mission snapshot"
+git push origin main
+```
+
+`npm run missions:publish` writes `lab/missions/public-status.json` and `lab/missions/publish-state.json` in the ledger directory. The state file is gitignored and is what stops an older sequence from being published again. Do not copy it to Vercel and do not commit it. The command does not read a seed and does not start a timer.
+
 ## Public desk
 
 `GET /api/missions`, `GET /api/missions/status`, `GET /api/missions/:id`, and `GET /api/missions/:id/replay` are read-only. Other methods return `PUBLIC_WRITE`. The desk serves `machines/missions/public-feed.json`. It does not read the operator ledger and it does not accept a visitor command.

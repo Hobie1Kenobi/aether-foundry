@@ -1,4 +1,10 @@
-import { loadMissionRoute, loadMissionStatus } from "./missions-runtime.js";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const { loadMissionRoute, loadMissionStatus } = require("./missions-runtime.js") as {
+  loadMissionRoute: (route: string, id?: string, now?: string) => Promise<{ status: number; body: Record<string, unknown> }>;
+  loadMissionStatus: (now?: string) => Promise<Record<string, unknown>>;
+};
 
 export type MissionStatus = {
   ok?: boolean;
@@ -23,15 +29,18 @@ export type MissionStatus = {
   missions?: Array<{ id: string; status: string; rationale?: string; settlement?: string | null }>;
 };
 
-export function missionStatus(now?: string): MissionStatus {
-  return loadMissionStatus(now) as MissionStatus;
+export async function missionStatus(now?: string): Promise<MissionStatus> {
+  return (await loadMissionStatus(now)) as MissionStatus;
 }
 
-export function missionRoute(route: string, id?: string, now?: string) {
-  return loadMissionRoute(route, id, now) as { status: number; body: MissionStatus & { code?: string; error?: string } };
+export async function missionRoute(route: string, id?: string, now?: string) {
+  return (await loadMissionRoute(route, id, now)) as {
+    status: number;
+    body: MissionStatus & { code?: string; error?: string };
+  };
 }
 
-export function publicMissionResponse(method: string, route: string, id?: string) {
+export async function publicMissionResponse(method: string, route: string, id?: string) {
   if (method !== "GET") {
     return {
       status: 405,

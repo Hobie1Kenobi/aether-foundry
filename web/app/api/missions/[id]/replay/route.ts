@@ -10,11 +10,11 @@ const HEADERS = {
 
 export async function GET(_: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
-  const result = publicMissionResponse("GET", "replay", id);
+  const result = await publicMissionResponse("GET", "replay", id);
   return Response.json(result.body, { status: result.status, headers: HEADERS });
 }
 
 export async function POST() {
-  const result = publicMissionResponse("POST", "replay");
+  const result = await publicMissionResponse("POST", "replay");
   return Response.json(result.body, { status: result.status, headers: HEADERS });
 }

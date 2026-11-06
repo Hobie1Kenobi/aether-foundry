@@ -13,21 +13,21 @@ function json(status: number, body: unknown) {
 }
 
 export async function GET() {
-  const result = publicMissionResponse("GET", "feed");
+  const result = await publicMissionResponse("GET", "feed");
   return json(result.status, result.body);
 }
 
 export async function POST() {
-  const result = publicMissionResponse("POST", "feed");
+  const result = await publicMissionResponse("POST", "feed");
   return json(result.status, result.body);
 }
 
 export async function PUT() {
-  const result = publicMissionResponse("PUT", "feed");
+  const result = await publicMissionResponse("PUT", "feed");
   return json(result.status, result.body);
 }
 
 export async function DELETE() {
-  const result = publicMissionResponse("DELETE", "feed");
+  const result = await publicMissionResponse("DELETE", "feed");
   return json(result.status, result.body);
 }

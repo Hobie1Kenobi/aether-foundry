@@ -8,8 +8,8 @@ export const metadata = {
   description: "Read-only mission status folded from the Foundry ledger when that ledger is on this server.",
 };
 
-export default function MissionsPage() {
-  const feed = missionStatus();
+export default async function MissionsPage() {
+  const feed = await missionStatus();
   const live = feed.live_spend_drops == null ? "unknown" : feed.live_spend_drops;
   return (
     <main>
@@ -83,8 +83,9 @@ export default function MissionsPage() {
           The desk process reads <code>events.jsonl</code> from <code>FOUNDRY_MISSION_LEDGER</code>, or from{" "}
           <code>lab/missions</code> beside the repo when this server is the Foundry box. It folds those events. It does
           not use a committed example document, and a missing ledger is unknown spend rather than a measured zero.
-          Vercel has no copy of the box ledger, so production stays unavailable until that file is on the server that
-          runs this route.
+          On Vercel the same route resolves the current main commit and reads the sanitized snapshot{" "}
+          <code>lab/missions/public-status.json</code> at that commit. Until the box publishes one, this page stays
+          unavailable. The snapshot is not a second ledger.
         </p>
       </section>
     </main>

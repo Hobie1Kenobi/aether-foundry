@@ -83,16 +83,18 @@ function quote(input) {
 }
 
 function tokenOk(got, expected) {
-  const left = Buffer.from(String(got || ""));
-  const right = Buffer.from(String(expected || ""));
-  if (right.length < 16 || left.length !== right.length) return false;
-  return crypto.timingSafeEqual(left, right);
+  if (typeof expected !== "string" || expected.length < 16) return false;
+  if (typeof got !== "string" || got.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(got), Buffer.from(expected));
 }
 
 function dayUsed(state, day) {
-  const row = state.days[day];
-  if (!row) return 0n;
-  return BigInt(row.reserved) + BigInt(row.spent) + BigInt(row.uncertain);
+  const row = (state.days && state.days[day]) || {};
+  let uncertain = 0n;
+  for (const bucket of Object.values(state.days || {})) {
+    uncertain += BigInt((bucket && bucket.uncertain) || "0");
+  }
+  return BigInt(row.reserved || "0") + BigInt(row.spent || "0") + uncertain;
 }
 
 module.exports = {
