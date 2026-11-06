@@ -41,7 +41,11 @@ async function rpc(fetchImpl, method) {
   if (typeof fetchImpl !== "function") throw coded("network fee RPC is not configured", "FEE");
   const response = await fetchImpl(LABS_HTTP, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json",
+      "user-agent": "aether-foundry-missions",
+    },
     body: JSON.stringify({ method, params: [{}] }),
   });
   if (!response || response.ok === false) throw coded("XRPL Labs fee RPC failed", "FEE");

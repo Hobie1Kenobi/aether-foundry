@@ -4,6 +4,8 @@
 # Does not print tokens.env or account.json.
 
 HOME_DIR=/workspace/foundry-ops/missions-runtime
+# This release's unpack directory. bin/stop waits for 8794 and 8788 to be free
+# and does not kill any other listener.
 RELEASE=/workspace/foundry-ops/releases/REPLACE_WITH_RELEASE_SHA
 TOKENS="$HOME_DIR/tokens.env"
 ACCOUNT="$HOME_DIR/account.json"

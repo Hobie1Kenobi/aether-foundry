@@ -1,15 +1,21 @@
 #!/bin/sh
-# Stop only the pid files this release wrote.
+# Stop only the pid files this release wrote, then wait until those pids
+# have exited and their dedicated ports can be bound. Never signals another port.
 set -eu
+ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+cd "$ROOT"
 HOME_DIR=${FOUNDRY_MISSION_HOME:-/workspace/foundry-ops/missions-runtime}
-for name in worker signer; do
+stop_one() {
+  name=$1
+  port=$2
   pidfile="$HOME_DIR/$name.pid"
-  if [ -f "$pidfile" ]; then
-    pid=$(cat "$pidfile")
-    if kill -0 "$pid" 2>/dev/null; then
-      kill "$pid"
-    fi
-    rm -f "$pidfile"
+  if [ ! -f "$pidfile" ]; then
+    return 0
   fi
-done
+  pid=$(cat "$pidfile")
+  node src/missions/port-wait.js --pid "$pid" --port "$port"
+  rm -f "$pidfile"
+}
+stop_one worker 8794
+stop_one signer 8788
 echo "stopped"

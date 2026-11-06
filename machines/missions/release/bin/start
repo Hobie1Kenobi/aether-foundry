@@ -7,6 +7,8 @@ ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 HOME_DIR=${FOUNDRY_MISSION_HOME:-/workspace/foundry-ops/missions-runtime}
 install -d "$HOME_DIR" "$HOME_DIR/ledger"
+node src/missions/port-wait.js --check --port 8794
+node src/missions/port-wait.js --check --port 8788
 if [ -f "$HOME_DIR/worker.pid" ] && kill -0 "$(cat "$HOME_DIR/worker.pid")" 2>/dev/null; then
   echo "mission worker already running"
   exit 0
