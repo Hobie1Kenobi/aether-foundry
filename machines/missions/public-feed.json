@@ -1,0 +1,17 @@
+{
+  "schema": "aether.missions.public",
+  "spending_enabled": false,
+  "signing_enabled": false,
+  "authorized_per_mission_drops": "1000000",
+  "authorized_daily_drops": "5000000",
+  "authorized_per_mission_xrp": "1",
+  "authorized_daily_xrp": "5",
+  "timezone": "America/Chicago",
+  "live_spend_drops": "0",
+  "live_spend_xrp": "0",
+  "source": "snapshot",
+  "source_observed_at": "2026-11-06T17:00:00.000Z",
+  "killed": false,
+  "missions": [],
+  "note": "Example schema only. The desk does not read this file. Live figures come from lab/missions/events.jsonl on the Foundry box."
+}

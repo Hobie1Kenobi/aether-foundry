@@ -10,7 +10,7 @@ export default function DeskPage() {
       <footer style={{ marginTop: "2rem" }} className="muted">
         Aether Foundry · XRPL Testnet desk · does not sign · x402 pay-to W3 ·{" "}
         <a href="/demo">Demo</a> · <a href="/net">Net chat</a> ·{" "}
-        <a href="/wall">Wall of Change</a>
+        <a href="/wall">Wall of Change</a> · <a href="/missions">Missions</a>
       </footer>
     </main>
   );

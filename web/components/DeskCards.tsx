@@ -291,6 +291,7 @@ export async function DeskCards() {
           <a href="/.well-known/xrp-ledger.toml">XRPL.toml ↗</a>
           <a href="/api/status">Status JSON</a>
           <a href="/wall">Wall</a>
+          <a href="/missions">Missions</a>
           <a href="#frontier-title">Frontier</a>
           <a href="#devnet-frontier">Devnet</a>
           <a href="#storefront-title">Walk-In storefront</a>

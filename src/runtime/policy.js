@@ -13,6 +13,7 @@ const grants = require("../grants/policy");
 const guard = require("../x402-outbound-guard");
 const walkIn = require("../walk-in-public");
 const license = require("../license/catalog");
+const axelarConfig = require("../bridge/axelar/config");
 
 const ALLOWLIST_PATH = path.join(__dirname, "allowlist.json");
 const STALE_MS = anchors.MAX_AGE_HOURS * 60 * 60 * 1000;
@@ -491,6 +492,9 @@ function assertOutbound(opts) {
   const payTo = options.payTo;
   if (payTo === anchors.WALLETS.W3.address) {
     throw coded("refusing circular outbound W3 to W3", "CIRCULAR");
+  }
+  if (payTo === axelarConfig.XRPL_GATEWAY || payTo === axelarConfig.XRPL_GATEWAY_MAINNET_REFUSED) {
+    throw coded("refusing Axelar gateway as x402 payTo", "BRIDGE");
   }
   const index = labeledIndex(options.index);
   const label = payTo ? index.get(payTo) : "";
@@ -1265,12 +1269,65 @@ function assertKnownIntent(tx, intent, opts) {
   }
 }
 
+function assertNotAxelarPayment(tx, intent) {
+  const name = typeof intent === "string" ? intent : "";
+  if (/axelar|interchain_transfer|bridge_its/i.test(name)) {
+    throw coded("refusing Axelar intent on the agent signer", "BRIDGE");
+  }
+  if (!tx || typeof tx !== "object") return;
+  if (tx.Destination === axelarConfig.XRPL_GATEWAY || tx.Destination === axelarConfig.XRPL_GATEWAY_MAINNET_REFUSED) {
+    throw coded("refusing Axelar gateway payment on the agent signer", "BRIDGE");
+  }
+  if (tx.Account === axelarConfig.XRPL_GATEWAY_MAINNET_REFUSED) {
+    throw coded("refusing Axelar mainnet gateway", "MAINNET");
+  }
+  const memos = grants.decodeMemos(tx);
+  if (memos.type === "interchain_transfer" || memos.type === "call_contract" || memos.destination_chain || memos.gas_fee_amount) {
+    throw coded("refusing Axelar memo on the agent signer", "BRIDGE");
+  }
+  const list = Array.isArray(tx.Memos) ? tx.Memos : [];
+  const needles = ["interchain_transfer", "call_contract", "destination_chain", "gas_fee_amount"].map((item) =>
+    Buffer.from(item, "utf8").toString("hex")
+  );
+  for (const wrapper of list) {
+    const row = wrapper && wrapper.Memo;
+    if (!row) continue;
+    const blob = `${row.MemoType || ""}${row.MemoData || ""}`.toLowerCase();
+    if (needles.some((needle) => blob.includes(needle))) {
+      throw coded("refusing Axelar memo on the agent signer", "BRIDGE");
+    }
+  }
+}
+
+function assertMissionSpend(tx, env) {
+  assertNotCi(env || {});
+  assertNotAxelarPayment(tx, "mission_spend");
+  if (!tx || tx.TransactionType !== "Payment") throw coded("mission spend is a Payment", "TX");
+  if (tx.NetworkID !== anchors.XRPL_NETWORK_ID) throw coded("mission spend is network id 1 only", "MAINNET");
+  const account = tx.Account;
+  const destination = tx.Destination;
+  if (!account || !destination) throw coded("mission spend needs account and destination", "ACCOUNT");
+  for (const id of anchors.WALLET_IDS) {
+    if (account === anchors.WALLETS[id].address || destination === anchors.WALLETS[id].address) {
+      throw coded(`refusing house wallet ${id} on mission spend`, "W0");
+    }
+  }
+  const configured = env && env.MISSION_XRPL_ADDRESS;
+  if (!configured || configured !== account) throw coded("mission account is not the isolated wallet", "WALLET");
+  const amount = grants.dropsOf(tx.Amount);
+  const fee = tx.Fee == null ? 0n : grants.dropsOf(tx.Fee);
+  if (amount <= 0n) throw coded("mission amount must be positive", "CAP");
+  if (amount + fee > 1000000n) throw coded("mission spend exceeds 1000000 drops", "CAP");
+  return { amount: amount.toString(), fee: fee.toString(), total: (amount + fee).toString() };
+}
+
 function assertAgentRequest(opts) {
   const options = opts || {};
   assertAgentGate(options.env);
   const wallet = agentWallet(options.wallet);
   const tx = options.tx;
   if (!tx || typeof tx !== "object" || Array.isArray(tx)) throw coded("refusing empty tx", "TX");
+  assertNotAxelarPayment(tx, options.intent);
   assertNoSeedFields(tx);
   if (tx.Account === anchors.WALLETS.W0.address || options.wallet === "W0") {
     throw coded("refusing to sign as W0", "W0");
@@ -1375,6 +1432,8 @@ module.exports = {
   assertAgentAllowlist,
   assertAgentRpc,
   assertAgentRequest,
+  assertNotAxelarPayment,
+  assertMissionSpend,
   assertEpochScar,
   agentWallet,
   loadMotions,

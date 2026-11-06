@@ -1,0 +1,16 @@
+{
+  "name": "Aether Foundry — Axelar ITS testnet bridge",
+  "machine": "axelar-its-bridge",
+  "version": "0.1.0",
+  "status": "plan-only",
+  "network": "XRPL Testnet",
+  "network_id": 1,
+  "evm_chain_id": "1449000",
+  "axelar_source_chain": "xrpl",
+  "axelar_destination_chain": "xrpl-evm",
+  "asset": "XRP",
+  "signing": "disabled",
+  "submitted": false,
+  "last_tx_hash": null,
+  "note": "AI-assisted testnet planning pack. Not an audit. No hash until a later, separately approved submission. Do not invent one."
+}
