@@ -11,6 +11,9 @@ async function loadMissionStatus(now) {
 }
 
 async function loadMissionRoute(route, id, now) {
+  if (route !== "detail" && route !== "replay") {
+    return { status: 200, body: await loadMissionStatus(now) };
+  }
   const dir = local.ledgerDir();
   if (dir) return local.loadMissionRoute(route, id, now);
   if (process.env.FOUNDRY_MISSION_REMOTE === "off") {
