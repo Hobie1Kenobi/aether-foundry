@@ -29,6 +29,20 @@ const DOCS = [
 const BINS = ["start", "health", "stop", "arm", "wake", "account", "execute", "publish"];
 const EXTRA = ["src/runtime/allowlist.json", "src/missions/port-wait.js"];
 
+function scriptsFromBins(root) {
+  const scripts = new Set();
+  for (const name of BINS) {
+    const text = fs.readFileSync(path.join(root, "machines/missions/release/bin", name), "utf8");
+    for (const match of text.matchAll(/(?:^|[\s;|&])node\s+(src\/[A-Za-z0-9_./-]+\.js)\b/g)) {
+      scripts.add(match[1]);
+    }
+  }
+  if (!scripts.has("src/missions/execute-once.js") || !scripts.has("src/missions/publish-health.js")) {
+    throw new Error("bin/execute and bin/publish must name their modules");
+  }
+  return [...scripts];
+}
+
 function walkRequires(root, rel, seen) {
   if (seen.has(rel)) return;
   const abs = path.join(root, rel);
@@ -83,7 +97,7 @@ function pack(options) {
   if (git.status !== 0) throw new Error("git rev-parse failed");
   const gitSha = git.stdout.trim();
   const seen = new Set();
-  for (const entry of ENTRIES) walkRequires(root, entry, seen);
+  for (const entry of ENTRIES.concat(scriptsFromBins(root))) walkRequires(root, entry, seen);
   for (const extra of EXTRA) {
     if (fs.existsSync(path.join(root, extra))) seen.add(extra);
   }
