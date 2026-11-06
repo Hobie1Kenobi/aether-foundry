@@ -233,14 +233,15 @@ function buildSignaturePayload({ required, accept, txBlob, hash }) {
   const payload = {};
   if (typeof txBlob === "string" && txBlob.length > 0) payload.signedTxBlob = txBlob;
   if (typeof hash === "string" && hash.length > 0) payload.transaction = hash;
-  const extra = accept && accept.extra && typeof accept.extra === "object" ? accept.extra : {};
+  const extra = Object.assign({}, accept && accept.extra && typeof accept.extra === "object" ? accept.extra : {});
+  if (extra.areFeesSponsored == null) extra.areFeesSponsored = false;
   if (typeof extra.invoiceId === "string" && extra.invoiceId.length > 0) {
     payload.invoiceId = extra.invoiceId;
   }
   return {
     x402Version: 2,
     resource: required && required.resource,
-    accepted: accept,
+    accepted: Object.assign({}, accept, { extra }),
     payload,
   };
 }

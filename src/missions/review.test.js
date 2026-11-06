@@ -92,7 +92,6 @@ describe("validated reads", () => {
         Destination: REVIEWED,
         Amount: "1737",
         Fee: "10",
-        NetworkID: 1,
         Sequence: 22117391,
         LastLedgerSequence: 22118889,
       }, { validated: 22118800, sequence: 22117391 }),

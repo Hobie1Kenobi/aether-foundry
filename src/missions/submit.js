@@ -25,7 +25,7 @@ function claimMatches(mission, tx) {
     && tx.Destination === claim.destination
     && tx.Amount === claim.amount
     && String(tx.Fee) === String(claim.fee)
-    && Number(tx.NetworkID) === 1
+    && tx.NetworkID == null
     && tx.Destination === mission.seller
     && !missionPolicy.isHouse(tx.Account)
     && !missionPolicy.isHouse(tx.Destination);
@@ -52,9 +52,13 @@ function beginSubmit(dir, input) {
     const nextAccount = mission.unsigned_tx && mission.unsigned_tx.Account;
     assertSequenceAvailable(state, nextAccount, input);
     const tx = mission.unsigned_tx;
-    if (!tx || tx.TransactionType !== "Payment" || Number(tx.NetworkID) !== 1) {
+    if (!tx || tx.TransactionType !== "Payment") {
       throw coded("claim payment is not an xrpl:1 Payment", "TX");
     }
+    if (tx.NetworkID != null && Number(tx.NetworkID) !== 1) {
+      throw coded("standard xrpl:1 payments must omit NetworkID", "MAINNET");
+    }
+    if (Number(tx.NetworkID) === 1) delete tx.NetworkID;
     if (missionPolicy.isHouse(tx.Destination) || missionPolicy.isHouse(tx.Account) || tx.Destination !== mission.seller) {
       throw coded("claim destination is not the qualified seller", "CLAIM");
     }
@@ -177,8 +181,8 @@ function stampPrepared(dir, input) {
     const tx = Object.assign({}, mission.unsigned_tx, {
       Sequence: input.sequence,
       LastLedgerSequence: input.lastLedgerSequence,
-      NetworkID: 1,
     });
+    delete tx.NetworkID;
     mission.unsigned_tx = tx;
     mission.signed_fields = signedFields(tx);
     mission.sequence = tx.Sequence;

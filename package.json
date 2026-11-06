@@ -10,7 +10,7 @@
     "health": "node src/health.js",
     "offers": "node src/place-four-clean.js",
     "trials": "node src/work-ticket-trials-finish.js",
-    "test": "node --test src/xrpl-hosts.test.js src/time/rippleEpoch.test.js src/walk-in-remint-watch.test.js src/peer-hello.test.js src/agent-chat/protocol.test.js src/agent-chat/herald.test.js src/agent-chat/scribe.test.js src/agent-chat/scout.test.js src/walk-in-buy.test.js src/license/license.test.js src/x402-rules.test.js src/x402-hits.test.js src/x402-outbound.test.js src/xahau-split.test.js src/lp-badge-bound.test.js src/governance/policy.test.js src/director/director.test.js src/grants/grants.test.js src/runtime/policy.test.js src/bridge/axelar/axelar.test.js src/missions/missions.test.js src/missions/publish.test.js src/missions/runtime.test.js src/missions/entrypoint.test.js src/missions/review.test.js src/missions/control.test.js src/missions/execute-once.test.js src/missions/authorize-once.test.js src/missions/x402-exact.test.js src/missions/reconcile-claim.test.js src/runtime/heartbeat.test.js src/runtime/flywheel.test.js src/runtime/signer.test.js src/batch/heartbeat.test.js src/desk/status.test.js src/mcp/server.test.js src/frontier/probe-amendments.test.js src/frontier/probe-devnet.test.js src/frontier/devnet-frontier.test.js src/frontier/oracle-set.test.js src/frontier/mpt-labor.test.js src/frontier/token-escrow-labor.test.js src/frontier/credential-domain-shop.test.js src/frontier/devnet-packs.test.js src/x402-facilitator.test.js src/x402-citizen.test.js && node --experimental-strip-types --import ./src/desk/register-ts.mjs --test src/desk/wall.test.ts src/desk/net-chat.test.ts src/desk/missions-public.test.ts",
+    "test": "node --test src/xrpl-hosts.test.js src/time/rippleEpoch.test.js src/walk-in-remint-watch.test.js src/peer-hello.test.js src/agent-chat/protocol.test.js src/agent-chat/herald.test.js src/agent-chat/scribe.test.js src/agent-chat/scout.test.js src/walk-in-buy.test.js src/license/license.test.js src/x402-rules.test.js src/x402-hits.test.js src/x402-outbound.test.js src/xahau-split.test.js src/lp-badge-bound.test.js src/governance/policy.test.js src/director/director.test.js src/grants/grants.test.js src/runtime/policy.test.js src/bridge/axelar/axelar.test.js src/missions/missions.test.js src/missions/publish.test.js src/missions/runtime.test.js src/missions/entrypoint.test.js src/missions/review.test.js src/missions/control.test.js src/missions/execute-once.test.js src/missions/authorize-once.test.js src/missions/x402-exact.test.js src/missions/x402-facilitator-offline.test.js src/missions/reconcile-claim.test.js src/runtime/heartbeat.test.js src/runtime/flywheel.test.js src/runtime/signer.test.js src/batch/heartbeat.test.js src/desk/status.test.js src/mcp/server.test.js src/frontier/probe-amendments.test.js src/frontier/probe-devnet.test.js src/frontier/devnet-frontier.test.js src/frontier/oracle-set.test.js src/frontier/mpt-labor.test.js src/frontier/token-escrow-labor.test.js src/frontier/credential-domain-shop.test.js src/frontier/devnet-packs.test.js src/x402-facilitator.test.js src/x402-citizen.test.js && node --experimental-strip-types --import ./src/desk/register-ts.mjs --test src/desk/wall.test.ts src/desk/net-chat.test.ts src/desk/missions-public.test.ts",
     "buy:walk-in": "node src/walk-in-buy.js",
     "director:snapshot": "node src/director/snapshot.js",
     "director:wake": "node src/director/wake.js",
@@ -85,6 +85,9 @@
     "url": "https://github.com/Hobie1Kenobi/aether-foundry/issues"
   },
   "homepage": "https://github.com/Hobie1Kenobi/aether-foundry#readme",
+  "devDependencies": {
+    "@x402/xrpl": "^2.30.0"
+  },
   "dependencies": {
     "dotenv": "^18.0.4",
     "xahau": "^4.1.1",

@@ -938,8 +938,10 @@ describe("real signer sequence and last ledger bounds", () => {
       Destination: REVIEWED,
       Amount: "1737",
       Fee: "10",
-      NetworkID: 1,
     };
+    const tagged = await post(Object.assign({}, payment, { Sequence: 22117391, LastLedgerSequence: 22118889, NetworkID: 1 }));
+    assert.equal(tagged.status, 400);
+    assert.equal(tagged.body.code, "MAINNET");
     const missing = await post(payment);
     assert.equal(missing.status, 400);
     assert.equal(missing.body.code, "TX");
