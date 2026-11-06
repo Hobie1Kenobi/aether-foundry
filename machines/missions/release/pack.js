@@ -136,7 +136,8 @@ function pack(options) {
 }
 
 if (require.main === module) {
-  const result = pack();
+  const outDir = process.argv[2];
+  const result = pack(outDir ? { outDir } : {});
   process.stdout.write(`${JSON.stringify({ tar: result.tarPath, git_sha: result.gitSha, files: result.manifest.files.length })}\n`);
 }
 
