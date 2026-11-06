@@ -10,7 +10,7 @@ const anchors = require("../director/anchors");
 const config = require("./config");
 const { Worker } = require("node:worker_threads");
 const { control, view, startMission, act } = require("./engine");
-const { beginSubmit } = require("./submit");
+const { beginSubmit, notePresign } = require("./submit");
 const { tick, run } = require("./worker");
 const signer = require("./signer");
 const { arm } = require("./arm");
@@ -690,7 +690,9 @@ describe("x402 qualification and network fee", () => {
       }
       return {
         status: 200,
-        text: async () => JSON.stringify({ data: { from: "USD", amount: 1 } }),
+        text: async () => JSON.stringify({
+          data: { from: "USD", amount: 1, rate_date: "2026-11-06", conversions: { EUR: { amount: 1 } } },
+        }),
         headers: { get() { return ""; } },
       };
     };
@@ -700,7 +702,10 @@ describe("x402 qualification and network fee", () => {
       quoteFee: async () => labsQuote("12"),
       preparedAccount: { validated: 22118869, sequence: 22117391 },
       resourceFetch,
-      presign: async () => ({ tx_blob: "BLOB", hash: HASH }),
+      presign: async (mission) => {
+        notePresign(files.ledger, mission.id, HASH, { tx: mission.unsigned_tx });
+        return { tx_blob: "BLOB", hash: HASH };
+      },
       fetch: async (_url, init) => {
         submits += 1;
         const incoming = JSON.parse(init.body);

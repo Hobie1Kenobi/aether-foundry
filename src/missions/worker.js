@@ -574,7 +574,29 @@ async function tick(options) {
         });
         return Object.assign(base, { reason: "undeliverable", code: "undeliverable", mission_id: mission.id, worked: true, submitted: false, complete: false });
       }
-      notePresign(files.ledger, mission.id, signed.hash, { tx: begun.mission.unsigned_tx || mission.unsigned_tx });
+      const storedBefore = view(files.ledger, now).missions[mission.id];
+      if (
+        !storedBefore
+        || storedBefore.presigned !== true
+        || storedBefore.signed !== true
+        || storedBefore.presigned_hash !== signed.hash
+        || !storedBefore.signed_fields
+        || !Number.isInteger(storedBefore.last_ledger_sequence)
+      ) {
+        writeState(files.ledger, {
+          last_tick_at: now,
+          last_reason: "persistence_missing",
+          consumed: { [built.key]: { at: now, reason: "persistence_missing" } },
+        });
+        return Object.assign(base, {
+          reason: "persistence_missing",
+          code: "persistence_missing",
+          mission_id: mission.id,
+          worked: true,
+          submitted: false,
+          complete: false,
+        });
+      }
       let submittedOnce = false;
       let delivered = { http_status: 0, submitted: false, hash: null, mode: "refused", parsed: null };
       try {
@@ -602,7 +624,7 @@ async function tick(options) {
         delivered.http_status,
         delivered.parsed
       );
-      if (verdict.ok && delivered.hash) {
+      if (verdict.useful === true && delivered.hash) {
         const finished = finishSubmit(files.ledger, {
           mission_id: mission.id,
           now,

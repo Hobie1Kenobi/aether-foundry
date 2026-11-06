@@ -1,51 +1,63 @@
 "use strict";
 
 /**
- * Success bodies are the documented Stablecoin Gateways HTTP 200 envelope:
- * a JSON object whose `data` property is an object. The public OpenAPI
- * (fetched unsigned) titles the API mainnet and also lists xrpl:0, which
- * this validator does not authorize. Only https://api.stablecoingateways.com
- * and the documented /v1 paths are accepted, and only for a data object.
- * Any other resource, including HTTP 200 with no `code` field, is not a purchase.
+ * The unsigned public OpenAPI is titled mainnet and lists xrpl:0. That is not
+ * authorization. A purchase still needs a live x402 version 2 xrpl:1 challenge.
+ * The sanitized cand-17 snapshot does not include its resource URL, so this
+ * check cannot be pinned to that one pathname without inventing it. It accepts
+ * only an exact https host and an exact documented pathname, never a host
+ * suffix or a path prefix. data:{} is not a useful result. The OpenAPI does
+ * not mark data fields required; the lists below are the identifying fields
+ * named for each path, and a missing one stays incomplete.
  */
 
 const HOST = "api.stablecoingateways.com";
-const PATHS = new Set([
-  "/v1/domain-facts",
-  "/v1/sec/company-facts",
-  "/v1/sanctions/screen",
-  "/v1/page-to-markdown",
-  "/v1/business-days",
-  "/v1/fx/rates",
-  "/v1/lei",
-  "/v1/recalls",
-  "/v1/us/rates-macro",
-  "/v1/whois",
-  "/v1/fx/convert",
-  "/v1/merchant-check",
-  "/v1/sanctions/address",
-  "/v1/counterparty-check",
-]);
+const FIELDS = {
+  "/v1/domain-facts": ["domain", "checked_at"],
+  "/v1/sec/company-facts": ["cik", "name"],
+  "/v1/sanctions/screen": ["lists", "source"],
+  "/v1/page-to-markdown": ["url", "markdown"],
+  "/v1/business-days": ["calendar", "op"],
+  "/v1/fx/rates": ["base", "rate_date", "rates"],
+  "/v1/lei": ["found"],
+  "/v1/recalls": ["query", "source"],
+  "/v1/us/rates-macro": ["series"],
+  "/v1/whois": ["domain", "checked_at"],
+  "/v1/fx/convert": ["from", "amount", "rate_date", "conversions"],
+  "/v1/merchant-check": ["query", "facts"],
+  "/v1/sanctions/address": ["listed", "query"],
+  "/v1/counterparty-check": ["query", "facts"],
+};
 
-function supportsResource(resourceUrl) {
+function resourcePath(resourceUrl) {
   let url;
   try {
     url = new URL(resourceUrl);
   } catch {
-    return false;
+    return null;
   }
-  return url.protocol === "https:" && url.hostname === HOST && PATHS.has(url.pathname);
+  if (url.protocol !== "https:" || url.username || url.password) return null;
+  if (url.hostname !== HOST) return null;
+  return Object.prototype.hasOwnProperty.call(FIELDS, url.pathname) ? url.pathname : null;
+}
+
+function supportsResource(resourceUrl) {
+  return resourcePath(resourceUrl) !== null;
 }
 
 function validatePurchasedService(resourceUrl, httpStatus, parsed) {
-  if (!supportsResource(resourceUrl)) return { ok: false, code: "unsupported_delivery" };
+  const pathname = resourcePath(resourceUrl);
+  if (!pathname) return { ok: false, useful: false, code: "unsupported_delivery" };
   if (httpStatus !== 200 || !parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return { ok: false, code: "delivery_failed" };
+    return { ok: false, useful: false, code: "delivery_failed" };
   }
-  if (!parsed.data || typeof parsed.data !== "object" || Array.isArray(parsed.data)) {
-    return { ok: false, code: "delivery_failed" };
+  const data = parsed.data;
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return { ok: false, useful: false, code: "incomplete_result" };
   }
-  return { ok: true, schema: "stablecoingateways.data/1" };
+  const missing = FIELDS[pathname].filter((key) => data[key] == null);
+  if (missing.length) return { ok: false, useful: false, code: "incomplete_result" };
+  return { ok: true, useful: true, schema: `stablecoingateways${pathname}` };
 }
 
 function boundedErrorCode(parsed, httpStatus) {

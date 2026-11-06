@@ -92,7 +92,7 @@ FOUNDRY_MISSION_RETRY_KEY=cand-17-51ec932c8e \
 node src/missions/retry-fee.js
 ```
 
-That command writes one audit line and does not sign. It does not clear any other consumed key. The next tick opens `cand-17-51ec932c8e-fee-retry-2` because `fee-retry-1` already exists. Do not mint a new discovery id. A grant written by the earlier command that named every fee key does not open another successor. A successor that is empty or already signed blocks another grant for that parent. Claims with a hash, signer acceptance, or an uncertain hold are not retried. Swap to this release before the next start so the installed worker does not still honor those older grants. `cand-17-51ec932c8e` stays the same key; the worker opens a successor only after that audit.
+That command writes one audit line and does not sign. It does not clear any other consumed key. The next tick opens `cand-17-51ec932c8e-fee-retry-2` because `fee-retry-1` already exists. Do not mint a new discovery id. A grant written by the earlier command that named every fee key does not open another successor. A successor that is empty or already signed blocks another grant for that parent. Claims with a hash, signer acceptance, or an uncertain hold are not retried. Do not run that retry while `msn5b5c3223e5e88526` is open. `./bin/start` in this release stays asleep even if `arm.json` is present. Do not set `FOUNDRY_MISSION_EXECUTE=yes` and do not delete `asleep`. The 1747-drop hold stays in the cap. No new seller is added.
 
 ## Open presign
 

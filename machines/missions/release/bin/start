@@ -26,9 +26,9 @@ fi
 EXECUTE=0
 ADDRESS=""
 if [ "$ARMED" = "1" ] && [ -n "${FOUNDRY_MISSION_SIGNER_TOKEN:-}" ]; then
-  EXECUTE=1
   ADDRESS=$(FOUNDRY_MISSION_HOME="$HOME_DIR" node -e 'process.stdout.write(require("./src/missions/arm").readAccount(process.env).address)')
 fi
+# This release stays asleep. An arm file must not start a purchase.
 env \
   -u W0_SEED -u W1_SEED -u W2_SEED -u W3_SEED -u W4_SEED -u W5_SEED -u W6_SEED -u W7_SEED \
   -u W1_REGULAR_SEED -u W2_REGULAR_SEED -u W3_REGULAR_SEED -u W4_REGULAR_SEED -u W5_REGULAR_SEED -u W6_REGULAR_SEED \

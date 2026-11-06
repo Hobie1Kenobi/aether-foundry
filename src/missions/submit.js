@@ -114,6 +114,14 @@ function notePresign(dir, missionId, hash, fields) {
     if (!mission || mission.submit_state !== "signing") throw coded("no open signing claim", "CLAIM");
     if (mission.signer_accepted === true) throw coded("claim already handed to the signer", "NO_RETRY");
     if (mission.presigned_hash && mission.presigned_hash !== upper) throw coded("refusing a second presign", "NO_RETRY");
+    if (
+      Number.isInteger(mission.last_ledger_sequence)
+      && meta
+      && meta.LastLedgerSequence != null
+      && meta.LastLedgerSequence !== mission.last_ledger_sequence
+    ) {
+      throw coded("refusing to refresh LastLedgerSequence after it was stored", "NO_RETRY");
+    }
     mission.presigned_hash = upper;
     mission.presigned = true;
     mission.signed = true;
@@ -137,7 +145,9 @@ function stampPrepared(dir, input) {
     if (!mission || mission.hold !== "unsubmitted" || !mission.unsigned_tx) {
       throw coded("no unsubmitted payment to prepare", "TX");
     }
-    if (mission.presigned_hash || mission.submit_state) throw coded("refusing to prepare a claim that may have been signed", "NO_RETRY");
+    if (mission.presigned_hash || mission.submit_state || Number.isInteger(mission.last_ledger_sequence)) {
+      throw coded("refusing to refresh LastLedgerSequence after it was stored", "NO_RETRY");
+    }
     const tx = Object.assign({}, mission.unsigned_tx, {
       Sequence: input.sequence,
       LastLedgerSequence: input.lastLedgerSequence,
