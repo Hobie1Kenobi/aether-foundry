@@ -10,7 +10,7 @@ const { spawn } = require("node:child_process");
 const xrpl = require("xrpl");
 const config = require("./config");
 const { control, view, blockMission, startMission } = require("./engine");
-const { beginSubmit, notePresign, releaseUnsignedClaim } = require("./submit");
+const { beginSubmit, notePresign, releaseUnsignedClaim, releasePrepared } = require("./submit");
 const { retryPreSignFee } = require("./retry-fee");
 const deskFold = require("../../web/lib/mission-fold");
 
@@ -543,6 +543,32 @@ describe("resource allowlist and fee retry", () => {
       resource_url: resource,
     }, { allowlist: { payees: [{ address: REVIEWED, resource }] } });
     assert.equal(replay.replay, true);
+    const capped = releasePrepared(ledger, {
+      mission_id: successor.mission.id,
+      now,
+      code: "FEE_CAP",
+      rationale: "A fresh XRPL Labs fee is above the reserved network fee. Nothing was signed.",
+    });
+    assert.equal(capped.mission.code, "FEE_CAP");
+    assert.equal(capped.mission.presigned_hash, undefined);
+    retryPreSignFee(ledger, {
+      token: TOKEN,
+      confirm: config.FEE_RETRY_PHRASE,
+      idempotency_key: "cand-17-51ec932c8e",
+      now,
+    }, { token: TOKEN });
+    const second = startMission(ledger, {
+      idempotency_key: "cand-17-51ec932c8e",
+      now,
+      observation: { network: "xrpl:1", network_id: 1, accounts: [{ address: REVIEWED }] },
+      payment_drops: "1737",
+      network_fee_drops: "12",
+      resource_url: resource,
+    }, { allowlist: { payees: [{ address: REVIEWED, resource }] } });
+    assert.equal(second.replay, false);
+    assert.equal(second.mission.idempotency_key, "cand-17-51ec932c8e-fee-retry-2");
+    assert.equal(second.mission.retry_of, "cand-17-51ec932c8e");
+    assert.equal(view(ledger, now).missions[successor.mission.id].status, "blocked");
   });
 
   it("refuses to release a claim after a presign hash exists", () => {
@@ -610,6 +636,7 @@ describe("resource allowlist and fee retry", () => {
       observation: { network: "xrpl:1", network_id: 1, accounts: [] },
     });
     assert.equal(empty.mission.retry_of, "cand-10-empty01");
+    assert.equal(empty.mission.idempotency_key, "cand-10-empty01-fee-retry-1");
     assert.equal(empty.mission.code, "no_foreign_seller");
     assert.throws(
       () => retryPreSignFee(ledger, {

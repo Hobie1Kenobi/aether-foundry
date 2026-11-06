@@ -297,18 +297,26 @@ function safePreSignFee(mission) {
 
 function feeRetryKey(events, mission, key) {
   if (!safePreSignFee(mission)) return null;
-  const granted = events.filter((event) => event
-    && event.type === "control.retry_fee"
-    && event.explicit === true
-    && event.idempotency_key === key
-    && event.live === false).length;
-  const opened = new Set();
+  let allowance = 0;
+  let consumed = 0;
+  const seen = new Set();
   for (const event of events) {
+    if (
+      event
+      && event.type === "control.retry_fee"
+      && event.explicit === true
+      && event.idempotency_key === key
+      && event.live === false
+    ) {
+      allowance += 1;
+    }
     const row = event && event.type === "mission.upsert" ? event.mission : null;
-    if (row && row.retry_of === key && row.idempotency_key) opened.add(row.idempotency_key);
+    if (!row || row.retry_of !== key || !row.idempotency_key || seen.has(row.idempotency_key)) continue;
+    seen.add(row.idempotency_key);
+    if (allowance > consumed) consumed += 1;
   }
-  if (granted <= opened.size) return null;
-  const next = `${key}-fee-retry-${opened.size + 1}`;
+  if (allowance <= consumed) return null;
+  const next = `${key}-fee-retry-${seen.size + 1}`;
   if (!/^[a-z0-9][a-z0-9-]{7,63}$/.test(next)) return null;
   return next;
 }
