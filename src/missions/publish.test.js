@@ -46,6 +46,20 @@ function throwsCode(fn, code) {
   });
 }
 
+describe("mission runner", () => {
+  it("stays dormant and does not treat signer health as mission spend", () => {
+    const { main } = require("./runner");
+    const root = dir();
+    const body = main({ FOUNDRY_AGENT_SIGN: "yes", MISSION_XRPL_SEED: "" }, root);
+    assert.equal(body.dormant, true);
+    assert.equal(body.mission_spend_enabled, false);
+    assert.equal(body.signer_health_signing_is_not_mission_enabled, true);
+    assert.equal(body.evm_gas, "not_authorized");
+    assert.equal(body.mission_seed_present, false);
+    assert.equal(JSON.stringify(body).includes("sEd"), false);
+  });
+});
+
 describe("control token", () => {
   it("fails closed when the server token is missing, even if the caller token is also missing", () => {
     const root = dir();
@@ -117,13 +131,19 @@ describe("sanitized snapshot publish and desk read", () => {
     const root = dir();
     startMission(root, buy("publish-key-1", NOW, { payment_drops: "15" }), allow());
     const first = publish(root, NOW);
+    const stored = JSON.parse(fs.readFileSync(path.join(root, "public-status.json"), "utf8"));
     assert.equal(first.sequence, 1);
     assert.equal(first.prev_sequence, 0);
     assert.equal(first.version, 1);
-    assert.equal(first.integrity, integrityOf(first));
-    assert.equal(remote.integrityOf(first), first.integrity);
+    assert.equal(stored.integrity, integrityOf(stored));
+    assert.equal(remote.integrityOf(stored), stored.integrity);
     assert.equal(JSON.stringify(first).includes("hidden"), false);
+    const same = publish(root, NOW);
+    assert.equal(same.changed, false);
+    assert.equal(same.sequence, 1);
+    startMission(root, buy("publish-key-2", NOW, { payment_drops: "15" }), allow());
     const second = publish(root, NOW);
+    assert.equal(second.changed, true);
     assert.equal(second.sequence, 2);
     const snap = path.join(root, "public-status.json");
     const state = path.join(root, "publish-state.json");
@@ -161,7 +181,8 @@ describe("sanitized snapshot publish and desk read", () => {
     assert.equal(timed.error, "timeout");
     const root = dir();
     startMission(root, buy("remote-key-1", NOW, { payment_drops: "20" }), allow());
-    const doc = publish(root, NOW);
+    publish(root, NOW);
+    const doc = JSON.parse(fs.readFileSync(path.join(root, "public-status.json"), "utf8"));
     const ok = await remote.fetchPublished(
       async (url) => ({
         ok: true,
@@ -174,7 +195,8 @@ describe("sanitized snapshot publish and desk read", () => {
     assert.equal(ok.source, "git");
     assert.equal(ok.source_commit, sha);
     assert.equal(ok.live_spend_drops, "0");
-    assert.equal(String(ok.note).includes("main commit"), true);
+    assert.equal(ok.authenticity, "unsigned");
+    assert.match(String(ok.sequence_means), /cannot tell a replaced chain/);
     const gap = Object.assign({}, doc, { sequence: 4, prev_sequence: 2 });
     delete gap.integrity;
     gap.integrity = remote.integrityOf(gap);
@@ -189,6 +211,18 @@ describe("sanitized snapshot publish and desk read", () => {
     );
     assert.equal(ordered.error, "out_of_order");
     assert.equal(ordered.live_spend_drops, null);
+    const detail = remote.routeFromPublished(ok, "detail", doc.missions[0].id);
+    const replay = remote.routeFromPublished(ok, "replay", doc.missions[0].id);
+    assert.equal(detail.body.source, "git");
+    assert.equal(detail.body.mission.id, doc.missions[0].id);
+    assert.equal(replay.body.source, "git");
+    assert.ok(Array.isArray(replay.body.events));
+    const replaced = Object.assign({}, doc, { sequence: 1, prev_sequence: 0 });
+    delete replaced.integrity;
+    replaced.integrity = remote.integrityOf(replaced);
+    const stateless = remote.verify(replaced, NOW);
+    assert.equal(stateless.ok, true);
+    assert.equal(stateless.body.authenticity, "unsigned");
     const raw = String(await (async () => {
       const seen = [];
       await remote.fetchPublished(

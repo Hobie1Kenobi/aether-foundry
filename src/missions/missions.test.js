@@ -348,9 +348,11 @@ describe("authenticated spend activation", () => {
     const turned = control(root, { action: "activate", token: TOKEN, confirm: config.ACTIVATE_PHRASE, now: NOW }, allow());
     assert.equal(turned.spending_enabled, true);
     const row = startMission(root, buy("activate-1", NOW, { payment_drops: "100", network_fee_drops: "12" }), allow());
-    throwsCode(() => act(root, { mission_id: row.mission.id, now: NOW }, { wallet: { address: ISOLATED } }), "APPROVAL");
-    const approved = approve(root, { mission_id: row.mission.id, token: TOKEN, now: NOW }, allow());
-    assert.equal(approved.mission.status, "approved_ready");
+    assert.equal(row.mission.status, "approved_ready");
+    assert.equal(row.mission.labels.approval, "approved_unsigned");
+    const novel = startMission(root, buy("activate-novel", NOW, { payment_drops: "10", network_fee_drops: "0", kind: "bridge-return" }), allow());
+    assert.equal(novel.mission.status, "awaiting_human_approval");
+    throwsCode(() => act(root, { mission_id: novel.mission.id, now: NOW }, { wallet: { address: ISOLATED } }), "APPROVAL");
     let seedReads = 0;
     const acted = act(root, { mission_id: row.mission.id, now: NOW }, {
       wallet: { address: ISOLATED },

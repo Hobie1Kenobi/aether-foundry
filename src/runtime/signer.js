@@ -278,6 +278,7 @@ async function health(ctx) {
     network_id: Number(networkId),
     wallets_ready: walletsReady(env),
     signing,
+    mission_spend: false,
   };
   policy.assertNoSeedFields(body);
   return { status: 200, body };

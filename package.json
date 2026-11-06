@@ -65,6 +65,7 @@
     "bridge:axelar": "node src/bridge/axelar/cli.js",
     "missions:status": "node src/missions/cli.js status",
     "missions:publish": "node src/missions/publish.js",
+    "missions:ready": "node src/missions/runner.js",
     "batch:heartbeat": "node src/batch/heartbeat.js",
     "mcp": "node src/mcp/server.js",
     "mcp:test": "node --test src/mcp/server.test.js"

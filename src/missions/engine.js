@@ -33,6 +33,7 @@ function emptyState() {
     live_spent: 0n,
     live_uncertain: 0n,
     missionCommitted: {},
+    classes: [],
   };
 }
 
@@ -94,9 +95,15 @@ function fold(events) {
     if (event.type === "control.activate" && !state.killed) {
       const per = BigInt(event.per_mission_drops || "0");
       const daily = BigInt(event.daily_drops || "0");
-      if (per === config.PER_MISSION_DROPS && daily === config.DAILY_DROPS) state.spending_enabled = true;
+      if (per === config.PER_MISSION_DROPS && daily === config.DAILY_DROPS) {
+        state.spending_enabled = true;
+        state.classes = Array.isArray(event.classes) ? event.classes.filter((name) => name === config.AUTONOMOUS_CLASS) : [];
+      }
     }
-    if (event.type === "control.deactivate") state.spending_enabled = false;
+    if (event.type === "control.deactivate") {
+      state.spending_enabled = false;
+      state.classes = [];
+    }
     if (event.type === "control.denial") state.denials.push(event);
     if (event.type === "mission.upsert") {
       state.missions[event.mission.id] = event.mission;
@@ -297,9 +304,20 @@ function startMission(dir, input, opts) {
     mission.day = day;
     mission.hold = "unsubmitted";
     mission.stage = "policy";
-    mission.status = "awaiting_human_approval";
-    mission.labels.approval = "human_required";
-    mission.rationale = "Plan is inside the authorized cap. A human must approve before any further step. Signing stays disabled, so this hold is not live spend.";
+    const kind = input.kind || config.AUTONOMOUS_CLASS;
+    const classOpen = state.spending_enabled && Array.isArray(state.classes) && state.classes.includes(kind);
+    mission.kind = kind;
+    if (classOpen) {
+      mission.status = "approved_ready";
+      mission.labels.approval = "approved_unsigned";
+      mission.rationale = "Class foreign-xrpl1-purchase is already approved within the caps. This purchase was not sent for a second approval. Nothing has been signed.";
+    } else {
+      mission.status = "awaiting_human_approval";
+      mission.labels.approval = "human_required";
+      mission.rationale = kind === config.AUTONOMOUS_CLASS
+        ? "Plan is inside the cap. Runtime spend is not activated, so this purchase waits."
+        : "This action is outside the approved class. A human must approve it. Nothing has been signed.";
+    }
     mission.updated_at = now;
     persist(api, mission);
     return { mission, replay: false };
@@ -420,6 +438,7 @@ function control(dir, input, opts) {
         at: now,
         per_mission_drops: config.PER_MISSION_DROPS.toString(),
         daily_drops: config.DAILY_DROPS.toString(),
+        classes: [config.AUTONOMOUS_CLASS],
         network: config.NETWORK,
         live: false,
       });

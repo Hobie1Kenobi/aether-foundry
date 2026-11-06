@@ -30,51 +30,45 @@ Use the Axelar testnet planner only as an unsigned description. This engine will
 
 `bridge_pending` and `dest_final` are different. A pending or uncertain bridge is not retried.
 
-## Activation on the Foundry box
+## Box handoff
 
-Spending stays off until an authenticated ledger event. Caps cannot be raised. This does not start a daemon and it does not submit.
+Checked layout, not a new supervisor:
+
+- Checkout: `/workspace/aether-foundry` on local `main` at `d442347`, one commit ahead of stale `origin/main` `0bd1127`. `lab/director-state.json` is dirty. Do not `git pull`, `reset`, `stash`, or `checkout` over that.
+- Processes already up, started by `/workspace/foundry-ops/ensure-up.sh`: signer `127.0.0.1:8787`, scribe `8792`, license `8793`. Leave them running. systemd units are not installed. PID 1 is tini. `crontab` is not on the box.
+- `ensure-up.sh` loads the signer token, W1–W6 regular seeds, and Ollama. It does not load a mission account. `runtime:watch` stays off.
+- Signer `GET /health` field `signing: true` means that ordinary signer is armed. `mission_spend` on the same body is `false`. Mission readiness is `npm run missions:ready`, not the signer health flag.
+
+The mission runner is dormant. `machines/missions/ensure-up.snippet.sh` is not sourced. Parent adds that one commented block only when they want it, and still does not set `FOUNDRY_MISSION_EXECUTE`.
 
 ```bash
-cd /path/aether-foundry
-export FOUNDRY_MISSION_TOKEN='<box token, not committed>'
-node src/missions/cli.js status
+cd /workspace/aether-foundry
+npm run missions:ready
+```
+
+That prints booleans only. It does not submit and it does not print a seed.
+
+Class `foreign-xrpl1-purchase` becomes autonomous only after the ledger activate event. Until then every purchase waits. A different `kind` still waits for a separate approval. Bridge return and EVM gas stay `NON_XRP`.
+
+```bash
+cd /workspace/aether-foundry
+export FOUNDRY_MISSION_TOKEN='<set on the box, not in git>'
 node -e 'require("./src/missions/engine").control("lab/missions",{action:"activate",confirm:"ACTIVATE-XRPL1-MISSION-SPEND",token:process.env.FOUNDRY_MISSION_TOKEN,now:new Date().toISOString()},{token:process.env.FOUNDRY_MISSION_TOKEN})'
 ```
 
-The signer unit already loads `/workspace/aether-foundry-secrets/.env` via `foundry-signer.service`. Add only these names there, on the box, not in git:
+A missing token fails closed. Add `MISSION_XRPL_ADDRESS` and `MISSION_XRPL_SEED` to the environment `ensure-up.sh` already uses, only when that isolated account exists. Do not put W0–W6 seeds in the mission process.
 
-- `MISSION_XRPL_ADDRESS` — isolated classic address, not W0–W7
-- `MISSION_XRPL_SEED` — that account's seed
-
-Do not add `MISSION_XRPL_SEED` to the generic seed allowlist. Mission signing reads that environment variable only, and only when all of these are true: intent `mission_spend`, `FOUNDRY_AGENT_SIGN=yes`, `FOUNDRY_MISSION_EXECUTE=yes`, `execute: true`, and a submit hook. Otherwise `/sign` is a dry-run and loads no key. Payments to the Axelar gateway are refused on that path too.
+Publish writes one sanitized file and does not commit unless `FOUNDRY_MISSION_PUBLISH=yes`. It does not push. It does not stage `lab/director-state.json`.
 
 ```bash
-curl -sS -X POST http://127.0.0.1:8787/dry-run \
-  -H "Authorization: Bearer $FOUNDRY_SIGNER_TOKEN" \
-  -H 'content-type: application/json' \
-  -d '{"intent":"mission_spend","dry_run":true,"tx":{"TransactionType":"Payment","Account":"'"$MISSION_XRPL_ADDRESS"'","Destination":"<allowlisted foreign r-address>","Amount":"100","Fee":"12","NetworkID":1}}'
-```
-
-Expect `key_loaded: false` and `submitted: false`. Do not set `FOUNDRY_MISSION_EXECUTE` in this cloud environment.
-
-## Publish the sanitized snapshot
-
-The box ledger `lab/missions/events.jsonl` stays on the box and is gitignored. The desk on Vercel does not have that disk. It uses the same GitHub read as `/api/status`: resolve `commits/main` to a 40-character SHA, then fetch `lab/missions/public-status.json` at that SHA. A missing file, HTTP error, timeout, bad integrity, unknown version, or a sequence that does not follow `prev_sequence` is `unavailable`. Live spend stays null.
-
-On the box, after missions have been recorded:
-
-```bash
-cd /path/aether-foundry
+cd /workspace/aether-foundry
 npm run missions:publish
-git add lab/missions/public-status.json
+git add -- lab/missions/public-status.json
+git diff --cached --name-only
 git commit -m "Publish sanitized mission snapshot"
-git push origin main
+git status
 ```
 
-`npm run missions:publish` writes `lab/missions/public-status.json` and `lab/missions/publish-state.json` in the ledger directory. The state file is gitignored and is what stops an older sequence from being published again. Do not copy it to Vercel and do not commit it. The command does not read a seed and does not start a timer.
+`git status` should still show the dirty director file unstaged, and the local NAV commit still ahead of origin. Push that snapshot commit when you choose. Do not pull first.
 
-## Public desk
-
-`GET /api/missions`, `GET /api/missions/status`, `GET /api/missions/:id`, and `GET /api/missions/:id/replay` are read-only. Other methods return `PUBLIC_WRITE`. The desk serves `machines/missions/public-feed.json`. It does not read the operator ledger and it does not accept a visitor command.
-
-Source health is `source` plus `source_observed_at`. The snapshot time is not a live clock.
+The desk reads status, detail, and replay from that file at the current main SHA. The hash detects a corrupt file. It is not authentication. `prev_sequence` only checks the numbers inside the file. The reader has no saved checkpoint, so it cannot see a rolled-back chain. No snapshot is committed in this PR, so production stays `unavailable` and live spend is null.
