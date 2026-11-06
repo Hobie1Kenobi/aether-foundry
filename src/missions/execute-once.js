@@ -19,6 +19,7 @@ const { blockingClaim } = require("./sequence-hold");
 const { requireDecision } = require("./new-account");
 const { RETAINED_INVOICE } = require("./x402-deliver");
 const { tick } = require("./worker");
+const { readHistory, assertChain, openGeneration, generationUsed, seenInvoices, appendRecord } = require("./lease-chain");
 
 const PHRASE = "EXECUTE-ONE-FRESH-PURCHASE";
 const INVOICE_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{3,127}$/;
@@ -35,11 +36,26 @@ function readLease(home) {
   return JSON.parse(fs.readFileSync(file, "utf8"));
 }
 
-function writeLease(home, lease) {
-  const file = path.join(home, "execute.json");
-  const tmp = `${file}.partial`;
-  fs.writeFileSync(tmp, `${JSON.stringify(lease)}\n`, { mode: 0o600 });
-  fs.renameSync(tmp, file);
+function legacyUsed(home) {
+  const lease = readLease(home);
+  return Boolean(lease && Number(lease.ticks_used) >= 1);
+}
+
+function consumeGeneration(home, open, now, invoiceId) {
+  const generation = open || appendRecord(home, {
+    type: "lease.issued",
+    lease_id: crypto.randomBytes(16).toString("hex"),
+    issued_at: now,
+    note: "initial one-shot",
+    max_ticks: 1,
+  });
+  return appendRecord(home, {
+    type: "lease.used",
+    lease_id: generation.lease_id,
+    used_at: now,
+    ticks: 1,
+    invoice_id: invoiceId,
+  });
 }
 
 function challengeItem(doc, now) {
@@ -128,8 +144,12 @@ async function executeOnce(env, opts) {
   assertExecuteAuth(source);
   const home = guard.assertIsolated(source.FOUNDRY_MISSION_HOME || "/workspace/foundry-ops/missions-runtime");
   const ledger = guard.assertIsolated(source.FOUNDRY_MISSION_LEDGER || path.join(home, "ledger"));
-  const lease = readLease(home);
-  if (lease && lease.ticks_used >= 1) throw coded("the one-shot purchase was already used", "NO_RETRY");
+  const history = readHistory(home);
+  assertChain(history);
+  const open = openGeneration(history);
+  if (!open && (legacyUsed(home) || generationUsed(history))) {
+    throw coded("the one-shot purchase was already used", "NO_RETRY");
+  }
   const held = blockingClaim(view(ledger, now), null);
   if (!held) throw coded("no unresolved claim is on file", "CLAIM");
   requireDecision(ledger, held.mission_id);
@@ -146,7 +166,7 @@ async function executeOnce(env, opts) {
   if (!file) throw coded("fresh challenge file is missing", "TX");
   const challenge = challengeItem(JSON.parse(fs.readFileSync(file, "utf8")), now);
   const usedInvoice = readEvents(ledger).some((event) => event && event.type === "mission.upsert" && event.mission && event.mission.invoice_id === challenge.invoiceId);
-  if (usedInvoice) throw coded("this invoice was already used", "NO_RETRY");
+  if (usedInvoice || seenInvoices(history).has(challenge.invoiceId)) throw coded("this invoice was already used", "NO_RETRY");
   let signer = null;
   const port = guard.assertFreePort(source.FOUNDRY_MISSION_SIGNER_PORT, 8788);
   if (options.spawnSigner !== false && !(await signerReady(port)) && fs.existsSync(path.join(home, "account.json"))) {
@@ -174,17 +194,7 @@ async function executeOnce(env, opts) {
       resourceFetch: options.fetch,
     });
     const signed = result.signed === true || result.complete === true || result.reason === "delivery_failed" || result.reason === "persistence_missing";
-    if (signed) {
-      writeLease(home, {
-        schema: "aether.missions.execute-once",
-        phrase: PHRASE,
-        ticks_used: 1,
-        execute: false,
-        prior_claim_id: held.mission_id,
-        purchase_key: challenge.key,
-        signed: true,
-      });
-    }
+    if (signed) consumeGeneration(home, open, now, challenge.invoiceId);
     if (discoveryBefore) {
       const after = fs.existsSync(discoveryFile) ? fs.readFileSync(discoveryFile) : Buffer.from("");
       if (!after.equals(discoveryBefore)) throw coded("discovery was rewritten", "NO_RETRY");
