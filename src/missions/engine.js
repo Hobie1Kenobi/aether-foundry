@@ -1,6 +1,7 @@
 "use strict";
 
 const crypto = require("crypto");
+const anchors = require("../director/anchors");
 const config = require("./config");
 const { chicagoDay } = require("./clock");
 const { exclusive, readEvents, coded } = require("./ledger");
@@ -117,6 +118,15 @@ function fold(events) {
         add(day, "released", BigInt(event.drops));
         mission.hold = "released";
       }
+    }
+    if (event.type === "budget.spent") {
+      const day = dayBucket(state, event.day);
+      const amount = BigInt(event.drops);
+      sub(day, "reserved", amount);
+      add(day, "spent", amount);
+      if (event.live === true) state.live_spent += amount;
+      const mission = state.missions[event.mission_id];
+      if (mission) mission.hold = "spent";
     }
     if (event.type === "budget.fee_spent") {
       const day = dayBucket(state, event.day);
@@ -543,6 +553,55 @@ function act(dir, input, opts) {
   });
 }
 
+function recordSubmission(dir, input) {
+  const now = input.now || new Date().toISOString();
+  return exclusive(dir, (api) => {
+    const state = fold(api.read());
+    const mission = state.missions[input.mission_id];
+    if (!mission) throw coded("mission not found", "PLAN");
+    if (mission.submitted) return { mission, replay: true };
+    if (state.killed) throw coded("hard stop is on", "killed");
+    if (!state.spending_enabled) throw coded("spending is not activated", "SPENDING_DISABLED");
+    if (mission.status !== "ready_for_signer") throw coded("mission is not ready for the dedicated signer", "SIGN");
+    const result = input.result || {};
+    const text = JSON.stringify(result);
+    if (anchors.EMBEDDED_SEED_RE.test(text)) throw coded("refusing a result that contains a seed", "SEED");
+    if (result.dry_run === true || result.submitted !== true || result.live !== true || result.signed !== true) {
+      throw coded("dedicated signer did not submit", "SUBMIT");
+    }
+    const hash = String(result.hash || "").toUpperCase();
+    if (!anchors.HASH_RE.test(hash)) throw coded("refusing a submission without a ledger hash", "SUBMIT");
+    if (Number(result.network_id) !== config.NETWORK_ID) throw coded("refusing network id", "MAINNET");
+    if (result.engine_result !== "tesSUCCESS") throw coded("refusing a result that is not tesSUCCESS", "SUBMIT");
+    const amount = BigInt(mission.budget ? mission.budget.budget_drops : "0");
+    if (amount <= 0n) throw coded("mission budget is missing", "CAP");
+    api.append({
+      type: "budget.spent",
+      at: now,
+      mission_id: mission.id,
+      day: mission.day,
+      drops: amount.toString(),
+      live: true,
+      hash,
+    });
+    mission.status = "submitted";
+    mission.submitted = true;
+    mission.signed = true;
+    mission.live = true;
+    mission.hold = "spent";
+    mission.settlement = "xrpl_validated";
+    mission.proof_hash = hash;
+    mission.explorer = `${config.EXPLORER_TX}${hash}`;
+    mission.foreign_revenue_drops = mission.budget.payment_drops;
+    mission.retry_blocked = true;
+    mission.stage = "observe";
+    mission.rationale = "Dedicated mission signer submitted a network-id-1 Payment. The EVM return leg was not used.";
+    mission.updated_at = now;
+    persist(api, mission);
+    return { mission, replay: false };
+  });
+}
+
 function classifyBridge(observation) {
   const classified = axelarStatus.classify({
     direction: observation.direction || "xrpl-to-evm",
@@ -817,7 +876,9 @@ function publicFeed(dir, now) {
     live: mission.live === true,
     signed: mission.signed === true,
     submitted: mission.submitted === true,
-    foreign_revenue_drops: "0",
+    foreign_revenue_drops: /^[0-9]+$/.test(String(mission.foreign_revenue_drops || ""))
+      ? String(mission.foreign_revenue_drops)
+      : "0",
     proof_hash: mission.proof_hash,
     explorer: mission.explorer,
     budget_drops: mission.budget ? mission.budget.budget_drops : "0",
@@ -883,6 +944,7 @@ module.exports = {
   approve,
   control,
   act,
+  recordSubmission,
   observe,
   evaluate,
   kill,

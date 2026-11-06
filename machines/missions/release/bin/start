@@ -1,0 +1,37 @@
+#!/bin/sh
+# Start the isolated mission worker and, when a token is present, its signer.
+# Does not signal the ordinary signer, scribe, or license processes.
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+cd "$ROOT"
+HOME_DIR=${FOUNDRY_MISSION_HOME:-/workspace/foundry-ops/missions-runtime}
+install -d "$HOME_DIR" "$HOME_DIR/ledger"
+if [ -f "$HOME_DIR/worker.pid" ] && kill -0 "$(cat "$HOME_DIR/worker.pid")" 2>/dev/null; then
+  echo "mission worker already running"
+  exit 0
+fi
+env \
+  -u W0_SEED -u W1_SEED -u W2_SEED -u W3_SEED -u W4_SEED -u W5_SEED -u W6_SEED -u W7_SEED \
+  -u W1_REGULAR_SEED -u W2_REGULAR_SEED -u W3_REGULAR_SEED -u W4_REGULAR_SEED -u W5_REGULAR_SEED -u W6_REGULAR_SEED \
+  -u AETHER_SECRETS -u FOUNDRY_AGENT_SIGN -u FOUNDRY_MISSION_EXECUTE -u MISSION_XRPL_SEED \
+  FOUNDRY_MISSION_HOME="$HOME_DIR" \
+  FOUNDRY_MISSION_LEDGER="$HOME_DIR/ledger" \
+  node src/missions/worker.js >> "$HOME_DIR/worker.log" 2>&1 &
+echo $! > "$HOME_DIR/worker.pid"
+if [ -n "${FOUNDRY_MISSION_SIGNER_TOKEN:-}" ]; then
+  set -- env \
+    -u W0_SEED -u W1_SEED -u W2_SEED -u W3_SEED -u W4_SEED -u W5_SEED -u W6_SEED -u W7_SEED \
+    -u W1_REGULAR_SEED -u W2_REGULAR_SEED -u W3_REGULAR_SEED -u W4_REGULAR_SEED -u W5_REGULAR_SEED -u W6_REGULAR_SEED \
+    -u AETHER_SECRETS -u FOUNDRY_AGENT_SIGN -u FOUNDRY_MISSION_EXECUTE \
+    FOUNDRY_MISSION_HOME="$HOME_DIR" \
+    FOUNDRY_MISSION_SIGNER_TOKEN="$FOUNDRY_MISSION_SIGNER_TOKEN"
+  if [ -n "${MISSION_XRPL_ADDRESS:-}" ]; then
+    set -- "$@" MISSION_XRPL_ADDRESS="$MISSION_XRPL_ADDRESS"
+  fi
+  if [ -n "${MISSION_XRPL_SEED:-}" ]; then
+    set -- "$@" MISSION_XRPL_SEED="$MISSION_XRPL_SEED"
+  fi
+  "$@" node src/missions/signer.js >> "$HOME_DIR/signer.log" 2>&1 &
+  echo $! > "$HOME_DIR/signer.pid"
+fi
+echo "started"

@@ -56,6 +56,8 @@ describe("mission runner", () => {
     assert.equal(body.signer_health_signing_is_not_mission_enabled, true);
     assert.equal(body.evm_gas, "not_authorized");
     assert.equal(body.mission_seed_present, false);
+    assert.equal(body.loop, false);
+    assert.equal(body.autonomous, false);
     assert.equal(JSON.stringify(body).includes("sEd"), false);
   });
 });

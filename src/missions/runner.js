@@ -27,17 +27,19 @@ function ready(env, dir) {
     mission_account_configured: present(env.MISSION_XRPL_ADDRESS),
     mission_seed_present: present(env.MISSION_XRPL_SEED),
     signer_health_signing_is_not_mission_enabled: true,
+    loop: false,
+    autonomous: false,
     untouched_listeners: ["127.0.0.1:8787", "127.0.0.1:8792", "127.0.0.1:8793"],
   };
 }
 
 function main(env, dir) {
   const body = ready(env || {}, dir);
-  if (!body.dormant) {
-    body.ran = "ready-check-only";
-    body.submitted = false;
-    body.note = "FOUNDRY_MISSION_RUN=yes still does not submit. Live submit stays off until FOUNDRY_MISSION_EXECUTE=yes on the box, which this command does not set.";
-  }
+  body.ran = "ready-check-only";
+  body.submitted = false;
+  body.note = body.dormant
+    ? "This command prints one ready check and returns. It is not a scheduled worker. The worker is node src/missions/worker.js and it stays asleep until FOUNDRY_MISSION_WORKER=yes."
+    : "FOUNDRY_MISSION_RUN=yes still prints one ready check and returns. It does not poll, sign, or submit.";
   return body;
 }
 

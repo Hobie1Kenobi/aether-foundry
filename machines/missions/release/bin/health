@@ -1,0 +1,15 @@
+#!/bin/sh
+# Read the mission worker and, if it was started, the dedicated signer.
+# Does not call 127.0.0.1:8787.
+set -eu
+echo "worker"
+curl -fsS --max-time 5 http://127.0.0.1:8794/health
+echo
+if curl -fsS --max-time 2 http://127.0.0.1:8788/health >/tmp/foundry-mission-signer-health.json 2>/dev/null; then
+  echo "signer"
+  cat /tmp/foundry-mission-signer-health.json
+  echo
+  rm -f /tmp/foundry-mission-signer-health.json
+else
+  echo "signer_not_listening"
+fi
