@@ -66,7 +66,7 @@ function x402Item(id, acceptExtra, url) {
         payTo: FOREIGN,
         maxTimeoutSeconds: 300,
         fee_drops: "999999",
-        extra: { invoiceId: "inv-1", fee_drops: "999999" },
+        extra: { invoiceId: "inv-1", sourceTag: 26100014, fee_drops: "999999" },
       }, acceptExtra || {})],
     },
   };
@@ -664,7 +664,7 @@ describe("x402 qualification and network fee", () => {
     const allowPath = files.allowlist;
     fs.writeFileSync(allowPath, JSON.stringify({ payees: [FOREIGN] }));
     const outside = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
-    const supported = "https://api.stablecoingateways.com/v1/fx/convert?from=USD&to=EUR&amount=1";
+    const supported = "https://api.stablecoingateways.com/v1/sanctions/address?address=0x098B716B8Aaf21512996dC57EB0615e2383E2f96";
     writeDiscovery(files.discovery, [
       x402Item("deliver-item-1", {}, supported),
       x402Item("outside-scope1", { payTo: outside, amount: "1000" }, supported),
@@ -673,7 +673,7 @@ describe("x402 qualification and network fee", () => {
     let submits = 0;
     const proofHashes = [];
     const resourceFetch = async (url, init) => {
-      assert.equal(url, "https://api.stablecoingateways.com/v1/fx/convert?from=USD&to=EUR&amount=1");
+      assert.equal(url, "https://api.stablecoingateways.com/v1/sanctions/address?address=0x098B716B8Aaf21512996dC57EB0615e2383E2f96");
       const header = init && init.headers && (init.headers["PAYMENT-SIGNATURE"] || init.headers["payment-signature"]);
       if (!header) {
         return { status: 402, json: async () => x402Item("deliver-item-1").x402 };
@@ -691,7 +691,10 @@ describe("x402 qualification and network fee", () => {
       return {
         status: 200,
         text: async () => JSON.stringify({
-          data: { from: "USD", amount: 1, rate_date: "2026-11-06", conversions: { EUR: { amount: 1 } } },
+          data: {
+            listed: false,
+            query: { address: "0x098B716B8Aaf21512996dC57EB0615e2383E2f96" },
+          },
         }),
         headers: { get() { return ""; } },
       };

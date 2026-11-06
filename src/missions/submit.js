@@ -101,6 +101,7 @@ function signedFields(tx) {
     NetworkID: 1,
     Sequence: Number.isSafeInteger(tx.Sequence) ? tx.Sequence : null,
     LastLedgerSequence: Number.isSafeInteger(tx.LastLedgerSequence) ? tx.LastLedgerSequence : null,
+    SourceTag: Number.isInteger(tx.SourceTag) ? tx.SourceTag : null,
   };
 }
 
@@ -132,6 +133,26 @@ function notePresign(dir, missionId, hash, fields) {
     if (meta && meta.Sequence != null) mission.sequence = meta.Sequence;
     if (meta && meta.LastLedgerSequence != null) mission.last_ledger_sequence = meta.LastLedgerSequence;
     mission.rationale = "A signature is stored. It has not been submitted. The claim stays open until a supported result is recorded, or a future signature's validated ledger window has passed and the hash is absent.";
+    mission.updated_at = now;
+    api.append({ type: "mission.upsert", at: now, mission });
+    return { mission };
+  });
+}
+
+function applyChallenge(dir, input) {
+  const now = input.now || new Date().toISOString();
+  return exclusive(dir, (api) => {
+    const mission = fold(api.read()).missions[input.mission_id];
+    if (!mission || mission.hold !== "unsubmitted" || !mission.unsigned_tx) {
+      throw coded("no unsubmitted payment to bind", "TX");
+    }
+    if (mission.presigned_hash || mission.submit_state) throw coded("refusing to bind a claim that may have been signed", "NO_RETRY");
+    mission.unsigned_tx = Object.assign({}, mission.unsigned_tx, {
+      SourceTag: input.sourceTag,
+      Memos: [input.memo],
+    });
+    mission.invoice_id = input.invoiceId;
+    mission.source_tag = input.sourceTag;
     mission.updated_at = now;
     api.append({ type: "mission.upsert", at: now, mission });
     return { mission };
@@ -446,6 +467,7 @@ module.exports = {
   beginSubmit,
   finishSubmit,
   notePresign,
+  applyChallenge,
   stampPrepared,
   releasePassedWindow,
   acceptClaim,
