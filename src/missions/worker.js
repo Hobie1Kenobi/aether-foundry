@@ -14,7 +14,7 @@ const path = require("path");
 const config = require("./config");
 const { coded, readEvents } = require("./ledger");
 const { fold, startMission, blockMission, act, evaluate, view } = require("./engine");
-const { beginSubmit, finishSubmit, releasePrepared, releaseUnsignedClaim, narrowUnsubmittedFee, noteDeliveryFailure, notePresign, stampPrepared, releasePassedWindow } = require("./submit");
+const { beginSubmit, finishSubmit, releasePrepared, releaseUnsignedClaim, narrowUnsubmittedFee, noteDeliveryFailure, applyChallenge, stampPrepared, releasePassedWindow } = require("./submit");
 const networkFee = require("./network-fee");
 const ledgerWindow = require("./ledger-window");
 const serviceResult = require("./service-result");
@@ -518,6 +518,37 @@ async function tick(options) {
         complete: false,
       });
     }
+    let challenge;
+    try {
+      challenge = x402Deliver.bindChallenge(live.accept);
+    } catch (error) {
+      const released = releasePrepared(files.ledger, {
+        mission_id: mission.id,
+        now,
+        code: error.code || "TX",
+        rationale: "The live xrpl:1 challenge did not include a usable source tag and invoice. Nothing was signed.",
+      });
+      writeState(files.ledger, {
+        last_tick_at: now,
+        last_reason: error.code || "TX",
+        consumed: { [built.key]: { at: now, reason: error.code || "TX" } },
+      });
+      return Object.assign(base, {
+        reason: error.code || "TX",
+        code: error.code || "TX",
+        mission_id: released.mission.id,
+        worked: true,
+        submitted: false,
+        complete: false,
+      });
+    }
+    mission = applyChallenge(files.ledger, {
+      mission_id: mission.id,
+      now,
+      sourceTag: challenge.sourceTag,
+      invoiceId: challenge.invoiceId,
+      memo: challenge.memo,
+    }).mission;
     const account = opts.preparedAccount
       || await ledgerWindow.readValidatedAccount(runtimeFetch(opts), env.MISSION_XRPL_ADDRESS);
     const bound = ledgerWindow.bindWindow(account.validated, account.sequence);

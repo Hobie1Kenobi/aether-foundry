@@ -3,31 +3,23 @@
 /**
  * The unsigned public OpenAPI is titled mainnet and lists xrpl:0. That is not
  * authorization. A purchase still needs a live x402 version 2 xrpl:1 challenge.
- * The sanitized cand-17 snapshot does not include its resource URL, so this
- * check cannot be pinned to that one pathname without inventing it. It accepts
- * only an exact https host and an exact documented pathname, never a host
- * suffix or a path prefix. data:{} is not a useful result. The OpenAPI does
- * not mark data fields required; the lists below are the identifying fields
- * named for each path, and a missing one stays incomplete.
+ * The reviewed resource is the exact sanctions address URL the operator
+ * retained. A host suffix, a path prefix, or a different address query is
+ * not that resource. data:{} is not a useful result. The OpenAPI does not
+ * mark fields required and its title says mainnet; neither authorizes xrpl:0.
+ * A useful result needs data.listed as a boolean and data.query.address
+ * equal to the address in that URL. A fresh x402 v2 xrpl:1 challenge is
+ * still required before any signature. The retained invoice is not a replay.
  */
 
 const HOST = "api.stablecoingateways.com";
-const FIELDS = {
-  "/v1/domain-facts": ["domain", "checked_at"],
-  "/v1/sec/company-facts": ["cik", "name"],
-  "/v1/sanctions/screen": ["lists", "source"],
-  "/v1/page-to-markdown": ["url", "markdown"],
-  "/v1/business-days": ["calendar", "op"],
-  "/v1/fx/rates": ["base", "rate_date", "rates"],
-  "/v1/lei": ["found"],
-  "/v1/recalls": ["query", "source"],
-  "/v1/us/rates-macro": ["series"],
-  "/v1/whois": ["domain", "checked_at"],
-  "/v1/fx/convert": ["from", "amount", "rate_date", "conversions"],
-  "/v1/merchant-check": ["query", "facts"],
-  "/v1/sanctions/address": ["listed", "query"],
-  "/v1/counterparty-check": ["query", "facts"],
-};
+const REVIEWED_PATH = "/v1/sanctions/address";
+const REVIEWED_ADDRESS = "0x098B716B8Aaf21512996dC57EB0615e2383E2f96";
+
+function reviewedAddress(resourceUrl) {
+  const url = new URL(resourceUrl);
+  return url.searchParams.get("address") || "";
+}
 
 function resourcePath(resourceUrl) {
   let url;
@@ -38,7 +30,9 @@ function resourcePath(resourceUrl) {
   }
   if (url.protocol !== "https:" || url.username || url.password) return null;
   if (url.hostname !== HOST) return null;
-  return Object.prototype.hasOwnProperty.call(FIELDS, url.pathname) ? url.pathname : null;
+  if (url.pathname !== REVIEWED_PATH) return null;
+  if (reviewedAddress(resourceUrl) !== REVIEWED_ADDRESS) return null;
+  return url.pathname;
 }
 
 function supportsResource(resourceUrl) {
@@ -55,9 +49,11 @@ function validatePurchasedService(resourceUrl, httpStatus, parsed) {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     return { ok: false, useful: false, code: "incomplete_result" };
   }
-  const missing = FIELDS[pathname].filter((key) => data[key] == null);
-  if (missing.length) return { ok: false, useful: false, code: "incomplete_result" };
-  return { ok: true, useful: true, schema: `stablecoingateways${pathname}` };
+  const address = reviewedAddress(resourceUrl);
+  if (typeof data.listed !== "boolean" || !data.query || typeof data.query.address !== "string" || data.query.address !== address) {
+    return { ok: false, useful: false, code: "incomplete_result" };
+  }
+  return { ok: true, useful: true, schema: "stablecoingateways/v1/sanctions/address" };
 }
 
 function boundedErrorCode(parsed, httpStatus) {

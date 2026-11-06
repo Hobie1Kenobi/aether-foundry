@@ -18,7 +18,8 @@ const policy = require("./policy");
 const REVIEWED = "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs";
 const TOKEN = "mission-internal-16";
 const ROOT = path.resolve(__dirname, "..", "..");
-const FX = "https://api.stablecoingateways.com/v1/fx/convert?from=USD&to=EUR&amount=1";
+const SANCTIONS = "https://api.stablecoingateways.com/v1/sanctions/address?address=0x098B716B8Aaf21512996dC57EB0615e2383E2f96";
+const WATCHED = "0x098B716B8Aaf21512996dC57EB0615e2383E2f96";
 
 function tmp() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "mission-review-"));
@@ -30,18 +31,28 @@ function activate(ledger, now) {
 
 describe("exact resource result", () => {
   it("rejects host suffixes, path prefixes, and an empty data object", () => {
-    assert.equal(serviceResult.supportsResource("https://api.stablecoingateways.com.evil/v1/fx/convert"), false);
-    assert.equal(serviceResult.supportsResource("https://evil.api.stablecoingateways.com/v1/fx/convert"), false);
-    assert.equal(serviceResult.supportsResource("https://api.stablecoingateways.com/v1/fx"), false);
-    assert.equal(serviceResult.supportsResource("https://api.stablecoingateways.com/v1/fx/convert/extra"), false);
-    assert.equal(serviceResult.supportsResource(FX), true);
-    const empty = serviceResult.validatePurchasedService(FX, 200, { data: {} });
+    assert.equal(serviceResult.supportsResource("https://api.stablecoingateways.com.evil/v1/sanctions/address?address=" + WATCHED), false);
+    assert.equal(serviceResult.supportsResource("https://evil.api.stablecoingateways.com/v1/sanctions/address?address=" + WATCHED), false);
+    assert.equal(serviceResult.supportsResource("https://api.stablecoingateways.com/v1/sanctions"), false);
+    assert.equal(serviceResult.supportsResource("https://api.stablecoingateways.com/v1/sanctions/address/extra?address=" + WATCHED), false);
+    assert.equal(serviceResult.supportsResource("https://api.stablecoingateways.com/v1/fx/convert?from=USD&to=EUR&amount=1"), false);
+    assert.equal(serviceResult.supportsResource(SANCTIONS), true);
+    const empty = serviceResult.validatePurchasedService(SANCTIONS, 200, { data: {} });
     assert.equal(empty.useful, false);
     assert.equal(empty.code, "incomplete_result");
-    const useful = serviceResult.validatePurchasedService(FX, 200, {
-      data: { from: "USD", amount: 1, rate_date: "2026-11-06", conversions: { EUR: {} } },
+    const useful = serviceResult.validatePurchasedService(SANCTIONS, 200, {
+      data: { listed: false, query: { address: WATCHED } },
     });
     assert.equal(useful.useful, true);
+    assert.throws(
+      () => require("./x402-deliver").bindChallenge({
+        scheme: "exact",
+        network: "xrpl:1",
+        asset: "XRP",
+        extra: { sourceTag: 26100014, invoiceId: "1793992874-ebc1623318b14ea7-d1737-4c212402f35bab060de0ac45" },
+      }),
+      (error) => error.code === "NO_RETRY"
+    );
   });
 });
 
@@ -175,10 +186,10 @@ describe("worker does not sign unsupported or unpersisted proofs", () => {
       items: [{
         id: "cand-no-persist",
         observed_at: now,
-        resource: { url: FX, method: "GET" },
+        resource: { url: SANCTIONS, method: "GET" },
         x402: {
           x402Version: 2,
-          resource: FX,
+          resource: SANCTIONS,
           accepts: [{
             scheme: "exact",
             network: "xrpl:1",
@@ -186,6 +197,7 @@ describe("worker does not sign unsupported or unpersisted proofs", () => {
             amount: "1737",
             payTo: REVIEWED,
             maxTimeoutSeconds: 300,
+            extra: { invoiceId: "inv-1", sourceTag: 26100014 },
           }],
         },
       }],
@@ -203,7 +215,7 @@ describe("worker does not sign unsupported or unpersisted proofs", () => {
       preparedAccount: { validated: 22118869, sequence: 22117391 },
       resourceFetch: async () => {
         proofs += 1;
-        return { status: 402, json: async () => ({ x402Version: 2, accepts: [{ scheme: "exact", network: "xrpl:1", amount: "1737", payTo: REVIEWED }] }) };
+        return { status: 402, json: async () => ({ x402Version: 2, accepts: [{ scheme: "exact", network: "xrpl:1", asset: "XRP", amount: "1737", payTo: REVIEWED, extra: { invoiceId: "inv-1", sourceTag: 26100014 } }] }) };
       },
       presign: async () => ({ tx_blob: "BLOB", hash: "AB".repeat(32) }),
     });
@@ -255,14 +267,14 @@ describe("signer sees a newer validated sequence", () => {
           }
           return new Response(JSON.stringify({ result: { drops: { open_ledger_fee: "10", base_fee: "10", median_fee: "5000" }, ledger_current_index: 22118869 } }), { status: 200 });
         }
-        if (target.startsWith("https://api.stablecoingateways.com/v1/fx/convert")) {
+        if (target.startsWith("https://api.stablecoingateways.com/v1/sanctions/address")) {
           fs.appendFileSync(process.env.PROOF_FILE, "sent\\n");
-          return new Response(JSON.stringify({ x402Version: 2, accepts: [{ scheme: "exact", network: "xrpl:1", asset: "XRP", amount: "1737", payTo: ${JSON.stringify(REVIEWED)}, maxTimeoutSeconds: 300 }] }), { status: 402 });
+          return new Response(JSON.stringify({ x402Version: 2, accepts: [{ scheme: "exact", network: "xrpl:1", asset: "XRP", amount: "1737", payTo: ${JSON.stringify(REVIEWED)}, maxTimeoutSeconds: 300, extra: { invoiceId: "inv-1", sourceTag: 26100014 } }] }), { status: 402 });
         }
         return new Response("{}", { status: 500 });
       };
     `);
-    fs.writeFileSync(path.join(home, "allowlist.json"), JSON.stringify({ payees: [{ address: REVIEWED, resource: FX }] }));
+    fs.writeFileSync(path.join(home, "allowlist.json"), JSON.stringify({ payees: [{ address: REVIEWED, resource: SANCTIONS }] }));
     fs.writeFileSync(path.join(home, "discovery.json"), JSON.stringify({
       schema: "aether.missions.discovery",
       network: "xrpl:1",
@@ -270,11 +282,11 @@ describe("signer sees a newer validated sequence", () => {
       items: [{
         id: "cand-seq-advance",
         observed_at: now,
-        resource: { url: FX, method: "GET" },
+        resource: { url: SANCTIONS, method: "GET" },
         x402: {
           x402Version: 2,
-          resource: FX,
-          accepts: [{ scheme: "exact", network: "xrpl:1", asset: "XRP", amount: "1737", payTo: REVIEWED, maxTimeoutSeconds: 300 }],
+          resource: SANCTIONS,
+          accepts: [{ scheme: "exact", network: "xrpl:1", asset: "XRP", amount: "1737", payTo: REVIEWED, maxTimeoutSeconds: 300, extra: { invoiceId: "inv-1", sourceTag: 26100014 } }],
         },
       }],
     }));

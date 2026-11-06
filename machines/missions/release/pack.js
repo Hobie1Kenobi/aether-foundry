@@ -21,6 +21,7 @@ const ENTRIES = [
 ];
 const DOCS = [
   "machines/missions/RUNBOOK.md",
+  "machines/missions/ACCEPTANCE.md",
   "machines/missions/THREAT.md",
   "machines/missions/ensure-up.snippet.sh",
   "machines/missions/release/INSTALL.md",

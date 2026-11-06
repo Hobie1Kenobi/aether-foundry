@@ -468,12 +468,12 @@ describe("production worker entrypoint", () => {
           }
           return new Response(JSON.stringify({ result: { drops: { base_fee: "10", median_fee: "5000", minimum_fee: "10", open_ledger_fee: "10" }, ledger_current_index: 22118869 } }), { status: 200 });
         }
-        if (target.startsWith("https://api.stablecoingateways.com/v1/fx/convert")) {
+        if (target.startsWith("https://api.stablecoingateways.com/v1/sanctions/address")) {
           const header = init && init.headers && (init.headers["PAYMENT-SIGNATURE"] || init.headers["payment-signature"]);
           if (!header) {
             return new Response(JSON.stringify({
               x402Version: 2,
-              accepts: [{ scheme: "exact", network: "xrpl:1", asset: "XRP", amount: "1737", payTo: ${JSON.stringify(REVIEWED)}, maxTimeoutSeconds: 300 }],
+              accepts: [{ scheme: "exact", network: "xrpl:1", asset: "XRP", amount: "1737", payTo: ${JSON.stringify(REVIEWED)}, maxTimeoutSeconds: 300, extra: { invoiceId: "inv-1", sourceTag: 26100014 } }],
             }), { status: 402, headers: { "content-type": "application/json" } });
           }
           fs.appendFileSync(process.env.PROOF_FILE, "1\\n");
@@ -484,7 +484,7 @@ describe("production worker entrypoint", () => {
     `);
     const now = new Date().toISOString();
     const wallet = xrpl.Wallet.generate();
-    const resource = "https://api.stablecoingateways.com/v1/fx/convert?from=USD&to=EUR&amount=1";
+    const resource = "https://api.stablecoingateways.com/v1/sanctions/address?address=0x098B716B8Aaf21512996dC57EB0615e2383E2f96";
     activate(ledger, now);
     fs.writeFileSync(path.join(home, "allowlist.json"), JSON.stringify({
       payees: [{ address: REVIEWED, resource }],

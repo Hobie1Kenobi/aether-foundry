@@ -85,7 +85,37 @@ async function preflight(built, fetchImpl) {
   if (!live) {
     return { ok: false, code: "stale_challenge", rationale: "The live 402 no longer matches the qualified xrpl:1 accept." };
   }
-  return { ok: true };
+  return { ok: true, accept: live };
+}
+
+const RETAINED_INVOICE = "1793992874-ebc1623318b14ea7-d1737-4c212402f35bab060de0ac45";
+
+function bindChallenge(accept) {
+  if (!accept || accept.scheme !== "exact" || accept.network !== "xrpl:1" || accept.asset !== "XRP") {
+    throw coded("live challenge is not an exact xrpl:1 XRP accept", "MAINNET");
+  }
+  const extra = accept.extra && typeof accept.extra === "object" ? accept.extra : {};
+  const tag = Number(extra.sourceTag);
+  if (!Number.isInteger(tag) || tag < 0 || tag > 4294967295) {
+    throw coded("live challenge sourceTag is missing or malformed", "TX");
+  }
+  const invoiceId = extra.invoiceId;
+  if (typeof invoiceId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{3,127}$/.test(invoiceId)) {
+    throw coded("live challenge invoiceId is missing or malformed", "TX");
+  }
+  if (invoiceId === RETAINED_INVOICE) {
+    throw coded("the retained invoice is not permission to replay a signed challenge", "NO_RETRY");
+  }
+  return {
+    sourceTag: tag,
+    invoiceId,
+    memo: {
+      Memo: {
+        MemoType: Buffer.from("invoice", "utf8").toString("hex").toUpperCase(),
+        MemoData: Buffer.from(invoiceId, "utf8").toString("hex").toUpperCase(),
+      },
+    },
+  };
 }
 
 async function deliverProof(options) {
@@ -112,6 +142,8 @@ module.exports = {
   challengeFresh,
   sameAccept,
   preflight,
+  RETAINED_INVOICE,
+  bindChallenge,
   deliverProof,
   buildSignaturePayload: x402.buildSignaturePayload,
 };
