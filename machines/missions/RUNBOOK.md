@@ -77,26 +77,29 @@ Automatic publishing needs `FOUNDRY_MISSION_GITHUB_TOKEN` in `/workspace/foundry
 
 ## Allowlist
 
-`/workspace/foundry-ops/missions-runtime/allowlist.json` is `{ "payees": [] }` until you edit it. A discovered `payTo` stays `payee_not_allowlisted` and is not added by the worker. After you review that candidate's resource and 402 body, add one object `{ "address", "resource" }` for that classic address and that exact URL. A string address still matches any resource; the reviewed seller `rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs` should be entered with its resource so a different URL cannot use it. The worker never writes this file. Class activation already covers the 1 XRP and 5 XRP caps. One reviewed address is not permission for any other seller.
+The installed allowlist is the reviewed resource object for `rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs`. This release does not add payees and does not turn that entry into a string that matches every URL. A discovered `payTo` outside that object stays `payee_not_allowlisted`. The worker never writes this file. Class activation already covers the 1 XRP and 5 XRP caps. One reviewed address is not permission for any other seller.
 
-A pre-sign `FEE` block can be reopened only with `FOUNDRY_MISSION_CONFIRM=RETRY-PRE-SIGN-FEE-BLOCK` and the mission token:
+The reserve is the XRPL Labs `open_ledger_fee` plus 1000 drops of headroom, and never above 10000 drops. That ceiling is inside the same 1 XRP and 5 XRP caps. Before a signature the worker quotes the same field again. If the fresh number is above the ceiling, the hold is released with `FEE_CAP` and nothing is signed. If it is within the ceiling, the unused headroom is released and the transaction fee is that fresh number. `median_fee` is not the quote.
+
+A pre-sign `FEE`, `FEE_CAP`, or `FEE_STALE` block can be reopened only by naming that one candidate key, with `FOUNDRY_MISSION_CONFIRM=RETRY-PRE-SIGN-FEE-BLOCK` and the mission token:
 
 ```bash
 FOUNDRY_MISSION_HOME=/workspace/foundry-ops/missions-runtime \
 FOUNDRY_MISSION_LEDGER=/workspace/foundry-ops/missions-runtime/ledger \
 FOUNDRY_MISSION_TOKEN=... \
 FOUNDRY_MISSION_CONFIRM=RETRY-PRE-SIGN-FEE-BLOCK \
+FOUNDRY_MISSION_RETRY_KEY=cand-17-51ec932c8e \
 node src/missions/retry-fee.js
 ```
 
-That command writes an audit line and does not sign. The old blocked mission stays in the ledger. Claims that were signed or left uncertain are not retried. Do not mint a new discovery id to skip a consumed candidate. `cand-17-51ec932c8e` stays the same key; the worker opens a successor only after that audit.
+That command writes one audit line and does not sign. It does not clear any other consumed key. The next tick opens `cand-17-51ec932c8e-fee-retry-2` because `fee-retry-1` already exists. Do not mint a new discovery id. A grant written by the earlier command that named every fee key does not open another successor. A successor that is empty or already signed blocks another grant for that parent. Claims with a hash, signer acceptance, or an uncertain hold are not retried. Swap to this release before the next start so the installed worker does not still honor those older grants. `cand-17-51ec932c8e` stays the same key; the worker opens a successor only after that audit.
 
 ## Swap a release
 
 Stop only the dedicated pids. The ledger, arm file, and account file stay in `/workspace/foundry-ops/missions-runtime`, so pending and uncertain holds are kept.
 
 ```bash
-OLD=/workspace/foundry-ops/releases/276cf4951258aba0bb45bcb58a7b73b211881a6a
+OLD=/workspace/foundry-ops/releases/42b66aabb9055a8bb691889a77119f2310fe2cb7
 NEW=/workspace/foundry-ops/releases/<newsha>
 FOUNDRY_MISSION_HOME=/workspace/foundry-ops/missions-runtime "$OLD/bin/stop"
 install -d "$NEW"

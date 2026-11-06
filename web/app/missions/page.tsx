@@ -51,7 +51,7 @@ export default async function MissionsPage() {
         <article className="card">
           <h2>Enabled</h2>
           <dl className="kv">
-            <dt>Spending</dt>
+            <dt>Class approved</dt>
             <dd>{feed.spending_enabled ? "yes" : "no"}</dd>
             <dt>Source of that flag</dt>
             <dd>{feed.spending_enabled_source}</dd>
@@ -76,6 +76,22 @@ export default async function MissionsPage() {
             </dd>
           </dl>
         </article>
+      </section>
+      <section>
+        <h2>Missions in this snapshot</h2>
+        <p className="muted">
+          Class approval is not a running worker. Signing on this server is{" "}
+          {feed.signing_enabled ? "yes" : "no"}. A row is complete only when its complete flag is true.
+          This page does not show a live execution loop.
+        </p>
+        <ul>
+          {(feed.missions || []).map((mission) => (
+            <li key={mission.id}>
+              <code>{mission.id}</code> {mission.status}
+              {mission.code ? ` · ${mission.code}` : ""} · {mission.complete ? "complete" : "not complete"}
+            </li>
+          ))}
+        </ul>
       </section>
       <section>
         <h2>How this page gets data</h2>

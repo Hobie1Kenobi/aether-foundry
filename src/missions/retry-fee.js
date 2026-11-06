@@ -5,61 +5,49 @@ const fs = require("fs");
 const path = require("path");
 const config = require("./config");
 const { exclusive, readEvents, coded } = require("./ledger");
-const { fold } = require("./engine");
+const { fold, safePreSignFee } = require("./engine");
 const missionPolicy = require("./policy");
 const guard = require("./runtime-guard");
 
-const FEE_BLOCKS = new Set(["FEE", "FEE_CAP", "FEE_STALE"]);
-
 function preSignFeeBlock(mission) {
-  return Boolean(
-    mission
-    && FEE_BLOCKS.has(mission.code)
-    && mission.signed !== true
-    && mission.submitted !== true
-    && mission.live !== true
-    && !mission.submit_state
-    && !mission.presigned_hash
-    && mission.hold !== "uncertain"
-  );
+  return safePreSignFee(mission);
 }
 
 function retryPreSignFee(dir, input, opts) {
   const options = opts || {};
   const now = input.now || new Date().toISOString();
+  const key = String(input.idempotency_key || "");
   if (input.confirm !== config.FEE_RETRY_PHRASE) throw coded("fee retry phrase mismatch", "APPROVAL");
   if (!missionPolicy.tokenOk(input.token, options.token)) throw coded("fee retry token was refused", "AUTH");
+  if (!/^[a-z0-9][a-z0-9-]{7,63}$/.test(key)) throw coded("fee retry needs one candidate key", "IDEMPOTENCY");
   const ledger = guard.assertIsolated(dir);
   return exclusive(ledger, (api) => {
-    const events = api.read();
-    const state = fold(events);
-    const keys = [];
-    for (const mission of Object.values(state.missions)) {
-      if (!FEE_BLOCKS.has(mission.code)) continue;
-      if (!preSignFeeBlock(mission)) throw coded("refusing to retry a claim that may have been signed", "NO_RETRY");
-      keys.push(mission.idempotency_key);
+    const state = fold(api.read());
+    const mission = Object.values(state.missions).find((item) => item.idempotency_key === key);
+    if (!mission || !preSignFeeBlock(mission)) throw coded("refusing to retry a claim that may have been signed", "NO_RETRY");
+    const children = Object.values(state.missions).filter((item) => item.retry_of === key);
+    for (const child of children) {
+      if (!preSignFeeBlock(child)) throw coded("refusing to open another successor after an empty or signed retry", "NO_RETRY");
     }
-    if (!keys.length) return { retried: [], live: false, submitted: false };
-    for (const key of keys) {
-      api.append({
-        type: "control.retry_fee",
-        at: now,
-        idempotency_key: key,
-        live: false,
-        signed: false,
-        submitted: false,
-        rationale: "Operator audit reopened one pre-sign fee block. No transaction was signed.",
-      });
-    }
+    api.append({
+      type: "control.retry_fee",
+      at: now,
+      idempotency_key: key,
+      explicit: true,
+      live: false,
+      signed: false,
+      submitted: false,
+      rationale: "Operator audit reopened one named pre-sign fee block. No transaction was signed.",
+    });
     const stateFile = path.join(ledger, "worker-state.json");
     if (fs.existsSync(stateFile)) {
       const workerState = JSON.parse(fs.readFileSync(stateFile, "utf8"));
       const consumed = workerState.consumed || {};
-      for (const key of keys) delete consumed[key];
+      delete consumed[key];
       workerState.consumed = consumed;
       fs.writeFileSync(stateFile, `${JSON.stringify(workerState)}\n`);
     }
-    return { retried: keys, live: false, submitted: false };
+    return { retried: [key], live: false, submitted: false };
   });
 }
 
@@ -70,6 +58,7 @@ if (require.main === module) {
     const result = retryPreSignFee(dir, {
       token: process.env.FOUNDRY_MISSION_TOKEN,
       confirm: process.env.FOUNDRY_MISSION_CONFIRM,
+      idempotency_key: process.env.FOUNDRY_MISSION_RETRY_KEY,
       now: new Date().toISOString(),
     }, { token: process.env.FOUNDRY_MISSION_TOKEN });
     process.stdout.write(`${JSON.stringify(result)}\n`);

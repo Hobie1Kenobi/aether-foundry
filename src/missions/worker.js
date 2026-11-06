@@ -14,7 +14,7 @@ const path = require("path");
 const config = require("./config");
 const { coded, readEvents } = require("./ledger");
 const { fold, startMission, blockMission, act, evaluate, view } = require("./engine");
-const { beginSubmit, finishSubmit, releasePrepared, releaseUnsignedClaim, notePresign } = require("./submit");
+const { beginSubmit, finishSubmit, releasePrepared, releaseUnsignedClaim, narrowUnsubmittedFee, notePresign } = require("./submit");
 const networkFee = require("./network-fee");
 const x402Deliver = require("./x402-deliver");
 const missionPolicy = require("./policy");
@@ -185,9 +185,9 @@ async function quotedFee(opts, now) {
   return networkFee.quoteNetworkFee({ fetch: runtimeFetch(opts), now });
 }
 
-function withFee(built, quote) {
+function withFee(built, quote, execute) {
   const price = BigInt(built.price_drops);
-  const fee = BigInt(quote.fee_drops);
+  const fee = BigInt(execute ? networkFee.reserveCeiling(quote.fee_drops) : quote.fee_drops);
   if (price + fee > config.PER_MISSION_DROPS) {
     return blocked({ id: built.key }, "FEE_CAP", "The XRPL network fee plus the payTo amount exceeds 1000000 drops.", built.seller, built.price_drops);
   }
@@ -206,7 +206,7 @@ function withFee(built, quote) {
         accounts: [{ address: built.seller, source: "x402" }],
       },
       payment_drops: built.price_drops,
-      network_fee_drops: quote.fee_drops,
+      network_fee_drops: fee.toString(),
       resource_url: built.resource ? built.resource.url : null,
     },
   };
@@ -342,7 +342,7 @@ async function tick(options) {
   let built = qualifyCandidate(pending, now);
   if (built.payable) {
     try {
-      built = withFee(built, await quotedFee(opts, now));
+      built = withFee(built, await quotedFee(opts, now), env.FOUNDRY_MISSION_EXECUTE === "yes");
     } catch (error) {
       built = blocked(pending, error.code || "FEE", "The XRPL Labs network fee could not be used. A merchant fee was not invented.");
     }
@@ -402,7 +402,16 @@ async function tick(options) {
   if (mission.status === "ready_for_signer" && env.FOUNDRY_MISSION_EXECUTE === "yes") {
     try {
       const again = await quotedFee(opts, now);
-      if (BigInt(again.fee_drops) > BigInt(mission.budget.network_fee_drops)) {
+      const fresh = BigInt(again.fee_drops);
+      const reservedFee = BigInt(mission.budget.network_fee_drops);
+      if (fresh < reservedFee) {
+        mission = narrowUnsubmittedFee(files.ledger, {
+          mission_id: mission.id,
+          now,
+          fee_drops: again.fee_drops,
+        }).mission;
+      }
+      if (fresh > reservedFee) {
         const released = releasePrepared(files.ledger, {
           mission_id: mission.id,
           now,
