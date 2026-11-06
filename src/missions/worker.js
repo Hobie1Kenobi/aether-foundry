@@ -174,9 +174,15 @@ function qualifyCandidate(item, now) {
   return blocked(item, "undeliverable", "A foreign payTo is not an instruction to send a raw Payment.", service.seller, amount);
 }
 
+function runtimeFetch(opts) {
+  if (opts && typeof opts.fetch === "function") return opts.fetch;
+  if (typeof globalThis.fetch === "function") return globalThis.fetch;
+  return null;
+}
+
 async function quotedFee(opts, now) {
   if (opts && typeof opts.quoteFee === "function") return networkFee.assertFresh(await opts.quoteFee(now), now);
-  return networkFee.quoteNetworkFee({ fetch: opts && opts.fetch, now });
+  return networkFee.quoteNetworkFee({ fetch: runtimeFetch(opts), now });
 }
 
 function withFee(built, quote) {
@@ -201,13 +207,20 @@ function withFee(built, quote) {
       },
       payment_drops: built.price_drops,
       network_fee_drops: quote.fee_drops,
+      resource_url: built.resource ? built.resource.url : null,
     },
   };
 }
 
 function allowlistOf(file) {
   const body = readJson(file);
-  const payees = body && Array.isArray(body.payees) ? body.payees.filter((item) => typeof item === "string") : [];
+  const payees = [];
+  for (const item of (body && Array.isArray(body.payees) ? body.payees : [])) {
+    if (typeof item === "string" && item) payees.push(item);
+    else if (item && typeof item.address === "string" && typeof item.resource === "string") {
+      payees.push({ address: item.address, resource: item.resource });
+    }
+  }
   return { payees };
 }
 
@@ -227,7 +240,7 @@ function pathsOf(options) {
 async function publishIfAsked(ledger, env, now, deps) {
   if (!env || env.FOUNDRY_MISSION_PUBLISH !== "yes") return { uploaded: false, reason: "publish_off" };
   try {
-    return await uploadSnapshot(ledger, { env, now, fetch: deps && deps.fetch });
+    return await uploadSnapshot(ledger, { env, now, fetch: runtimeFetch(deps) });
   } catch (error) {
     return { uploaded: false, reason: error.code || "PUBLISH" };
   }
@@ -259,7 +272,9 @@ async function defaultPresign(mission, env, opts) {
 
 async function maybeSubmit(mission, env, deps) {
   if (!env || env.FOUNDRY_MISSION_EXECUTE !== "yes") return { submitted: false, reason: "execute_off" };
-  const fetchImpl = deps && deps.fetch;
+  const fetchImpl = (deps && typeof deps.signerFetch === "function" && deps.signerFetch)
+    || (deps && typeof deps.fetch === "function" && deps.fetch)
+    || (typeof globalThis.fetch === "function" ? globalThis.fetch : null);
   if (typeof fetchImpl !== "function") return { submitted: false, reason: "no_signer_fetch" };
   const port = guard.assertFreePort(env.FOUNDRY_MISSION_SIGNER_PORT, 8788);
   const response = await fetchImpl(`http://127.0.0.1:${port}/sign`, {
