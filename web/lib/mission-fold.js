@@ -114,6 +114,16 @@ function fold(events, now) {
       const amount = BigInt(event.drops || "0");
       bucket.uncertain -= amount;
       bucket.spent += amount;
+    } else if (event.type === "budget.unsigned_released") {
+      const bucket = dayBucket(event.day);
+      const amount = BigInt(event.drops || "0");
+      bucket.uncertain -= amount;
+      if (bucket.uncertain < 0n) bucket.uncertain = 0n;
+      bucket.released += amount;
+      if (event.live === true) {
+        live -= amount;
+        if (live < 0n) live = 0n;
+      }
     } else if (event.type === "budget.uncertain") {
       const bucket = dayBucket(event.day);
       const amount = BigInt(event.drops || "0");

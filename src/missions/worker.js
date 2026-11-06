@@ -14,7 +14,7 @@ const path = require("path");
 const config = require("./config");
 const { coded, readEvents } = require("./ledger");
 const { fold, startMission, blockMission, act, evaluate, view } = require("./engine");
-const { beginSubmit, finishSubmit, releasePrepared, notePresign } = require("./submit");
+const { beginSubmit, finishSubmit, releasePrepared, releaseUnsignedClaim, notePresign } = require("./submit");
 const networkFee = require("./network-fee");
 const x402Deliver = require("./x402-deliver");
 const missionPolicy = require("./policy");
@@ -250,23 +250,29 @@ async function defaultPresign(mission, env, opts) {
   const fetchImpl = (opts && opts.signerFetch) || (opts && opts.fetch) || globalThis.fetch;
   if (typeof fetchImpl !== "function") return null;
   const port = guard.assertFreePort(env.FOUNDRY_MISSION_SIGNER_PORT, 8788);
-  const response = await fetchImpl(`http://127.0.0.1:${port}/sign`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${env.FOUNDRY_MISSION_SIGNER_TOKEN || ""}`,
-    },
-    body: JSON.stringify({
-      intent: "mission_spend",
-      execute: true,
-      presign: true,
-      dry_run: false,
-      mission_id: mission.id,
-      tx: mission.unsigned_tx,
-    }),
-  });
-  const body = await response.json();
-  if (!response.ok || !body.tx_blob || !body.hash) return null;
+  let response;
+  try {
+    response = await fetchImpl(`http://127.0.0.1:${port}/sign`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${env.FOUNDRY_MISSION_SIGNER_TOKEN || ""}`,
+      },
+      body: JSON.stringify({
+        intent: "mission_spend",
+        execute: true,
+        presign: true,
+        dry_run: false,
+        mission_id: mission.id,
+        tx: mission.unsigned_tx,
+      }),
+    });
+  } catch {
+    return null;
+  }
+  const body = await response.json().catch(() => null);
+  if (!response.ok) return { refused: true, code: (body && body.code) || "SIGNER" };
+  if (!body || !body.tx_blob || !body.hash) return null;
   return { tx_blob: body.tx_blob, hash: body.hash };
 }
 
@@ -464,6 +470,31 @@ async function tick(options) {
     if (begun.proceed) {
       const signed = await opts.presign(begun.mission);
       if (!signed || !signed.tx_blob || !signed.hash) {
+        if (signed && signed.refused === true) {
+          try {
+            const released = releaseUnsignedClaim(files.ledger, {
+              mission_id: mission.id,
+              now,
+              code: signed.code || "SIGNER",
+              rationale: "The dedicated signer refused before any signature. The claim was released and nothing was submitted.",
+            });
+            writeState(files.ledger, {
+              last_tick_at: now,
+              last_reason: released.mission.code,
+              consumed: { [built.key]: { at: now, reason: released.mission.code } },
+            });
+            return Object.assign(base, {
+              reason: released.mission.code,
+              code: released.mission.code,
+              mission_id: mission.id,
+              worked: true,
+              submitted: false,
+              complete: false,
+            });
+          } catch {
+            /* A hash may already be on the claim. Leave it uncertain. */
+          }
+        }
         writeState(files.ledger, {
           last_tick_at: now,
           last_reason: "undeliverable",

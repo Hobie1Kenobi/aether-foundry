@@ -10,7 +10,9 @@ const { spawn } = require("node:child_process");
 const xrpl = require("xrpl");
 const config = require("./config");
 const { control, view, blockMission, startMission } = require("./engine");
+const { beginSubmit, notePresign, releaseUnsignedClaim } = require("./submit");
 const { retryPreSignFee } = require("./retry-fee");
+const deskFold = require("../../web/lib/mission-fold");
 
 const FOREIGN = "rQsPPdwiBeVDqsdDnFcVmu7xTVHMjXRFqN";
 const REVIEWED = "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs";
@@ -51,11 +53,15 @@ function item(id, resource, payTo, now) {
   };
 }
 
+function childEnv(extra) {
+  return Object.assign({}, process.env, extra, { CI: "", GITHUB_ACTIONS: "" });
+}
+
 function runNode(args, env) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, args, {
       cwd: ROOT,
-      env: Object.assign({}, process.env, env),
+      env,
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -84,13 +90,13 @@ describe("production worker entrypoint", () => {
       network_id: 1,
       items: [item("cand-reviewed-1", resource, REVIEWED, now)],
     }));
-    const result = await runNode(["src/missions/worker.js", "--once"], {
+    const result = await runNode(["src/missions/worker.js", "--once"], childEnv({
       FOUNDRY_MISSION_HOME: home,
       FOUNDRY_MISSION_LEDGER: ledger,
       FOUNDRY_MISSION_WORKER: "yes",
       FOUNDRY_MISSION_EXECUTE: "",
       MISSION_XRPL_ADDRESS: "r3JbqcVQ4Pov4MhFUMSdnro7s3VgpaqssZ",
-    });
+    }));
     assert.equal(result.code, 0, result.stderr);
     const body = JSON.parse(result.stdout);
     assert.notEqual(body.code, "FEE");
@@ -109,6 +115,7 @@ describe("production worker entrypoint", () => {
     fs.mkdirSync(ledger);
     const now = new Date().toISOString();
     const wallet = xrpl.Wallet.generate();
+    let proofs = 0;
     const seller = http.createServer((req, res) => {
       const header = req.headers["payment-signature"];
       if (!header) {
@@ -119,10 +126,13 @@ describe("production worker entrypoint", () => {
         }));
         return;
       }
+      proofs += 1;
       const payload = JSON.parse(Buffer.from(header, "base64").toString("utf8"));
-      assert.equal(payload.x402Version, 2);
-      assert.equal(payload.accepted.payTo, REVIEWED);
-      assert.equal(payload.accepted.amount, "5000");
+      if (payload.x402Version !== 2 || payload.accepted.payTo !== REVIEWED || payload.accepted.amount !== "5000") {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ code: "bad_proof" }));
+        return;
+      }
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ ok: true, service: "ping" }));
     });
@@ -149,7 +159,7 @@ describe("production worker entrypoint", () => {
     };
     const signer = spawn(process.execPath, ["src/missions/signer.js"], {
       cwd: ROOT,
-      env: Object.assign({}, process.env, signerEnv),
+      env: childEnv(signerEnv),
       stdio: ["ignore", "pipe", "pipe"],
     });
     await new Promise((resolve, reject) => {
@@ -162,7 +172,7 @@ describe("production worker entrypoint", () => {
       };
       wait();
     });
-    const result = await runNode(["src/missions/worker.js", "--once"], {
+    const result = await runNode(["src/missions/worker.js", "--once"], childEnv({
       FOUNDRY_MISSION_HOME: home,
       FOUNDRY_MISSION_LEDGER: ledger,
       FOUNDRY_MISSION_WORKER: "yes",
@@ -170,18 +180,102 @@ describe("production worker entrypoint", () => {
       FOUNDRY_MISSION_SIGNER_TOKEN: TOKEN,
       FOUNDRY_MISSION_SIGNER_PORT: "18788",
       MISSION_XRPL_ADDRESS: wallet.address,
-    });
+    }));
     signer.kill("SIGTERM");
     await new Promise((resolve) => seller.close(resolve));
     assert.equal(result.code, 0, `${result.stderr}\n${result.stdout}`);
     const body = JSON.parse(result.stdout);
-    assert.equal(body.complete, true);
+    assert.equal(body.complete, true, JSON.stringify(body));
     assert.equal(body.code, null);
+    assert.equal(proofs, 1);
     const mission = view(ledger, now).missions[body.mission_id];
     assert.equal(mission.artifact.seller, REVIEWED);
     assert.equal(mission.budget.payment_drops, "5000");
     assert.notEqual(mission.budget.network_fee_drops, "999999");
     assert.equal(mission.resource_url, resource);
+    assert.notEqual(mission.signer_accepted, true);
+  });
+
+  it("releases a claim when the signer process refuses under CI and does not submit", async () => {
+    const home = tmp();
+    const ledger = path.join(home, "ledger");
+    fs.mkdirSync(ledger);
+    const now = new Date().toISOString();
+    const wallet = xrpl.Wallet.generate();
+    let proofs = 0;
+    const seller = http.createServer((req, res) => {
+      if (req.headers["payment-signature"]) proofs += 1;
+      res.writeHead(402, { "content-type": "application/json" });
+      res.end(JSON.stringify({
+        x402Version: 2,
+        accepts: [{ scheme: "exact", network: "xrpl:1", asset: "XRP", amount: "5000", payTo: REVIEWED }],
+      }));
+    });
+    await new Promise((resolve) => seller.listen(0, "127.0.0.1", resolve));
+    const resource = `http://127.0.0.1:${seller.address().port}/ping`;
+    activate(ledger, now);
+    fs.writeFileSync(path.join(home, "allowlist.json"), JSON.stringify({
+      payees: [{ address: REVIEWED, resource }],
+    }));
+    fs.writeFileSync(path.join(home, "discovery.json"), JSON.stringify({
+      schema: "aether.missions.discovery",
+      network: "xrpl:1",
+      network_id: 1,
+      items: [item("cand-ci-refuse-1", resource, REVIEWED, now)],
+    }));
+    const signer = spawn(process.execPath, ["src/missions/signer.js"], {
+      cwd: ROOT,
+      env: Object.assign({}, process.env, {
+        FOUNDRY_MISSION_HOME: home,
+        FOUNDRY_MISSION_LEDGER: ledger,
+        FOUNDRY_MISSION_SIGNER_TOKEN: TOKEN,
+        FOUNDRY_MISSION_SIGNER_PORT: "18789",
+        FOUNDRY_MISSION_EXECUTE: "yes",
+        MISSION_XRPL_ADDRESS: wallet.address,
+        MISSION_XRPL_SEED: wallet.seed,
+        CI: "true",
+        GITHUB_ACTIONS: "true",
+      }),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("signer did not listen")), 5000);
+      const wait = () => {
+        fetch("http://127.0.0.1:18789/health").then((res) => res.json()).then(() => {
+          clearTimeout(timer);
+          resolve();
+        }).catch(() => setTimeout(wait, 50));
+      };
+      wait();
+    });
+    const result = await runNode(["src/missions/worker.js", "--once"], Object.assign({}, process.env, {
+      FOUNDRY_MISSION_HOME: home,
+      FOUNDRY_MISSION_LEDGER: ledger,
+      FOUNDRY_MISSION_WORKER: "yes",
+      FOUNDRY_MISSION_EXECUTE: "yes",
+      FOUNDRY_MISSION_SIGNER_TOKEN: TOKEN,
+      FOUNDRY_MISSION_SIGNER_PORT: "18789",
+      MISSION_XRPL_ADDRESS: wallet.address,
+      CI: "true",
+      GITHUB_ACTIONS: "true",
+    }));
+    signer.kill("SIGTERM");
+    await new Promise((resolve) => seller.close(resolve));
+    assert.equal(result.code, 0, `${result.stderr}\n${result.stdout}`);
+    const body = JSON.parse(result.stdout);
+    assert.equal(body.complete, false, JSON.stringify(body));
+    assert.equal(body.submitted, false);
+    assert.equal(body.code, "CI");
+    assert.equal(proofs, 0);
+    const mission = view(ledger, now).missions[body.mission_id];
+    assert.equal(mission.status, "blocked");
+    assert.equal(mission.hold, "released");
+    assert.equal(mission.presigned_hash, undefined);
+    assert.equal(mission.signed, false);
+    assert.equal(view(ledger, now).live_spend_drops, "0");
+    const desk = deskFold.fold(deskFold.readEvents(ledger), now);
+    assert.equal(desk.live_spend_drops, "0");
+    assert.equal(desk.uncertain_drops, "0");
   });
 });
 
@@ -235,5 +329,32 @@ describe("resource allowlist and fee retry", () => {
     assert.equal(successor.mission.retry_of, "cand-17-51ec932c8e");
     assert.notEqual(successor.mission.id, blocked.mission.id);
     assert.equal(view(ledger, now).missions[blocked.mission.id].status, "blocked");
+  });
+
+  it("refuses to release a claim after a presign hash exists", () => {
+    const ledger = path.join(tmp(), "ledger");
+    fs.mkdirSync(ledger);
+    const now = "2026-11-06T18:00:00.000Z";
+    activate(ledger, now);
+    const started = startMission(ledger, {
+      idempotency_key: "presign-hold-1",
+      now,
+      observation: { network: "xrpl:1", network_id: 1, accounts: [{ address: REVIEWED }] },
+      payment_drops: "5000",
+      network_fee_drops: "10",
+      resource_url: "https://shop.test/reviewed",
+    }, { allowlist: { payees: [REVIEWED] } });
+    const { act } = require("./engine");
+    const ready = act(ledger, { mission_id: started.mission.id, now }, {
+      wallet: { address: "r3JbqcVQ4Pov4MhFUMSdnro7s3VgpaqssZ" },
+    }).mission;
+    beginSubmit(ledger, { mission_id: ready.id, now });
+    notePresign(ledger, ready.id, "AB".repeat(32));
+    assert.throws(
+      () => releaseUnsignedClaim(ledger, { mission_id: ready.id, now, code: "CI" }),
+      (error) => error.code === "NO_RETRY",
+    );
+    assert.equal(view(ledger, now).missions[ready.id].hold, "uncertain");
+    assert.equal(view(ledger, now).missions[ready.id].retry_blocked, true);
   });
 });

@@ -137,6 +137,18 @@ function fold(events) {
       const mission = state.missions[event.mission_id];
       if (mission) mission.fee_spent_drops = event.drops;
     }
+    if (event.type === "budget.unsigned_released") {
+      const day = dayBucket(state, event.day);
+      const amount = BigInt(event.drops || "0");
+      sub(day, "uncertain", amount);
+      add(day, "released", amount);
+      if (event.live === true) {
+        state.live_uncertain -= amount;
+        if (state.live_uncertain < 0n) state.live_uncertain = 0n;
+      }
+      const mission = state.missions[event.mission_id];
+      if (mission) mission.hold = "released";
+    }
     if (event.type === "budget.uncertain") {
       const day = dayBucket(state, event.day);
       const amount = BigInt(event.drops);
