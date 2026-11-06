@@ -8,23 +8,22 @@ import { publicMissionResponse } from "../../web/lib/missions-public.ts";
 const require = createRequire(import.meta.url);
 const { handlePublic } = require("../../src/missions/public.js");
 
-test("a server with no ledger reports unknown live spend and a stale source", () => {
+test("a server with no ledger reports unknown live spend and a stale source", async () => {
   const missing = handlePublic({ method: "GET", route: "status", served_at: "2026-11-06T18:00:00.000Z" }, null);
   assert.equal(missing.body.source, "unavailable");
   assert.equal(missing.body.source_observed_at, null);
   assert.equal(missing.body.stale, true);
   assert.equal(missing.body.live_spend_drops, null);
   assert.equal(missing.body.spending_enabled_source, "default_off");
-  const rendered = publicMissionResponse("GET", "status");
-  assert.equal(rendered.body.source === "ledger" || rendered.body.source === "unavailable", true);
-  if (rendered.body.source === "unavailable") {
-    assert.equal(rendered.body.live_spend_drops, null);
-    assert.equal(rendered.body.stale, true);
-  }
+  process.env.FOUNDRY_MISSION_REMOTE = "off";
+  const rendered = await publicMissionResponse("GET", "status");
+  assert.equal(rendered.body.source, "unavailable");
+  assert.equal(rendered.body.live_spend_drops, null);
+  assert.equal(rendered.body.stale, true);
 });
 
-test("public mission writes are denied", () => {
-  const posted = publicMissionResponse("POST", "feed");
+test("public mission writes are denied", async () => {
+  const posted = await publicMissionResponse("POST", "feed");
   assert.equal(posted.status, 405);
   assert.equal(posted.body.code, "PUBLIC_WRITE");
   const routes = [
