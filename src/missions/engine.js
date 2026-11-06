@@ -137,6 +137,18 @@ function fold(events) {
       const mission = state.missions[event.mission_id];
       if (mission) mission.fee_spent_drops = event.drops;
     }
+    if (event.type === "budget.unsigned_released") {
+      const day = dayBucket(state, event.day);
+      const amount = BigInt(event.drops || "0");
+      sub(day, "uncertain", amount);
+      add(day, "released", amount);
+      if (event.live === true) {
+        state.live_uncertain -= amount;
+        if (state.live_uncertain < 0n) state.live_uncertain = 0n;
+      }
+      const mission = state.missions[event.mission_id];
+      if (mission) mission.hold = "released";
+    }
     if (event.type === "budget.uncertain") {
       const day = dayBucket(state, event.day);
       const amount = BigInt(event.drops);
@@ -245,6 +257,34 @@ function deny(api, mission, code, rationale, now) {
   return mission;
 }
 
+function payeeAllowed(allowlist, seller, resourceUrl) {
+  const rows = allowlist && Array.isArray(allowlist.payees) ? allowlist.payees : [];
+  for (const row of rows) {
+    if (typeof row === "string") {
+      if (row === seller) return true;
+      continue;
+    }
+    if (!row || row.address !== seller || typeof row.resource !== "string") continue;
+    if (row.resource === resourceUrl) return true;
+  }
+  return false;
+}
+
+const FEE_BLOCKS = new Set(["FEE", "FEE_CAP", "FEE_STALE"]);
+
+function feeRetryKey(events, mission, key) {
+  if (!mission || !FEE_BLOCKS.has(mission.code)) return null;
+  if (mission.signed || mission.submitted || mission.live || mission.submit_state || mission.presigned_hash || mission.hold === "uncertain") {
+    return null;
+  }
+  const granted = events.filter((event) => event && event.type === "control.retry_fee" && event.idempotency_key === key && event.live === false).length;
+  const used = events.filter((event) => event && event.type === "mission.upsert" && event.mission && event.mission.retry_of === key).length;
+  if (granted <= used) return null;
+  const next = `${key}-fee-retry-${used + 1}`;
+  if (!/^[a-z0-9][a-z0-9-]{7,63}$/.test(next)) return null;
+  return next;
+}
+
 function startMission(dir, input, opts) {
   const options = opts || {};
   const now = input.now || new Date().toISOString();
@@ -252,10 +292,16 @@ function startMission(dir, input, opts) {
   if (!/^[a-z0-9][a-z0-9-]{7,63}$/.test(key)) throw coded("idempotency_key is missing", "IDEMPOTENCY");
   policy.assertNetwork(input.observation || input);
   return exclusive(dir, (api) => {
-    const state = fold(api.read());
+    const events = api.read();
+    const state = fold(events);
     expireHolds(api, state, now);
     const existing = Object.values(state.missions).find((mission) => mission.idempotency_key === key);
-    if (existing) return { mission: existing, replay: true };
+    let attemptKey = key;
+    if (existing) {
+      const successor = feeRetryKey(events, existing, key);
+      if (!successor) return { mission: existing, replay: true };
+      attemptKey = successor;
+    }
     if (state.killed || input.action === "kill") {
       const mission = baseMission(key, now);
       return { mission: deny(api, mission, "killed", "Hard stop is on. The mission was denied and not reserved.", now), replay: false };
@@ -264,7 +310,8 @@ function startMission(dir, input, opts) {
       const mission = baseMission(key, now);
       return { mission: deny(api, mission, "action", `Action ${input.action} is not on the allowlist.`, now), replay: false };
     }
-    const mission = baseMission(key, now);
+    const mission = baseMission(attemptKey, now);
+    if (attemptKey !== key) mission.retry_of = key;
     mission.stage = "plan";
     const found = policy.discover(input.observation);
     if (found.foreign.length === 0) {
@@ -278,11 +325,11 @@ function startMission(dir, input, opts) {
       return { mission, replay: false };
     }
     const seller = found.foreign[0];
-    const allow = new Set((options.allowlist && options.allowlist.payees) || []);
     mission.seller = seller;
     mission.labels.counterparty = "foreign";
-    if (!allow.has(seller)) {
-      return { mission: deny(api, mission, "payee_not_allowlisted", "The foreign account is not an allowlisted payee.", now), replay: false };
+    mission.resource_url = input.resource_url || null;
+    if (!payeeAllowed(options.allowlist, seller, input.resource_url || null)) {
+      return { mission: deny(api, mission, "payee_not_allowlisted", "The foreign account is not an allowlisted payee for this resource.", now), replay: false };
     }
     let priced;
     try {
@@ -980,6 +1027,8 @@ module.exports = {
   missionId,
   startMission,
   blockMission,
+  payeeAllowed,
+  feeRetryKey,
   addStep,
   approve,
   control,

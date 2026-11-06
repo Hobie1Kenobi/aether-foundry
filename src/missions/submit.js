@@ -185,6 +185,53 @@ function acceptClaim(dir, missionId, tx) {
   });
 }
 
+function releaseUnsignedClaim(dir, input) {
+  const now = input.now || new Date().toISOString();
+  return exclusive(dir, (api) => {
+    const events = api.read();
+    const mission = fold(events).missions[input.mission_id];
+    if (!mission) throw coded("mission not found", "PLAN");
+    if (mission.presigned_hash || mission.signer_accepted === true || mission.submitted || mission.signed) {
+      throw coded("refusing to release a claim that may have been signed", "NO_RETRY");
+    }
+    if (mission.submit_state !== "signing" || mission.hold !== "uncertain") {
+      throw coded("no unsigned signing claim", "CLAIM");
+    }
+    const drops = mission.claim
+      ? (BigInt(mission.claim.amount) + BigInt(mission.claim.fee)).toString()
+      : mission.budget.budget_drops;
+    const live = events.some((event) => event
+      && event.type === "budget.uncertain"
+      && event.mission_id === mission.id
+      && event.live === true);
+    api.append({
+      type: "budget.unsigned_released",
+      at: now,
+      mission_id: mission.id,
+      day: mission.day,
+      drops,
+      live,
+      reason: input.code || "SIGNER",
+    });
+    mission.submit_state = null;
+    mission.retry_blocked = false;
+    mission.signer_accepted = false;
+    mission.signed = false;
+    mission.submitted = false;
+    mission.live = false;
+    mission.hold = "released";
+    mission.status = "blocked";
+    mission.code = input.code || "SIGNER";
+    mission.settlement = "unsigned";
+    mission.complete = false;
+    mission.claim = null;
+    mission.rationale = input.rationale || "The dedicated signer refused before any signature. The claim was released and nothing was submitted.";
+    mission.updated_at = now;
+    api.append({ type: "mission.upsert", at: now, mission });
+    return { mission };
+  });
+}
+
 function releasePrepared(dir, input) {
   const now = input.now || new Date().toISOString();
   return exclusive(dir, (api) => {
@@ -221,5 +268,6 @@ module.exports = {
   finishSubmit,
   notePresign,
   acceptClaim,
+  releaseUnsignedClaim,
   releasePrepared,
 };

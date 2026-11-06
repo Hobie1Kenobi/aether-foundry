@@ -13,6 +13,7 @@ const { coded } = require("./ledger");
 const guard = require("./runtime-guard");
 
 const ALLOWED_REPO = "Hobie1Kenobi/aether-foundry";
+// GitHub tokens are not limited to one file. This process refuses every other path.
 const ALLOWED_PATH = "lab/missions/public-status.json";
 const API = "https://api.github.com";
 const THROTTLE_MS = 15 * 60 * 1000;

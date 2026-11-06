@@ -14,7 +14,7 @@ const path = require("path");
 const config = require("./config");
 const { coded, readEvents } = require("./ledger");
 const { fold, startMission, blockMission, act, evaluate, view } = require("./engine");
-const { beginSubmit, finishSubmit, releasePrepared, notePresign } = require("./submit");
+const { beginSubmit, finishSubmit, releasePrepared, releaseUnsignedClaim, notePresign } = require("./submit");
 const networkFee = require("./network-fee");
 const x402Deliver = require("./x402-deliver");
 const missionPolicy = require("./policy");
@@ -174,9 +174,15 @@ function qualifyCandidate(item, now) {
   return blocked(item, "undeliverable", "A foreign payTo is not an instruction to send a raw Payment.", service.seller, amount);
 }
 
+function runtimeFetch(opts) {
+  if (opts && typeof opts.fetch === "function") return opts.fetch;
+  if (typeof globalThis.fetch === "function") return globalThis.fetch;
+  return null;
+}
+
 async function quotedFee(opts, now) {
   if (opts && typeof opts.quoteFee === "function") return networkFee.assertFresh(await opts.quoteFee(now), now);
-  return networkFee.quoteNetworkFee({ fetch: opts && opts.fetch, now });
+  return networkFee.quoteNetworkFee({ fetch: runtimeFetch(opts), now });
 }
 
 function withFee(built, quote) {
@@ -201,13 +207,20 @@ function withFee(built, quote) {
       },
       payment_drops: built.price_drops,
       network_fee_drops: quote.fee_drops,
+      resource_url: built.resource ? built.resource.url : null,
     },
   };
 }
 
 function allowlistOf(file) {
   const body = readJson(file);
-  const payees = body && Array.isArray(body.payees) ? body.payees.filter((item) => typeof item === "string") : [];
+  const payees = [];
+  for (const item of (body && Array.isArray(body.payees) ? body.payees : [])) {
+    if (typeof item === "string" && item) payees.push(item);
+    else if (item && typeof item.address === "string" && typeof item.resource === "string") {
+      payees.push({ address: item.address, resource: item.resource });
+    }
+  }
   return { payees };
 }
 
@@ -227,7 +240,7 @@ function pathsOf(options) {
 async function publishIfAsked(ledger, env, now, deps) {
   if (!env || env.FOUNDRY_MISSION_PUBLISH !== "yes") return { uploaded: false, reason: "publish_off" };
   try {
-    return await uploadSnapshot(ledger, { env, now, fetch: deps && deps.fetch });
+    return await uploadSnapshot(ledger, { env, now, fetch: runtimeFetch(deps) });
   } catch (error) {
     return { uploaded: false, reason: error.code || "PUBLISH" };
   }
@@ -237,29 +250,37 @@ async function defaultPresign(mission, env, opts) {
   const fetchImpl = (opts && opts.signerFetch) || (opts && opts.fetch) || globalThis.fetch;
   if (typeof fetchImpl !== "function") return null;
   const port = guard.assertFreePort(env.FOUNDRY_MISSION_SIGNER_PORT, 8788);
-  const response = await fetchImpl(`http://127.0.0.1:${port}/sign`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${env.FOUNDRY_MISSION_SIGNER_TOKEN || ""}`,
-    },
-    body: JSON.stringify({
-      intent: "mission_spend",
-      execute: true,
-      presign: true,
-      dry_run: false,
-      mission_id: mission.id,
-      tx: mission.unsigned_tx,
-    }),
-  });
-  const body = await response.json();
-  if (!response.ok || !body.tx_blob || !body.hash) return null;
+  let response;
+  try {
+    response = await fetchImpl(`http://127.0.0.1:${port}/sign`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${env.FOUNDRY_MISSION_SIGNER_TOKEN || ""}`,
+      },
+      body: JSON.stringify({
+        intent: "mission_spend",
+        execute: true,
+        presign: true,
+        dry_run: false,
+        mission_id: mission.id,
+        tx: mission.unsigned_tx,
+      }),
+    });
+  } catch {
+    return null;
+  }
+  const body = await response.json().catch(() => null);
+  if (!response.ok) return { refused: true, code: (body && body.code) || "SIGNER" };
+  if (!body || !body.tx_blob || !body.hash) return null;
   return { tx_blob: body.tx_blob, hash: body.hash };
 }
 
 async function maybeSubmit(mission, env, deps) {
   if (!env || env.FOUNDRY_MISSION_EXECUTE !== "yes") return { submitted: false, reason: "execute_off" };
-  const fetchImpl = deps && deps.fetch;
+  const fetchImpl = (deps && typeof deps.signerFetch === "function" && deps.signerFetch)
+    || (deps && typeof deps.fetch === "function" && deps.fetch)
+    || (typeof globalThis.fetch === "function" ? globalThis.fetch : null);
   if (typeof fetchImpl !== "function") return { submitted: false, reason: "no_signer_fetch" };
   const port = guard.assertFreePort(env.FOUNDRY_MISSION_SIGNER_PORT, 8788);
   const response = await fetchImpl(`http://127.0.0.1:${port}/sign`, {
@@ -449,6 +470,31 @@ async function tick(options) {
     if (begun.proceed) {
       const signed = await opts.presign(begun.mission);
       if (!signed || !signed.tx_blob || !signed.hash) {
+        if (signed && signed.refused === true) {
+          try {
+            const released = releaseUnsignedClaim(files.ledger, {
+              mission_id: mission.id,
+              now,
+              code: signed.code || "SIGNER",
+              rationale: "The dedicated signer refused before any signature. The claim was released and nothing was submitted.",
+            });
+            writeState(files.ledger, {
+              last_tick_at: now,
+              last_reason: released.mission.code,
+              consumed: { [built.key]: { at: now, reason: released.mission.code } },
+            });
+            return Object.assign(base, {
+              reason: released.mission.code,
+              code: released.mission.code,
+              mission_id: mission.id,
+              worked: true,
+              submitted: false,
+              complete: false,
+            });
+          } catch {
+            /* A hash may already be on the claim. Leave it uncertain. */
+          }
+        }
         writeState(files.ledger, {
           last_tick_at: now,
           last_reason: "undeliverable",
