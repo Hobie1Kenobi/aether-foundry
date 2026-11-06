@@ -26,7 +26,14 @@ export type MissionStatus = {
   stale?: boolean;
   killed?: boolean;
   note?: string;
-  missions?: Array<{ id: string; status: string; rationale?: string; settlement?: string | null }>;
+  missions?: Array<{
+    id: string;
+    status: string;
+    code?: string | null;
+    complete?: boolean;
+    rationale?: string;
+    settlement?: string | null;
+  }>;
 };
 
 export async function missionStatus(now?: string): Promise<MissionStatus> {

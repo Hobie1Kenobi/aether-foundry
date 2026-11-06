@@ -114,6 +114,12 @@ function fold(events, now) {
       const amount = BigInt(event.drops || "0");
       bucket.uncertain -= amount;
       bucket.spent += amount;
+    } else if (event.type === "budget.fee_narrowed") {
+      const bucket = dayBucket(event.day);
+      const amount = BigInt(event.drops || "0");
+      bucket.reserved -= amount;
+      if (bucket.reserved < 0n) bucket.reserved = 0n;
+      bucket.released += amount;
     } else if (event.type === "budget.unsigned_released") {
       const bucket = dayBucket(event.day);
       const amount = BigInt(event.drops || "0");

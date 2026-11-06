@@ -5,6 +5,7 @@ const { coded } = require("./ledger");
 const LABS_HTTP = "https://testnet.xrpl-labs.com";
 const STALE_MS = 60 * 1000;
 const HARD_MAX_DROPS = 10000n;
+const FEE_HEADROOM_DROPS = 1000n;
 
 function drops(value) {
   if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) return String(value);
@@ -23,6 +24,13 @@ function networkId(body) {
   const result = body && (body.result || body);
   const info = result && (result.info || (result.result && result.result.info));
   return info ? info.network_id : null;
+}
+
+function reserveCeiling(feeDrops) {
+  const quoted = BigInt(feeDrops);
+  if (quoted <= 0n || quoted > HARD_MAX_DROPS) throw coded("network fee is outside the local bound", "FEE_CAP");
+  const ceiling = quoted + FEE_HEADROOM_DROPS;
+  return (ceiling > HARD_MAX_DROPS ? HARD_MAX_DROPS : ceiling).toString();
 }
 
 function assertFresh(quote, now) {
@@ -74,7 +82,9 @@ module.exports = {
   LABS_HTTP,
   STALE_MS,
   HARD_MAX_DROPS,
+  FEE_HEADROOM_DROPS,
   feeDrops,
+  reserveCeiling,
   assertFresh,
   quoteNetworkFee,
 };

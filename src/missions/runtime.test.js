@@ -645,6 +645,8 @@ describe("x402 qualification and network fee", () => {
       },
     });
     assert.equal(fromLabs.fee_drops, "10");
+    assert.equal(require("./network-fee").reserveCeiling("10"), "1010");
+    assert.equal(require("./network-fee").reserveCeiling("9500"), "10000");
     await assert.rejects(
       () => require("./network-fee").quoteNetworkFee({
         now: NOW,

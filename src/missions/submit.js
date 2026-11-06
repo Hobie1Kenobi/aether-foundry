@@ -9,11 +9,11 @@ const anchors = require("../director/anchors");
 function reservedDrops(events, missionId) {
   let total = 0n;
   for (const event of events) {
-    if (event && event.type === "budget.reserved" && event.mission_id === missionId) {
-      total += BigInt(event.budget_drops || "0");
-    }
+    if (!event || event.mission_id !== missionId) continue;
+    if (event.type === "budget.reserved") total += BigInt(event.budget_drops || "0");
+    if (event.type === "budget.fee_narrowed") total -= BigInt(event.drops || "0");
   }
-  return total;
+  return total < 0n ? 0n : total;
 }
 
 function claimMatches(mission, tx) {
@@ -232,6 +232,53 @@ function releaseUnsignedClaim(dir, input) {
   });
 }
 
+function narrowUnsubmittedFee(dir, input) {
+  const now = input.now || new Date().toISOString();
+  const next = BigInt(input.fee_drops);
+  return exclusive(dir, (api) => {
+    const mission = fold(api.read()).missions[input.mission_id];
+    if (!mission) throw coded("mission not found", "PLAN");
+    if (
+      mission.submit_state
+      || mission.presigned_hash
+      || mission.signer_accepted === true
+      || mission.signed
+      || mission.submitted
+      || mission.hold === "uncertain"
+    ) {
+      throw coded("refusing to change a fee after a signature", "NO_RETRY");
+    }
+    if (mission.hold !== "unsubmitted" || !mission.budget) throw coded("no unsubmitted fee reserve", "FEE");
+    const reserved = BigInt(mission.budget.network_fee_drops || "0");
+    if (next <= 0n || next > config.PER_MISSION_DROPS || next > reserved) {
+      throw coded("fresh fee is above the reserved network fee", "FEE_CAP");
+    }
+    const delta = reserved - next;
+    if (delta === 0n) return { mission, replay: true };
+    api.append({
+      type: "budget.fee_narrowed",
+      at: now,
+      mission_id: mission.id,
+      day: mission.day,
+      drops: delta.toString(),
+      from: reserved.toString(),
+      to: next.toString(),
+      live: false,
+    });
+    const budget = BigInt(mission.budget.budget_drops) - delta;
+    const committed = BigInt(mission.committed_drops || mission.budget.budget_drops) - delta;
+    mission.budget = Object.assign({}, mission.budget, {
+      network_fee_drops: next.toString(),
+      budget_drops: budget.toString(),
+    });
+    if (mission.unsigned_tx) mission.unsigned_tx = Object.assign({}, mission.unsigned_tx, { Fee: next.toString() });
+    mission.committed_drops = committed.toString();
+    mission.updated_at = now;
+    api.append({ type: "mission.upsert", at: now, mission });
+    return { mission, replay: false };
+  });
+}
+
 function releasePrepared(dir, input) {
   const now = input.now || new Date().toISOString();
   return exclusive(dir, (api) => {
@@ -269,5 +316,6 @@ module.exports = {
   notePresign,
   acceptClaim,
   releaseUnsignedClaim,
+  narrowUnsubmittedFee,
   releasePrepared,
 };

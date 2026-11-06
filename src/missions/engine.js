@@ -137,6 +137,15 @@ function fold(events) {
       const mission = state.missions[event.mission_id];
       if (mission) mission.fee_spent_drops = event.drops;
     }
+    if (event.type === "budget.fee_narrowed") {
+      const day = dayBucket(state, event.day);
+      const amount = BigInt(event.drops || "0");
+      sub(day, "reserved", amount);
+      add(day, "released", amount);
+      const prior = BigInt(state.missionCommitted[event.mission_id] || "0");
+      const next = prior > amount ? prior - amount : 0n;
+      state.missionCommitted[event.mission_id] = next.toString();
+    }
     if (event.type === "budget.unsigned_released") {
       const day = dayBucket(state, event.day);
       const amount = BigInt(event.drops || "0");
@@ -272,15 +281,34 @@ function payeeAllowed(allowlist, seller, resourceUrl) {
 
 const FEE_BLOCKS = new Set(["FEE", "FEE_CAP", "FEE_STALE"]);
 
+function safePreSignFee(mission) {
+  return Boolean(
+    mission
+    && FEE_BLOCKS.has(mission.code)
+    && mission.signed !== true
+    && mission.submitted !== true
+    && mission.live !== true
+    && mission.signer_accepted !== true
+    && !mission.submit_state
+    && !mission.presigned_hash
+    && mission.hold !== "uncertain"
+  );
+}
+
 function feeRetryKey(events, mission, key) {
-  if (!mission || !FEE_BLOCKS.has(mission.code)) return null;
-  if (mission.signed || mission.submitted || mission.live || mission.submit_state || mission.presigned_hash || mission.hold === "uncertain") {
-    return null;
+  if (!safePreSignFee(mission)) return null;
+  const granted = events.filter((event) => event
+    && event.type === "control.retry_fee"
+    && event.explicit === true
+    && event.idempotency_key === key
+    && event.live === false).length;
+  const opened = new Set();
+  for (const event of events) {
+    const row = event && event.type === "mission.upsert" ? event.mission : null;
+    if (row && row.retry_of === key && row.idempotency_key) opened.add(row.idempotency_key);
   }
-  const granted = events.filter((event) => event && event.type === "control.retry_fee" && event.idempotency_key === key && event.live === false).length;
-  const used = events.filter((event) => event && event.type === "mission.upsert" && event.mission && event.mission.retry_of === key).length;
-  if (granted <= used) return null;
-  const next = `${key}-fee-retry-${used + 1}`;
+  if (granted <= opened.size) return null;
+  const next = `${key}-fee-retry-${opened.size + 1}`;
   if (!/^[a-z0-9][a-z0-9-]{7,63}$/.test(next)) return null;
   return next;
 }
@@ -1028,6 +1056,7 @@ module.exports = {
   startMission,
   blockMission,
   payeeAllowed,
+  safePreSignFee,
   feeRetryKey,
   addStep,
   approve,

@@ -32,7 +32,7 @@ function activate(ledger, now) {
   }, { token: TOKEN });
 }
 
-function item(id, resource, payTo, now) {
+function item(id, resource, payTo, now, amount) {
   return {
     id,
     observed_at: now,
@@ -44,7 +44,7 @@ function item(id, resource, payTo, now) {
         scheme: "exact",
         network: "xrpl:1",
         asset: "XRP",
-        amount: "5000",
+        amount: amount || "5000",
         payTo,
         maxTimeoutSeconds: 300,
         fee_drops: "999999",
@@ -277,6 +277,175 @@ describe("production worker entrypoint", () => {
     assert.equal(desk.live_spend_drops, "0");
     assert.equal(desk.uncertain_drops, "0");
   });
+
+  it("signs the fresh open_ledger_fee inside the reserved ceiling", async () => {
+    const home = tmp();
+    const ledger = path.join(home, "ledger");
+    fs.mkdirSync(ledger);
+    const fees = ["10", "12"];
+    let feeCalls = 0;
+    fs.writeFileSync(path.join(home, "preload.js"), `
+      const original = globalThis.fetch;
+      const fees = ${JSON.stringify(fees)};
+      let feeCalls = 0;
+      globalThis.fetch = async (url, init) => {
+        if (String(url) === "https://testnet.xrpl-labs.com") {
+          const body = JSON.parse(init.body);
+          if (body.method === "server_info") {
+            return new Response(JSON.stringify({ result: { info: { build_version: "3.4.1", network_id: 1, load_factor: 1 } } }), { status: 200 });
+          }
+          const open = fees[Math.min(feeCalls, fees.length - 1)];
+          feeCalls += 1;
+          return new Response(JSON.stringify({ result: { drops: { base_fee: "10", median_fee: "5000", minimum_fee: "10", open_ledger_fee: open }, levels: { reference_level: "256", open_ledger_level: "256" }, ledger_current_index: 22118406 } }), { status: 200 });
+        }
+        return original(url, init);
+      };
+    `);
+    const now = new Date().toISOString();
+    const wallet = xrpl.Wallet.generate();
+    let proofs = 0;
+    const seller = http.createServer((req, res) => {
+      const header = req.headers["payment-signature"];
+      if (!header) {
+        res.writeHead(402, { "content-type": "application/json" });
+        res.end(JSON.stringify({
+          x402Version: 2,
+          accepts: [{ scheme: "exact", network: "xrpl:1", asset: "XRP", amount: "1737", payTo: REVIEWED }],
+        }));
+        return;
+      }
+      proofs += 1;
+      const payload = JSON.parse(Buffer.from(header, "base64").toString("utf8"));
+      if (payload.accepted.amount !== "1737") {
+        res.writeHead(400);
+        res.end("{}");
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true, service: "ping" }));
+    });
+    await new Promise((resolve) => seller.listen(0, "127.0.0.1", resolve));
+    const resource = `http://127.0.0.1:${seller.address().port}/ping`;
+    activate(ledger, now);
+    fs.writeFileSync(path.join(home, "allowlist.json"), JSON.stringify({
+      payees: [{ address: REVIEWED, resource }],
+    }));
+    fs.writeFileSync(path.join(home, "discovery.json"), JSON.stringify({
+      schema: "aether.missions.discovery",
+      network: "xrpl:1",
+      network_id: 1,
+      items: [item("cand-fee-headroom", resource, REVIEWED, now, "1737")],
+    }));
+    const signer = spawn(process.execPath, ["src/missions/signer.js"], {
+      cwd: ROOT,
+      env: childEnv({
+        FOUNDRY_MISSION_HOME: home,
+        FOUNDRY_MISSION_LEDGER: ledger,
+        FOUNDRY_MISSION_SIGNER_TOKEN: TOKEN,
+        FOUNDRY_MISSION_SIGNER_PORT: "18790",
+        FOUNDRY_MISSION_EXECUTE: "yes",
+        MISSION_XRPL_ADDRESS: wallet.address,
+        MISSION_XRPL_SEED: wallet.seed,
+      }),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("signer did not listen")), 5000);
+      const wait = () => {
+        fetch("http://127.0.0.1:18790/health").then((res) => res.json()).then(() => {
+          clearTimeout(timer);
+          resolve();
+        }).catch(() => setTimeout(wait, 50));
+      };
+      wait();
+    });
+    const result = await runNode(["src/missions/worker.js", "--once"], childEnv({
+      FOUNDRY_MISSION_HOME: home,
+      FOUNDRY_MISSION_LEDGER: ledger,
+      FOUNDRY_MISSION_WORKER: "yes",
+      FOUNDRY_MISSION_EXECUTE: "yes",
+      FOUNDRY_MISSION_SIGNER_TOKEN: TOKEN,
+      FOUNDRY_MISSION_SIGNER_PORT: "18790",
+      MISSION_XRPL_ADDRESS: wallet.address,
+      NODE_OPTIONS: `--require ${path.join(home, "preload.js")}`,
+    }));
+    signer.kill("SIGTERM");
+    await new Promise((resolve) => seller.close(resolve));
+    assert.equal(result.code, 0, `${result.stderr}\n${result.stdout}`);
+    const body = JSON.parse(result.stdout);
+    assert.equal(body.complete, true, JSON.stringify(body));
+    assert.equal(proofs, 1);
+    const mission = view(ledger, now).missions[body.mission_id];
+    assert.equal(mission.budget.payment_drops, "1737");
+    assert.equal(mission.budget.network_fee_drops, "12");
+    assert.equal(mission.budget.budget_drops, "1749");
+    assert.equal(mission.unsigned_tx.Fee, "12");
+    assert.notEqual(mission.signer_accepted, true);
+    const events = deskFold.readEvents(ledger);
+    const reserved = events.find((event) => event.type === "budget.reserved" && event.mission_id === mission.id);
+    const narrowed = events.find((event) => event.type === "budget.fee_narrowed" && event.mission_id === mission.id);
+    assert.equal(reserved.budget_drops, "2747");
+    assert.equal(narrowed.drops, "998");
+    assert.equal(narrowed.from, "1010");
+    assert.equal(narrowed.to, "12");
+    const desk = deskFold.fold(events, now);
+    assert.equal(desk.live_spend_drops, "1749");
+  });
+
+  it("releases the hold when the fresh open_ledger_fee exceeds the ceiling", async () => {
+    const home = tmp();
+    const ledger = path.join(home, "ledger");
+    fs.mkdirSync(ledger);
+    fs.writeFileSync(path.join(home, "preload.js"), `
+      const original = globalThis.fetch;
+      let feeCalls = 0;
+      globalThis.fetch = async (url, init) => {
+        if (String(url) === "https://testnet.xrpl-labs.com") {
+          const body = JSON.parse(init.body);
+          if (body.method === "server_info") {
+            return new Response(JSON.stringify({ result: { info: { network_id: 1, load_factor: 1 } } }), { status: 200 });
+          }
+          feeCalls += 1;
+          const open = feeCalls === 1 ? "10" : "5000";
+          return new Response(JSON.stringify({ result: { drops: { base_fee: "10", median_fee: "5000", minimum_fee: "10", open_ledger_fee: open }, ledger_current_index: 22118406 } }), { status: 200 });
+        }
+        return original(url, init);
+      };
+    `);
+    const now = new Date().toISOString();
+    const resource = "https://shop.test/reviewed";
+    activate(ledger, now);
+    fs.writeFileSync(path.join(home, "allowlist.json"), JSON.stringify({
+      payees: [{ address: REVIEWED, resource }],
+    }));
+    fs.writeFileSync(path.join(home, "discovery.json"), JSON.stringify({
+      schema: "aether.missions.discovery",
+      network: "xrpl:1",
+      network_id: 1,
+      items: [item("cand-fee-ceiling", resource, REVIEWED, now, "1737")],
+    }));
+    const result = await runNode(["src/missions/worker.js", "--once"], childEnv({
+      FOUNDRY_MISSION_HOME: home,
+      FOUNDRY_MISSION_LEDGER: ledger,
+      FOUNDRY_MISSION_WORKER: "yes",
+      FOUNDRY_MISSION_EXECUTE: "yes",
+      MISSION_XRPL_ADDRESS: "r3JbqcVQ4Pov4MhFUMSdnro7s3VgpaqssZ",
+      NODE_OPTIONS: `--require ${path.join(home, "preload.js")}`,
+    }));
+    assert.equal(result.code, 0, `${result.stderr}\n${result.stdout}`);
+    const body = JSON.parse(result.stdout);
+    assert.equal(body.code, "FEE_CAP", JSON.stringify(body));
+    assert.equal(body.complete, false);
+    assert.equal(body.submitted, false);
+    const mission = view(ledger, now).missions[body.mission_id];
+    assert.equal(mission.hold, "released");
+    assert.equal(mission.presigned_hash, undefined);
+    assert.equal(mission.signed, false);
+    assert.equal(view(ledger, now).live_spend_drops, "0");
+    const reserved = deskFold.readEvents(ledger).find((event) => event.type === "budget.reserved");
+    assert.equal(reserved.budget_drops, "2747");
+    assert.equal(reserved.components.network_fee_drops, "1010");
+  });
 });
 
 describe("resource allowlist and fee retry", () => {
@@ -310,6 +479,7 @@ describe("resource allowlist and fee retry", () => {
     const audit = retryPreSignFee(ledger, {
       token: TOKEN,
       confirm: config.FEE_RETRY_PHRASE,
+      idempotency_key: "cand-17-51ec932c8e",
       now,
     }, { token: TOKEN });
     assert.deepEqual(audit.retried, ["cand-17-51ec932c8e"]);
@@ -329,6 +499,50 @@ describe("resource allowlist and fee retry", () => {
     assert.equal(successor.mission.retry_of, "cand-17-51ec932c8e");
     assert.notEqual(successor.mission.id, blocked.mission.id);
     assert.equal(view(ledger, now).missions[blocked.mission.id].status, "blocked");
+    const other = blockMission(ledger, {
+      idempotency_key: "cand-01-feeblock",
+      now,
+      code: "FEE",
+      rationale: "The XRPL Labs network fee could not be used. A merchant fee was not invented.",
+    });
+    fs.writeFileSync(path.join(ledger, "worker-state.json"), JSON.stringify({
+      schema: "aether.missions.worker-state",
+      consumed: {
+        "cand-01-feeblock": { at: now, reason: "FEE" },
+        "cand-02-feeblock": { at: now, reason: "FEE" },
+      },
+      ticks: 2,
+    }));
+    blockMission(ledger, {
+      idempotency_key: "cand-02-feeblock",
+      now,
+      code: "FEE",
+      rationale: "The XRPL Labs network fee could not be used. A merchant fee was not invented.",
+    });
+    assert.throws(
+      () => retryPreSignFee(ledger, { token: TOKEN, confirm: config.FEE_RETRY_PHRASE, now }, { token: TOKEN }),
+      (error) => error.code === "IDEMPOTENCY",
+    );
+    const named = retryPreSignFee(ledger, {
+      token: TOKEN,
+      confirm: config.FEE_RETRY_PHRASE,
+      idempotency_key: "cand-01-feeblock",
+      now,
+    }, { token: TOKEN });
+    assert.deepEqual(named.retried, ["cand-01-feeblock"]);
+    const left = JSON.parse(fs.readFileSync(path.join(ledger, "worker-state.json"), "utf8")).consumed;
+    assert.equal(left["cand-01-feeblock"], undefined);
+    assert.ok(left["cand-02-feeblock"]);
+    assert.equal(view(ledger, now).missions[other.mission.id].code, "FEE");
+    const replay = startMission(ledger, {
+      idempotency_key: "cand-17-51ec932c8e",
+      now,
+      observation: { network: "xrpl:1", network_id: 1, accounts: [{ address: REVIEWED }] },
+      payment_drops: "5000",
+      network_fee_drops: "10",
+      resource_url: resource,
+    }, { allowlist: { payees: [{ address: REVIEWED, resource }] } });
+    assert.equal(replay.replay, true);
   });
 
   it("refuses to release a claim after a presign hash exists", () => {
@@ -356,5 +570,55 @@ describe("resource allowlist and fee retry", () => {
     );
     assert.equal(view(ledger, now).missions[ready.id].hold, "uncertain");
     assert.equal(view(ledger, now).missions[ready.id].retry_blocked, true);
+  });
+
+  it("does not open a successor from a blanket grant or after an empty successor", () => {
+    const ledger = path.join(tmp(), "ledger");
+    fs.mkdirSync(ledger);
+    const now = "2026-11-06T18:00:00.000Z";
+    activate(ledger, now);
+    blockMission(ledger, {
+      idempotency_key: "cand-10-empty01",
+      now,
+      code: "FEE",
+      rationale: "The XRPL Labs network fee could not be used. A merchant fee was not invented.",
+    });
+    fs.appendFileSync(path.join(ledger, "events.jsonl"), `${JSON.stringify({
+      type: "control.retry_fee",
+      at: now,
+      idempotency_key: "cand-10-empty01",
+      live: false,
+      signed: false,
+      submitted: false,
+    })}\n`);
+    const ignored = startMission(ledger, {
+      idempotency_key: "cand-10-empty01",
+      now,
+      observation: { network: "xrpl:1", network_id: 1, accounts: [] },
+    });
+    assert.equal(ignored.replay, true);
+    assert.equal(ignored.mission.code, "FEE");
+    retryPreSignFee(ledger, {
+      token: TOKEN,
+      confirm: config.FEE_RETRY_PHRASE,
+      idempotency_key: "cand-10-empty01",
+      now,
+    }, { token: TOKEN });
+    const empty = startMission(ledger, {
+      idempotency_key: "cand-10-empty01",
+      now,
+      observation: { network: "xrpl:1", network_id: 1, accounts: [] },
+    });
+    assert.equal(empty.mission.retry_of, "cand-10-empty01");
+    assert.equal(empty.mission.code, "no_foreign_seller");
+    assert.throws(
+      () => retryPreSignFee(ledger, {
+        token: TOKEN,
+        confirm: config.FEE_RETRY_PHRASE,
+        idempotency_key: "cand-10-empty01",
+        now,
+      }, { token: TOKEN }),
+      (error) => error.code === "NO_RETRY",
+    );
   });
 });
