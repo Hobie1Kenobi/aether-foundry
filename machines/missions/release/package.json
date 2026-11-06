@@ -1,0 +1,12 @@
+{
+  "name": "foundry-missions-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Isolated Aether Foundry mission worker. Native XRPL Testnet XRP only.",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "dependencies": {
+    "xrpl": "5.3.0"
+  }
+}

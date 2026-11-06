@@ -29,7 +29,11 @@ lab/bridge/
 lab/missions/events.jsonl
 lab/missions/lock
 lab/missions/publish-state.json
+lab/missions/worker-state.json
+lab/missions/discovery.json
+lab/missions/allowlist.json
 lab/missions/*.partial
+artifacts/
 
 # Isolated Axelar bridge wallet book. Public addresses only, still untracked.
 machines/axelar-its-bridge/wallets.json

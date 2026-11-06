@@ -32,43 +32,43 @@ Use the Axelar testnet planner only as an unsigned description. This engine will
 
 ## Box handoff
 
-Checked layout, not a new supervisor:
+The old checkout stays where it is: `/workspace/aether-foundry` local `main` at `d442347`, one commit ahead of stale `origin/main` `0bd1127`, with dirty `lab/director-state.json`. Do not pull, reset, stash, or checkout over it. Leave the processes from `/workspace/foundry-ops/ensure-up.sh` running: signer `127.0.0.1:8787`, scribe `8792`, license `8793`. systemd is not installed, PID 1 is tini, and `crontab` is absent. `ensure-up.sh` loads the ordinary signer token, W1–W6 regular seeds, and Ollama. It does not load a mission account. `runtime:watch` stays off. `machines/missions/ensure-up.snippet.sh` is not sourced.
 
-- Checkout: `/workspace/aether-foundry` on local `main` at `d442347`, one commit ahead of stale `origin/main` `0bd1127`. `lab/director-state.json` is dirty. Do not `git pull`, `reset`, `stash`, or `checkout` over that.
-- Processes already up, started by `/workspace/foundry-ops/ensure-up.sh`: signer `127.0.0.1:8787`, scribe `8792`, license `8793`. Leave them running. systemd units are not installed. PID 1 is tini. `crontab` is not on the box.
-- `ensure-up.sh` loads the signer token, W1–W6 regular seeds, and Ollama. It does not load a mission account. `runtime:watch` stays off.
-- Signer `GET /health` field `signing: true` means that ordinary signer is armed. `mission_spend` on the same body is `false`. Mission readiness is `npm run missions:ready`, not the signer health flag.
+`npm run missions:ready` and `FOUNDRY_MISSION_RUN=yes` print one ready check and return. That command is not a loop and it does not pay. The scheduled worker is the release `bin/start`, which runs `src/missions/worker.js`.
 
-The mission runner is dormant. `machines/missions/ensure-up.snippet.sh` is not sourced. Parent adds that one commented block only when they want it, and still does not set `FOUNDRY_MISSION_EXECUTE`.
+Install the non-secret tar into an isolated directory. The tar's `INSTALL.md` names the git SHA.
 
 ```bash
-cd /workspace/aether-foundry
-npm run missions:ready
+install -d /workspace/foundry-ops/releases/<sha>
+tar -xf foundry-missions-<sha>.tar -C /workspace/foundry-ops/releases/<sha>
+cd /workspace/foundry-ops/releases/<sha>
+npm ci --omit=dev
+./bin/start
+./bin/health
+./bin/stop
 ```
 
-That prints booleans only. It does not submit and it does not print a seed.
+`npm ci` installs locked `xrpl@5.3.0` from the public npm registry. Node must be `>=20.19`. `./bin/start` is off until `./bin/arm` succeeds. It strips W0–W6 seed variables. `./bin/stop` signals only its own pid files.
 
-Class `foreign-xrpl1-purchase` becomes autonomous only after the ledger activate event. Until then every purchase waits. A different `kind` still waits for a separate approval. Bridge return and EVM gas stay `NON_XRP`.
+`GET http://127.0.0.1:8787/health` with `signing: true` is the existing W1–W6 signer. That body keeps `mission_spend: false`. `./bin/health` reads `127.0.0.1:8794` and, when the signer is up, `127.0.0.1:8788`. After arming, those bodies set `mission_signer_armed: true` and `signing_disabled: false`. Before arming, `signing_disabled` is true. `ordinary_signing` stays false on both mission ports.
+
+Create the account on the box. The client connects to `wss://testnet.xrpl-labs.com`, requires network id 1, and only then uses the SDK faucet host `faucet.altnet.rippletest.net`. Stdout is the address. The seed stays in the `0600` file.
 
 ```bash
-cd /workspace/aether-foundry
-export FOUNDRY_MISSION_TOKEN='<set on the box, not in git>'
-node -e 'require("./src/missions/engine").control("lab/missions",{action:"activate",confirm:"ACTIVATE-XRPL1-MISSION-SPEND",token:process.env.FOUNDRY_MISSION_TOKEN,now:new Date().toISOString()},{token:process.env.FOUNDRY_MISSION_TOKEN})'
+cd /workspace/foundry-ops/releases/<sha>
+FOUNDRY_MISSION_WALLET_TOOL=yes FOUNDRY_MISSION_FAUCET=yes \
+  node src/missions/wallet-tool.js --out /workspace/foundry-ops/missions-runtime/account.json
+FOUNDRY_MISSION_TOKEN='<box token>' FOUNDRY_MISSION_CONFIRM='ACTIVATE-XRPL1-MISSION-SPEND' \
+  FOUNDRY_MISSION_SIGNER_TOKEN='<signer token>' ./bin/arm
+./bin/stop
+./bin/start
+./bin/health
 ```
 
-A missing token fails closed. Add `MISSION_XRPL_ADDRESS` and `MISSION_XRPL_SEED` to the environment `ensure-up.sh` already uses, only when that isolated account exists. Do not put W0–W6 seeds in the mission process.
+`./bin/arm` records the class and the authorized caps, 1000000 and 5000000 drops. It refuses a higher cap. `./bin/start` then loads the seed only from `account.json` inside the signer process and sets execute. A `{ "asleep": true }` file at `/workspace/foundry-ops/missions-runtime/worker.json` stops ticks without clearing the arm file.
 
-Publish writes one sanitized file and does not commit unless `FOUNDRY_MISSION_PUBLISH=yes`. It does not push. It does not stage `lab/director-state.json`.
+Discovery is `/workspace/foundry-ops/missions-runtime/discovery.json`. A service counts only when its seller, price, and fee are an xrpl:1 XRP offer, the seller is not a house account, and the fields are the service object itself. Extra fields are ignored as authority. The worker validates that payload and writes an artifact. `complete` is true only after that artifact. A payment without it stays incomplete. One item per tick. Default interval 60 seconds, floor 15 seconds.
 
-```bash
-cd /workspace/aether-foundry
-npm run missions:publish
-git add -- lab/missions/public-status.json
-git diff --cached --name-only
-git commit -m "Publish sanitized mission snapshot"
-git status
-```
+A submit takes an exclusive ledger claim first. A second process gets `NO_RETRY`. If the process dies after the claim is handed to the signer, the hold stays uncertain and is not submitted again. The dedicated signer rejects a loopback request that does not match that reserved claim, even with the bearer token. EVM gas stays unauthorized.
 
-`git status` should still show the dirty director file unstaged, and the local NAV commit still ahead of origin. Push that snapshot commit when you choose. Do not pull first.
-
-The desk reads status, detail, and replay from that file at the current main SHA. The hash detects a corrupt file. It is not authentication. `prev_sequence` only checks the numbers inside the file. The reader has no saved checkpoint, so it cannot see a rolled-back chain. No snapshot is committed in this PR, so production stays `unavailable` and live spend is null.
+Publish with the GitHub contents API, path `lab/missions/public-status.json` only. The token is not in the tar. The desk stays `unavailable` until that file is on main. The content hash is not authentication.
