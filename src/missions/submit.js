@@ -185,6 +185,31 @@ function acceptClaim(dir, missionId, tx) {
   });
 }
 
+function noteDeliveryFailure(dir, input) {
+  const now = input.now || new Date().toISOString();
+  const status = Number(input.http_status);
+  return exclusive(dir, (api) => {
+    const mission = fold(api.read()).missions[input.mission_id];
+    if (!mission || !mission.presigned_hash) throw coded("no presigned claim", "CLAIM");
+    if (mission.hold !== "uncertain" && mission.submit_state !== "signing") {
+      throw coded("claim is not an open presign", "NO_RETRY");
+    }
+    mission.status = "uncertain";
+    mission.code = "delivery_failed";
+    mission.settlement = "submit_unknown";
+    mission.retry_blocked = true;
+    mission.complete = false;
+    mission.signed = false;
+    mission.submitted = false;
+    mission.live = false;
+    mission.delivery_http_status = Number.isInteger(status) ? status : null;
+    mission.rationale = "The seller did not return HTTP 200 with a usable result body. The presigned claim stays uncertain and is not released or retried.";
+    mission.updated_at = now;
+    api.append({ type: "mission.upsert", at: now, mission });
+    return { mission };
+  });
+}
+
 function releaseUnsignedClaim(dir, input) {
   const now = input.now || new Date().toISOString();
   return exclusive(dir, (api) => {
@@ -315,6 +340,7 @@ module.exports = {
   finishSubmit,
   notePresign,
   acceptClaim,
+  noteDeliveryFailure,
   releaseUnsignedClaim,
   narrowUnsubmittedFee,
   releasePrepared,

@@ -62,12 +62,14 @@ export default async function MissionsPage() {
         <article className="card">
           <h2>Live spend</h2>
           <dl className="kv">
-            <dt>Live drops</dt>
+            <dt>Accounted spent</dt>
+            <dd>{feed.accounted_spent_drops == null ? "unknown" : feed.accounted_spent_drops}</dd>
+            <dt>Uncertain hold</dt>
+            <dd>{feed.uncertain_drops == null ? "unknown" : feed.uncertain_drops}</dd>
+            <dt>Figure that includes unsettled holds</dt>
             <dd>{live}</dd>
             <dt>Reserved this window</dt>
             <dd>{feed.reserved_drops == null ? "unknown" : feed.reserved_drops}</dd>
-            <dt>Uncertain</dt>
-            <dd>{feed.uncertain_drops == null ? "unknown" : feed.uncertain_drops}</dd>
             <dt>Source health</dt>
             <dd>
               {feed.source}
@@ -81,14 +83,16 @@ export default async function MissionsPage() {
         <h2>Missions in this snapshot</h2>
         <p className="muted">
           Class approval is not a running worker. Signing on this server is{" "}
-          {feed.signing_enabled ? "yes" : "no"}. A row is complete only when its complete flag is true.
-          This page does not show a live execution loop.
+          {feed.signing_enabled ? "yes" : "no"}. No row is a completed purchase unless its complete flag is true.
+          An uncertain hold is not accounted spend. A settlement of submit_unknown is an open claim, not a purchase
+          ready to run. This snapshot has no worker-asleep field.
         </p>
         <ul>
           {(feed.missions || []).map((mission) => (
             <li key={mission.id}>
               <code>{mission.id}</code> {mission.status}
-              {mission.code ? ` · ${mission.code}` : ""} · {mission.complete ? "complete" : "not complete"}
+              {mission.code ? ` · ${mission.code}` : ""}
+              {mission.settlement ? ` · ${mission.settlement}` : ""} · {mission.complete ? "complete" : "not complete"}
             </li>
           ))}
         </ul>
