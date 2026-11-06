@@ -342,6 +342,8 @@ describe("signer sees a newer validated sequence", () => {
     assert.equal(code, 0, stdout);
     const body = JSON.parse(stdout);
     assert.equal(body.complete, false);
+    assert.equal(body.reason, "SEQUENCE_HELD");
+    assert.equal(body.sequence_policy, "hold");
     assert.notEqual(body.reason, "cand-seq-advance-fee-retry-1");
     assert.equal(fs.readFileSync(path.join(home, "proofs.txt"), "utf8").includes("sent"), false);
     const prior = view(ledger, now).missions[ready.id];

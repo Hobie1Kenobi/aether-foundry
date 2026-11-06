@@ -1,6 +1,11 @@
 # Parent may paste this into /workspace/foundry-ops/ensure-up.sh.
-# It is not sourced until then. Do not add a cron entry.
-# Does not signal 127.0.0.1:8787, 8792, or 8793.
+# Place the whole block BEFORE that script's final `exit 0`.
+# An `exit 0` above this block makes the block unreachable. Do not add `exit` here.
+# The parent script keeps its own exit after this block. A crash-recovery run
+# confirmed that order: the dedicated worker stops and restarts asleep, the
+# ledger and account are unchanged, and 8787, 8792, and 8793 stay healthy.
+# This is one flocked bashrc hook for a new shell, not a five-minute service.
+# Do not add a cron entry. Do not signal 127.0.0.1:8787, 8792, or 8793.
 # Does not print tokens.env or account.json.
 
 HOME_DIR=/workspace/foundry-ops/missions-runtime

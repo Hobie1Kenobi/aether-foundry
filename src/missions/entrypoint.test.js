@@ -857,6 +857,20 @@ describe("real signer sequence and last ledger bounds", () => {
     const oldReady = act(ledger, { mission_id: old.mission.id, now }, { wallet: { address: wallet.address } }).mission;
     beginSubmit(ledger, { mission_id: oldReady.id, now });
     notePresign(ledger, oldReady.id, "CD".repeat(32));
+    const same = startMission(ledger, {
+      idempotency_key: "same-account-held",
+      now,
+      observation: { network: "xrpl:1", network_id: 1, accounts: [{ address: REVIEWED }] },
+      payment_drops: "11",
+      network_fee_drops: "0",
+      resource_url: "https://shop.test/reviewed",
+    }, { allowlist: { payees: [REVIEWED] } });
+    const sameReady = act(ledger, { mission_id: same.mission.id, now }, { wallet: { address: wallet.address } }).mission;
+    assert.throws(
+      () => beginSubmit(ledger, { mission_id: sameReady.id, now }),
+      (error) => error.code === "SEQUENCE_HELD"
+    );
+    const other = xrpl.Wallet.generate();
     const fresh = startMission(ledger, {
       idempotency_key: "future-sign-01",
       now,
@@ -865,7 +879,7 @@ describe("real signer sequence and last ledger bounds", () => {
       network_fee_drops: "10",
       resource_url: "https://shop.test/reviewed",
     }, { allowlist: { payees: [REVIEWED] } });
-    const freshReady = act(ledger, { mission_id: fresh.mission.id, now }, { wallet: { address: wallet.address } }).mission;
+    const freshReady = act(ledger, { mission_id: fresh.mission.id, now }, { wallet: { address: other.address } }).mission;
     beginSubmit(ledger, { mission_id: freshReady.id, now });
     fs.writeFileSync(path.join(home, "preload.js"), `
       globalThis.fetch = async (url, init) => {
@@ -887,8 +901,8 @@ describe("real signer sequence and last ledger bounds", () => {
         FOUNDRY_MISSION_SIGNER_TOKEN: TOKEN,
         FOUNDRY_MISSION_SIGNER_PORT: "18792",
         FOUNDRY_MISSION_EXECUTE: "yes",
-        MISSION_XRPL_ADDRESS: wallet.address,
-        MISSION_XRPL_SEED: wallet.seed,
+        MISSION_XRPL_ADDRESS: other.address,
+        MISSION_XRPL_SEED: other.seed,
         NODE_OPTIONS: `--require ${path.join(home, "preload.js")}`,
       }),
       stdio: ["ignore", "pipe", "pipe"],
@@ -920,7 +934,7 @@ describe("real signer sequence and last ledger bounds", () => {
     }
     const payment = {
       TransactionType: "Payment",
-      Account: wallet.address,
+      Account: other.address,
       Destination: REVIEWED,
       Amount: "1737",
       Fee: "10",

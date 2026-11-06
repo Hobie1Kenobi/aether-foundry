@@ -22,6 +22,9 @@ const x402Deliver = require("./x402-deliver");
 const missionPolicy = require("./policy");
 const guard = require("./runtime-guard");
 const { uploadSnapshot } = require("./github-publish");
+const { uploadIngest } = require("./desk-publish");
+const { blockingClaim } = require("./sequence-hold");
+const wake = require("./wake");
 const { check: checkArm } = require("./arm");
 
 const DEFAULT_PORT = 8794;
@@ -241,8 +244,15 @@ function pathsOf(options) {
 
 async function publishIfAsked(ledger, env, now, deps) {
   if (!env || env.FOUNDRY_MISSION_PUBLISH !== "yes") return { uploaded: false, reason: "publish_off" };
+  const fetchImpl = runtimeFetch(deps);
   try {
-    return await uploadSnapshot(ledger, { env, now, fetch: runtimeFetch(deps) });
+    if (typeof env.FOUNDRY_MISSION_INGEST_SECRET === "string" && env.FOUNDRY_MISSION_INGEST_SECRET.length >= 32) {
+      return await uploadIngest(ledger, { env, now, fetch: fetchImpl });
+    }
+    if (typeof env.FOUNDRY_MISSION_GITHUB_TOKEN === "string" && env.FOUNDRY_MISSION_GITHUB_TOKEN.length >= 16) {
+      return await uploadSnapshot(ledger, { env, now, fetch: fetchImpl });
+    }
+    return { uploaded: false, reason: "no_ingest_secret" };
   } catch (error) {
     return { uploaded: false, reason: error.code || "PUBLISH" };
   }
@@ -355,6 +365,25 @@ async function tick(options) {
     reason: !schedule ? "asleep" : enabled ? null : "class_off",
   };
   if (!schedule || !enabled) {
+    if (!schedule) {
+      try {
+        const controlled = await wake.controlTick(files.home, files.ledger, env, now, { fetch: runtimeFetch(opts) });
+        if (controlled.control) {
+          writeState(files.ledger, { last_tick_at: now, last_reason: "control" });
+          return Object.assign(base, controlled, { asleep: true, reason: "control", schedule_open: false });
+        }
+      } catch (error) {
+        writeState(files.ledger, { last_tick_at: now, last_reason: error.code || "control" });
+        return Object.assign(base, {
+          asleep: true,
+          reason: error.code || "control",
+          control: true,
+          execute: false,
+          submitted: false,
+          complete: false,
+        });
+      }
+    }
     writeState(files.ledger, { last_tick_at: now, last_reason: base.reason });
     return base;
   }
@@ -371,6 +400,21 @@ async function tick(options) {
   if (!pending) {
     writeState(files.ledger, { last_tick_at: now, last_reason: discovery.reason || "idle" });
     return Object.assign(base, { reason: discovery.reason || "idle" });
+  }
+  const held = blockingClaim(view(files.ledger, now), env.MISSION_XRPL_ADDRESS || null);
+  if (held) {
+    writeState(files.ledger, { last_tick_at: now, last_reason: "SEQUENCE_HELD" });
+    return Object.assign(base, {
+      reason: "SEQUENCE_HELD",
+      code: "SEQUENCE_HELD",
+      worked: false,
+      submitted: false,
+      signed: false,
+      complete: false,
+      sequence_policy: "hold",
+      held_mission_id: held.mission_id,
+      options: held.options,
+    });
   }
   let built = qualifyCandidate(pending, now);
   if (built.payable) {

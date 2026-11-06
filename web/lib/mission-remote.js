@@ -71,6 +71,22 @@ function verify(doc, now) {
 
 async function fetchPublished(fetchImpl, now, opts) {
   const options = opts || {};
+  if (typeof options.readIngested === "function") {
+    try {
+      const stored = await options.readIngested();
+      if (stored) {
+        const checked = verify(stored, now);
+        if (checked.ok) {
+          checked.body.source = "ingest";
+          checked.body.authenticity = "bearer-ingest";
+          checked.body.note = "Sanitized snapshot from the desk store. The hash detects corruption, not a signature. The box ledger stays authoritative.";
+          return checked.body;
+        }
+      }
+    } catch {
+      /* A store miss falls through to the git snapshot. */
+    }
+  }
   if (typeof fetchImpl !== "function") return unavailable("unavailable");
   const repo = options.repo || process.env.FOUNDRY_MISSION_GIT_REPO || GIT_REPO;
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) return unavailable("upstream");
@@ -125,7 +141,7 @@ async function fetchPublished(fetchImpl, now, opts) {
 }
 
 function routeFromPublished(body, route, id) {
-  if (!body || body.source !== "git") {
+  if (!body || (body.source !== "git" && body.source !== "ingest")) {
     return { status: 503, body: body && body.source ? body : unavailable("unavailable") };
   }
   if (route === "detail" || route === "replay") {
