@@ -436,4 +436,20 @@ describe("authenticated spend activation", () => {
     assert.equal(view(root, NOW).days[chicagoDay(NOW)].uncertain, "1000000");
     assert.equal(view(root, NOW).days[chicagoDay(NOW)].reserved, "4000000");
   });
+
+  it("matches the desk fold for the same ledger file", () => {
+    const root = dir();
+    control(root, { action: "activate", token: TOKEN, confirm: config.ACTIVATE_PHRASE, now: NOW }, allow());
+    const row = startMission(root, buy("desk-fold-1", NOW, { payment_drops: "25", network_fee_drops: "12" }), allow());
+    observe(root, { mission_id: row.mission.id, now: NOW, observe_key: "desk-obs", report: {} });
+    const engine = view(root, NOW);
+    const desk = require("../../web/lib/mission-fold").fold(require("../../web/lib/mission-fold").readEvents(root), NOW);
+    assert.equal(desk.spending_enabled, engine.spending_enabled);
+    assert.equal(desk.live_spend_drops, engine.live_spend_drops);
+    assert.equal(desk.reserved_drops, engine.reserved_drops);
+    assert.equal(desk.uncertain_drops, engine.uncertain_drops);
+    assert.equal(desk.accounted_spent_drops, engine.accounted_spent_drops);
+    assert.equal(desk.source, "ledger");
+    assert.equal(desk.stale, engine.stale);
+  });
 });
