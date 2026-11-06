@@ -73,7 +73,11 @@ A submit takes an exclusive ledger claim first. A second process gets `NO_RETRY`
 
 Automatic publishing needs `FOUNDRY_MISSION_GITHUB_TOKEN` in `/workspace/foundry-ops/missions-runtime/tokens.env`, mode `0600`, with permission to write only `lab/missions/public-status.json`. This tree does not contain that token and does not read undocumented credential files. Until the parent adds it, a recurring website update does not run. A one-file git snapshot on main is the sanctioned stand-in. That is not a continuous live feed. When the token exists, a changed snapshot uploads at most once every 15 minutes.
 
-`machines/missions/ensure-up.snippet.sh` is not installed. The parent may paste it into `/workspace/foundry-ops/ensure-up.sh`. It sources `tokens.env` only when that file is mode `0600`, keeps the seed in `account.json`, and restarts the worker and the dedicated signer as separate processes if their pids are dead. It does not signal `8787`, `8792`, or `8793`, and it does not add a cron.
+`machines/missions/ensure-up.snippet.sh` is in this release at that path. It is not installed until the parent pastes it into `/workspace/foundry-ops/ensure-up.sh`. It sources `tokens.env` only when that file is mode `0600`, keeps the seed in `account.json`, and restarts the worker and the dedicated signer as separate processes if their pids are dead. `./bin/stop` waits up to 10 seconds for those pids to exit and for `8794` and `8788` to accept a new bind. If some other process still holds the port, stop fails and does not kill it. The snippet does not signal `8787`, `8792`, or `8793`, and it does not add a cron.
+
+## Allowlist
+
+`/workspace/foundry-ops/missions-runtime/allowlist.json` is `{ "payees": [] }` until you edit it. A discovered `payTo` stays `payee_not_allowlisted` and is not added by the worker. After you review that candidate's resource and 402 body, add only that classic address. Class activation already covers the 1 XRP and 5 XRP caps, so this edit does not raise the budget and does not need another activation phrase. One reviewed address is not permission for the other candidates.
 
 ## Swap a release
 

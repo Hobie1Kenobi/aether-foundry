@@ -601,6 +601,7 @@ describe("x402 qualification and network fee", () => {
       now: NOW,
       fetch: async (url, init) => {
         assert.equal(url, "https://testnet.xrpl-labs.com");
+        assert.equal(init.headers["user-agent"], "aether-foundry-missions");
         const body = JSON.parse(init.body);
         if (body.method === "server_info") return { ok: true, json: async () => ({ result: { info: { network_id: 1 } } }) };
         return { ok: true, json: async () => ({ result: { drops: { open_ledger_fee: "10", base_fee: "10" }, ledger_current_index: 4 } }) };
@@ -624,6 +625,32 @@ describe("x402 qualification and network fee", () => {
     assert.throws(
       () => require("./network-fee").assertFresh(labsQuote("10", "2026-11-06T17:00:00.000Z"), NOW),
       (error) => error.code === "FEE_STALE"
+    );
+    const labsFee = {
+      result: {
+        drops: { base_fee: "10", median_fee: "5000", minimum_fee: "10", open_ledger_fee: "10" },
+        ledger_current_index: 22117859,
+      },
+    };
+    assert.equal(require("./network-fee").feeDrops(labsFee), "10");
+    const fromLabs = await require("./network-fee").quoteNetworkFee({
+      now: NOW,
+      fetch: async (_url, init) => {
+        const body = JSON.parse(init.body);
+        if (init.headers["user-agent"] !== "aether-foundry-missions") return { ok: false, status: 403, json: async () => ({}) };
+        if (body.method === "server_info") {
+          return { ok: true, json: async () => ({ result: { info: { build_version: "3.4.1", network_id: 1, load_factor: 1 } } }) };
+        }
+        return { ok: true, json: async () => labsFee };
+      },
+    });
+    assert.equal(fromLabs.fee_drops, "10");
+    await assert.rejects(
+      () => require("./network-fee").quoteNetworkFee({
+        now: NOW,
+        fetch: async () => ({ ok: false, status: 403, json: async () => ({}) }),
+      }),
+      (error) => error.code === "FEE"
     );
   });
 
@@ -701,6 +728,22 @@ describe("x402 qualification and network fee", () => {
   });
 });
 
+describe("dedicated port release", () => {
+  it("does not kill a listener that is not the recorded pid", async () => {
+    const net = require("net");
+    const { releaseOwn } = require("./port-wait");
+    const server = net.createServer();
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = server.address().port;
+    await assert.rejects(
+      () => releaseOwn({ pid: 999999, port, allowPort: true, signal: false, waitMs: 200, stepMs: 20 }),
+      (error) => error.code === "PORT_BUSY"
+    );
+    assert.equal(server.listening, true);
+    await new Promise((resolve) => server.close(resolve));
+  });
+});
+
 describe("release pack", () => {
   it("packs runtime files and leaves out git, env, lab data, and seeds", () => {
     const out = tmp();
@@ -719,6 +762,8 @@ describe("release pack", () => {
     }
     assert.equal(names.some((name) => name.endsWith("package-lock.json")), true);
     assert.equal(names.some((name) => name.endsWith("src/missions/worker.js")), true);
+    assert.equal(names.some((name) => name.endsWith("machines/missions/ensure-up.snippet.sh")), true);
+    assert.equal(names.some((name) => name.endsWith("src/missions/port-wait.js")), true);
     const manifest = JSON.parse(fs.readFileSync(path.join(result.stage, "manifest.json"), "utf8"));
     assert.equal(manifest.base, "1116ce48a3128aa4ccfb8429c06841bf5cb844aa");
     const worker = manifest.files.find((row) => row.path === "src/missions/worker.js");

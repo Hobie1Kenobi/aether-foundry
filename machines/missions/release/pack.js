@@ -21,10 +21,11 @@ const ENTRIES = [
 const DOCS = [
   "machines/missions/RUNBOOK.md",
   "machines/missions/THREAT.md",
+  "machines/missions/ensure-up.snippet.sh",
   "machines/missions/release/INSTALL.md",
 ];
 const BINS = ["start", "health", "stop", "arm"];
-const EXTRA = ["src/runtime/allowlist.json"];
+const EXTRA = ["src/runtime/allowlist.json", "src/missions/port-wait.js"];
 
 function walkRequires(root, rel, seen) {
   if (seen.has(rel)) return;
@@ -92,11 +93,22 @@ function pack(options) {
   }
   for (const rel of DOCS) {
     if (!fs.existsSync(path.join(root, rel))) continue;
-    const dest = path.join(stage, path.basename(rel) === "INSTALL.md" ? "INSTALL.md" : path.join("docs", path.basename(rel)));
+    const dest = path.join(
+      stage,
+      path.basename(rel) === "INSTALL.md"
+        ? "INSTALL.md"
+        : path.basename(rel) === "ensure-up.snippet.sh"
+          ? "machines/missions/ensure-up.snippet.sh"
+          : path.join("docs", path.basename(rel))
+    );
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     fs.copyFileSync(path.join(root, rel), dest);
   }
   fs.writeFileSync(path.join(stage, "INSTALL.md"), installText(gitSha));
+  const snippet = path.join(stage, "machines/missions/ensure-up.snippet.sh");
+  if (fs.existsSync(snippet)) {
+    fs.writeFileSync(snippet, fs.readFileSync(snippet, "utf8").replaceAll("REPLACE_WITH_RELEASE_SHA", gitSha));
+  }
   fs.copyFileSync(path.join(root, "machines/missions/release/package.json"), path.join(stage, "package.json"));
   fs.copyFileSync(path.join(root, "machines/missions/release/package-lock.json"), path.join(stage, "package-lock.json"));
   fs.mkdirSync(path.join(stage, "bin"));
