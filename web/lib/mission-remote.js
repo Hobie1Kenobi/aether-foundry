@@ -61,7 +61,10 @@ function verify(doc, now) {
       source: "git",
       stale,
       signing_enabled: false,
-      note: "Sanitized snapshot from the Foundry box, fetched at the current main commit. The box ledger stays authoritative.",
+      integrity_means: doc.integrity_means || "sha256 of this document; detects corruption, not who wrote it",
+      sequence_means: doc.sequence_means || "prev_sequence is only a check inside this file. This reader keeps no checkpoint, so it cannot detect a rolled-back chain.",
+      authenticity: "unsigned",
+      note: "Sanitized snapshot fetched at one commit SHA. The hash is not a signature. The box ledger stays authoritative.",
     }),
   };
 }
@@ -121,4 +124,21 @@ async function fetchPublished(fetchImpl, now, opts) {
   return checked.body;
 }
 
-module.exports = { VERSION, GIT_PATH, integrityOf, verify, fetchPublished, unavailable };
+function routeFromPublished(body, route, id) {
+  if (!body || body.source !== "git") {
+    return { status: 503, body: body && body.source ? body : unavailable("unavailable") };
+  }
+  if (route === "detail" || route === "replay") {
+    const mission = (body.missions || []).find((item) => item.id === id);
+    const events = body.replays && body.replays[id];
+    if (route === "detail") {
+      if (!mission) return { status: 404, body: { ok: false, code: "NOT_FOUND", error: "mission not found", source: "git" } };
+      return { status: 200, body: { schema: "aether.missions.detail", source: "git", source_commit: body.source_commit || null, mission } };
+    }
+    if (!events) return { status: 404, body: { ok: false, code: "NOT_FOUND", error: "mission not found", source: "git" } };
+    return { status: 200, body: { schema: "aether.missions.replay", source: "git", source_commit: body.source_commit || null, id, events } };
+  }
+  return { status: 200, body };
+}
+
+module.exports = { VERSION, GIT_PATH, integrityOf, verify, fetchPublished, unavailable, routeFromPublished };

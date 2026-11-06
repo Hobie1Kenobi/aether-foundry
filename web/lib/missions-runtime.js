@@ -11,12 +11,13 @@ async function loadMissionStatus(now) {
 }
 
 async function loadMissionRoute(route, id, now) {
-  if (route === "detail" || route === "replay") {
-    const dir = local.ledgerDir();
-    if (!dir) return { status: 404, body: { ok: false, code: "NOT_FOUND", error: "mission not found" } };
-    return local.loadMissionRoute(route, id, now);
+  const dir = local.ledgerDir();
+  if (dir) return local.loadMissionRoute(route, id, now);
+  if (process.env.FOUNDRY_MISSION_REMOTE === "off") {
+    return { status: 404, body: { ok: false, code: "NOT_FOUND", error: "mission not found", source: "unavailable" } };
   }
-  return { status: 200, body: await loadMissionStatus(now) };
+  const published = await remote.fetchPublished(globalThis.fetch, now, {});
+  return remote.routeFromPublished(published, route, id);
 }
 
 module.exports = { ledgerDir: local.ledgerDir, loadMissionStatus, loadMissionRoute };
