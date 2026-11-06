@@ -26,7 +26,12 @@ curl -sS https://aether-foundry-desk.vercel.app/api/peers/hellos
 curl -sS https://aether-foundry-desk.vercel.app/api/peers/sessions
 curl -sS https://aether-foundry-desk.vercel.app/api/wall
 curl -sS https://aether-foundry-desk.vercel.app/api/wall/rss.xml | head
+curl -sS https://aether-foundry-desk.vercel.app/api/missions
+curl -sS https://aether-foundry-desk.vercel.app/api/missions/status
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST https://aether-foundry-desk.vercel.app/api/missions
 ```
+
+`/api/missions` is the sanitized snapshot. It is read-only. Authorized caps and live spend are different fields. See `machines/missions/DEPLOY.md`.
 
 `/api/wall` is the one route that calls a public mainnet JSON-RPC, for `server_info`, `feature`, and `account_info` on allowlisted mainnet-live accounts, all on `https://xrplcluster.com/`. It does not submit. The env vars above still cannot steer the rest of the desk onto a mainnet host. The same route merges Cointelegraph Ripple RSS with X recent search. X rows are labeled `X post. Not on-chain.` After `X_BEARER_TOKEN` is saved, redeploy, then:
 

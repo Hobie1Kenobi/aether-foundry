@@ -25,3 +25,8 @@ __pycache__/
 # Lab scratch (keep tracked JSONL and markdown)
 lab/sessions/*.tmp
 lab/*.tmp
+lab/bridge/
+lab/missions/
+
+# Isolated Axelar bridge wallet book. Public addresses only, still untracked.
+machines/axelar-its-bridge/wallets.json

@@ -1,0 +1,10 @@
+{
+  "schema": "aether.axelar-its.wallets",
+  "network": "xrpl_testnet",
+  "evm_chain_id": "1449000",
+  "accounts": {
+    "bridge_xrpl_test": null,
+    "bridge_evm_test": null
+  },
+  "note": "Copy to wallets.json and fill two fresh testnet addresses. Do not use W0-W7. Do not put a seed in this file."
+}

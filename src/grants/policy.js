@@ -7,6 +7,7 @@
 
 const xrpl = require("xrpl");
 const hosts = require("../xrpl-hosts");
+const axelarConfig = require("../bridge/axelar/config");
 
 const EXPERIMENT = "grants-flywheel";
 const PURPOSE = "aether-grant";
@@ -242,6 +243,7 @@ function buildGrantPayment(opts) {
   const drops = assertGrantDrops(opts.drops == null ? DEFAULT_DROPS : opts.drops, destination, opts.motions || []);
   if (account !== W6) throw coded("grant Account must be W6", "PAYER");
   if (destination === W6) throw coded("refusing a grant to W6", "FOUNDRY");
+  if (axelarConfig.isGatewayAddress(destination)) throw coded("refusing a grant to the Axelar gateway", "BRIDGE");
   const tx = {
     TransactionType: "Payment",
     Account: W6,
@@ -269,6 +271,7 @@ function buildAethGrantPayment(opts) {
   const destination = assertClassic(opts.destination, "grant destination");
   if (opts.account && opts.account !== W6) throw coded("grant Account must be W6", "PAYER");
   if (destination === W6) throw coded("refusing a grant to W6", "FOUNDRY");
+  if (axelarConfig.isGatewayAddress(destination)) throw coded("refusing a grant to the Axelar gateway", "BRIDGE");
   const value = assertAethValue(opts.value);
   const sendMax = opts.sendMax == null ? AETH_SEND_MAX_DROPS : String(opts.sendMax);
   const send = dropsOf(sendMax);
