@@ -339,6 +339,28 @@ function startMission(dir, input, opts) {
   });
 }
 
+function blockMission(dir, input) {
+  const now = input.now || new Date().toISOString();
+  const key = String(input.idempotency_key || "");
+  if (!/^[a-z0-9][a-z0-9-]{7,63}$/.test(key)) throw coded("idempotency_key is missing", "IDEMPOTENCY");
+  return exclusive(dir, (api) => {
+    const state = fold(api.read());
+    const existing = Object.values(state.missions).find((mission) => mission.idempotency_key === key);
+    if (existing) return { mission: existing, replay: true };
+    const mission = baseMission(key, now);
+    mission.status = "blocked";
+    mission.code = input.code || "unsupported_protocol";
+    mission.stage = "policy";
+    mission.complete = false;
+    mission.hold = null;
+    mission.labels.approval = "denied";
+    mission.rationale = input.rationale || "This candidate is not a supported xrpl:1 XRP payment.";
+    mission.updated_at = now;
+    persist(api, mission);
+    return { mission, replay: false };
+  });
+}
+
 function approve(dir, input, opts) {
   const options = opts || {};
   const now = input.now || new Date().toISOString();
@@ -957,6 +979,7 @@ module.exports = {
   fold,
   missionId,
   startMission,
+  blockMission,
   addStep,
   approve,
   control,

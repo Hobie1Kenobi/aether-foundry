@@ -49,6 +49,28 @@ function writeDiscovery(file, items, extra) {
   );
 }
 
+function x402Item(id, acceptExtra) {
+  return {
+    id,
+    observed_at: NOW,
+    resource: { url: "https://shop.test/ping", method: "GET" },
+    x402: {
+      x402Version: 2,
+      resource: "https://shop.test/ping",
+      accepts: [Object.assign({
+        scheme: "exact",
+        network: "xrpl:1",
+        asset: "XRP",
+        amount: "100000",
+        payTo: FOREIGN,
+        maxTimeoutSeconds: 300,
+        fee_drops: "999999",
+        extra: { invoiceId: "inv-1", fee_drops: "999999" },
+      }, acceptExtra || {})],
+    },
+  };
+}
+
 function sellerItem(id, serviceExtra, itemExtra) {
   return Object.assign({
     id,
@@ -58,7 +80,6 @@ function sellerItem(id, serviceExtra, itemExtra) {
       asset: "XRP",
       seller: FOREIGN,
       price_drops: "100000",
-      fee_drops: "12",
     }, serviceExtra || {}),
   }, itemExtra || {});
 }
@@ -79,6 +100,10 @@ function workerEnv(extra) {
   }, extra || {});
 }
 
+function labsQuote(drops, at) {
+  return { fee_drops: drops || "12", quoted_at: at || NOW, source: "https://testnet.xrpl-labs.com" };
+}
+
 describe("mission worker", () => {
   it("stays asleep and does not invent a seller", async () => {
     const files = layout();
@@ -92,16 +117,16 @@ describe("mission worker", () => {
 
   it("does not read discovery until the class is activated", async () => {
     const files = layout();
-    writeDiscovery(files.discovery, [sellerItem("class-off-item")]);
+    writeDiscovery(files.discovery, [x402Item("class-off-item")]);
     const waiting = await tick(Object.assign({}, files, { env: workerEnv(), now: NOW }));
     assert.equal(waiting.class_enabled, false);
     assert.equal(waiting.reason, "class_off");
     assert.equal(fs.existsSync(path.join(files.ledger, "events.jsonl")), false);
     activate(files.ledger);
     fs.writeFileSync(files.allowlist, JSON.stringify({ payees: [FOREIGN] }));
-    const paid = await tick(Object.assign({}, files, { env: workerEnv(), now: NOW, fetch: () => { throw new Error("fetch"); } }));
-    assert.equal(paid.reason, "complete");
-    assert.equal(paid.complete, true);
+    const paid = await tick(Object.assign({}, files, { env: workerEnv(), now: NOW, quoteFee: async () => labsQuote(), fetch: () => { throw new Error("fetch"); } }));
+    assert.equal(paid.reason, "ready_for_signer");
+    assert.equal(paid.complete, false);
     assert.equal(paid.submitted, false);
     assert.equal(paid.signed, false);
     const again = await tick(Object.assign({}, files, { env: workerEnv(), now: NOW }));
@@ -114,7 +139,7 @@ describe("mission worker", () => {
     activate(files.ledger);
     writeDiscovery(files.discovery, [
       sellerItem("house-only-1", { seller: anchors.WALLETS.W0.address }),
-      { id: "missing-pay-1", service: { network: "xrpl:1", network_id: 1, asset: "XRP", seller: FOREIGN, fee_drops: "12" } },
+      { id: "missing-pay-1", service: { network: "xrpl:1", network_id: 1, asset: "XRP", seller: FOREIGN } },
       sellerItem("novel-kind-1", {}, { kind: "bridge-return" }),
       sellerItem("untrusted-field-1", { bridge_gas_drops: "1" }),
     ]);
@@ -130,38 +155,26 @@ describe("mission worker", () => {
     assert.equal(view(files.ledger, NOW).live_spend_drops, "0");
   });
 
-  it("submits only through the dedicated signer when execute is already on", async () => {
+  it("does not raw-submit a payTo that has no x402 resource", async () => {
     const files = layout();
     activate(files.ledger);
     fs.writeFileSync(files.allowlist, JSON.stringify({ payees: [FOREIGN] }));
     writeDiscovery(files.discovery, [sellerItem("live-item-01")]);
-    const calls = [];
-    const fetchImpl = async (url, init) => {
-      calls.push(url);
-      assert.equal(url, "http://127.0.0.1:8788/sign");
-      const incoming = JSON.parse(init.body);
-      const result = await signer.evaluate(incoming, {
-        FOUNDRY_MISSION_EXECUTE: "yes",
-        FOUNDRY_MISSION_LEDGER: files.ledger,
-        MISSION_XRPL_ADDRESS: ISOLATED,
-        MISSION_XRPL_SEED: "test-seed-value",
-      }, {
-        openWallet: () => ({ classicAddress: ISOLATED, sign: () => ({ tx_blob: "00" }) }),
-        submit: () => ({ hash: HASH, engine_result: "tesSUCCESS", network_id: 1 }),
-      });
-      return { ok: true, json: async () => result };
-    };
+    let calls = 0;
     const body = await tick(Object.assign({}, files, {
       env: workerEnv({ FOUNDRY_MISSION_EXECUTE: "yes", FOUNDRY_MISSION_SIGNER_TOKEN: TOKEN }),
       now: NOW,
-      fetch: fetchImpl,
+      quoteFee: async () => labsQuote(),
+      fetch: async () => {
+        calls += 1;
+        throw new Error("raw submit");
+      },
     }));
-    assert.equal(body.submitted, true);
-    assert.equal(body.complete, true);
-    assert.equal(calls.length, 1);
-    assert.equal(view(files.ledger, NOW).live_spend_drops, "100012");
-    await tick(Object.assign({}, files, { env: workerEnv({ FOUNDRY_MISSION_EXECUTE: "yes" }), now: NOW, fetch: fetchImpl }));
-    assert.equal(calls.length, 1);
+    assert.equal(body.code, "undeliverable");
+    assert.equal(body.submitted, false);
+    assert.equal(body.complete, false);
+    assert.equal(calls, 0);
+    assert.equal(view(files.ledger, NOW).live_spend_drops, "0");
   });
 
   it("refuses the old checkout and a house seed", async () => {
@@ -297,7 +310,7 @@ describe("github contents publish", () => {
       fetch: fetchImpl,
     });
     assert.equal(second.uploaded, false);
-    assert.equal(second.reason, "unchanged");
+    assert.equal(second.reason, "throttled");
     assert.equal(calls.filter((call) => call.method === "PUT").length, 1);
     assert.throws(() => github.contentsUrl("other/repo", "main"), (error) => error.code === "PUBLISH");
   });
@@ -498,6 +511,193 @@ describe("authenticated arming", () => {
     assert.equal(ready.mission_signer_armed, true);
     assert.equal(ready.signing_disabled, false);
     assert.equal(ready.mission_spend_enabled, true);
+  });
+});
+
+describe("x402 qualification and network fee", () => {
+  it("uses an xrpl:1 payTo amount and a Labs fee, not a merchant fee", async () => {
+    const files = layout();
+    activate(files.ledger);
+    fs.writeFileSync(files.allowlist, JSON.stringify({ payees: [FOREIGN] }));
+    writeDiscovery(files.discovery, [x402Item("x402-accept-1", { amount: "5000" })]);
+    const calls = [];
+    const body = await tick(Object.assign({}, files, {
+      env: workerEnv(),
+      now: NOW,
+      quoteFee: async () => {
+        calls.push("quote");
+        return labsQuote("10");
+      },
+    }));
+    assert.equal(body.reason, "ready_for_signer");
+    assert.equal(body.complete, false);
+    assert.equal(body.submitted, false);
+    assert.equal(calls.length, 1);
+    assert.equal(view(files.ledger, NOW).days["2026-11-06"].reserved, "5010");
+    const mission = view(files.ledger, NOW).missions[body.mission_id];
+    assert.equal(mission.complete === true, false);
+    assert.equal(mission.budget.network_fee_drops, "10");
+    assert.equal(mission.budget.payment_drops, "5000");
+  });
+
+  it("records an unsupported protocol instead of an empty discovery", async () => {
+    const files = layout();
+    activate(files.ledger);
+    writeDiscovery(files.discovery, [{
+      id: "stripe-item-1",
+      protocol: "stripe",
+    }, {
+      id: "evm-accept-01",
+      x402: { x402Version: 2, accepts: [{ scheme: "exact", network: "eip155:1", asset: "USDC", amount: "1", payTo: "0xabc" }] },
+    }]);
+    const first = await tick(Object.assign({}, files, { env: workerEnv(), now: NOW }));
+    assert.equal(first.reason, "unsupported_protocol");
+    assert.equal(first.code, "unsupported_protocol");
+    const second = await tick(Object.assign({}, files, { env: workerEnv(), now: NOW }));
+    assert.equal(second.reason, "unsupported_protocol");
+    const feed = require("./engine").publicFeed(files.ledger, NOW);
+    assert.equal(feed.missions.length, 2);
+    assert.equal(feed.missions.every((mission) => mission.code === "unsupported_protocol"), true);
+    assert.equal(feed.live_spend_drops, "0");
+  });
+
+  it("rejects a fee above the local bound and a stale requote before sign", async () => {
+    const files = layout();
+    activate(files.ledger);
+    fs.writeFileSync(files.allowlist, JSON.stringify({ payees: [FOREIGN] }));
+    writeDiscovery(files.discovery, [x402Item("fee-bound-01")]);
+    const over = await tick(Object.assign({}, files, {
+      env: workerEnv(),
+      now: NOW,
+      quoteFee: async () => labsQuote("10001"),
+    }));
+    assert.equal(over.code, "FEE_CAP");
+    assert.equal(view(files.ledger, NOW).days["2026-11-06"], undefined);
+    const again = layout();
+    activate(again.ledger);
+    fs.writeFileSync(again.allowlist, JSON.stringify({ payees: [FOREIGN] }));
+    writeDiscovery(again.discovery, [x402Item("fee-stale-01")]);
+    let n = 0;
+    let fetches = 0;
+    const stale = await tick(Object.assign({}, again, {
+      env: workerEnv({ FOUNDRY_MISSION_EXECUTE: "yes" }),
+      now: NOW,
+      quoteFee: async () => {
+        n += 1;
+        return n === 1 ? labsQuote("12") : labsQuote("12", "2026-11-06T17:00:00.000Z");
+      },
+      fetch: async () => {
+        fetches += 1;
+        throw new Error("should not submit");
+      },
+    }));
+    assert.equal(stale.code, "FEE_STALE");
+    assert.equal(fetches, 0);
+    assert.equal(view(again.ledger, NOW).days["2026-11-06"].reserved, "0");
+  });
+
+  it("reads the open ledger fee only from XRPL Labs network id 1", async () => {
+    const quoted = await require("./network-fee").quoteNetworkFee({
+      now: NOW,
+      fetch: async (url, init) => {
+        assert.equal(url, "https://testnet.xrpl-labs.com");
+        const body = JSON.parse(init.body);
+        if (body.method === "server_info") return { ok: true, json: async () => ({ result: { info: { network_id: 1 } } }) };
+        return { ok: true, json: async () => ({ result: { drops: { open_ledger_fee: "10", base_fee: "10" }, ledger_current_index: 4 } }) };
+      },
+    });
+    assert.equal(quoted.fee_drops, "10");
+    await assert.rejects(
+      () => require("./network-fee").quoteNetworkFee({
+        now: NOW,
+        fetch: async () => ({ ok: true, json: async () => ({ result: { info: { network_id: 2 } } }) }),
+      }),
+      (error) => error.code === "MAINNET"
+    );
+    await assert.rejects(
+      () => require("./network-fee").quoteNetworkFee({
+        now: NOW,
+        fetch: async () => ({ ok: true, json: async () => ({ result: { info: {} } }) }),
+      }),
+      (error) => error.code === "MAINNET"
+    );
+    assert.throws(
+      () => require("./network-fee").assertFresh(labsQuote("10", "2026-11-06T17:00:00.000Z"), NOW),
+      (error) => error.code === "FEE_STALE"
+    );
+  });
+
+  it("delivers an x402 proof before any ledger submit and does not widen payTo", async () => {
+    const files = layout();
+    activate(files.ledger);
+    const allowPath = files.allowlist;
+    fs.writeFileSync(allowPath, JSON.stringify({ payees: [FOREIGN] }));
+    const outside = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
+    writeDiscovery(files.discovery, [
+      x402Item("deliver-item-1"),
+      x402Item("outside-scope1", { payTo: outside, amount: "1000" }),
+    ]);
+    let phase = "challenge";
+    let submits = 0;
+    const proofHashes = [];
+    const resourceFetch = async (url, init) => {
+      assert.equal(url, "https://shop.test/ping");
+      const header = init && init.headers && (init.headers["PAYMENT-SIGNATURE"] || init.headers["payment-signature"]);
+      if (!header) {
+        return { status: 402, json: async () => x402Item("deliver-item-1").x402 };
+      }
+      const payload = JSON.parse(Buffer.from(header, "base64").toString("utf8"));
+      proofHashes.push(payload);
+      assert.equal(payload.x402Version, 2);
+      assert.equal(payload.accepted.payTo, FOREIGN);
+      assert.equal(payload.accepted.amount, "100000");
+      assert.equal(payload.accepted.fee_drops, undefined);
+      if (phase === "challenge") {
+        phase = "needs-ledger";
+        return { status: 402, text: async () => JSON.stringify({ code: "payment_not_on_ledger" }), headers: { get() { return ""; } } };
+      }
+      return {
+        status: 200,
+        text: async () => JSON.stringify({ ok: true, service: "ping" }),
+        headers: { get() { return ""; } },
+      };
+    };
+    const body = await tick(Object.assign({}, files, {
+      env: workerEnv({ FOUNDRY_MISSION_EXECUTE: "yes", FOUNDRY_MISSION_SIGNER_TOKEN: TOKEN }),
+      now: NOW,
+      quoteFee: async () => labsQuote("12"),
+      resourceFetch,
+      presign: async () => ({ tx_blob: "BLOB", hash: HASH }),
+      fetch: async (_url, init) => {
+        submits += 1;
+        const incoming = JSON.parse(init.body);
+        const result = await signer.evaluate(incoming, {
+          FOUNDRY_MISSION_EXECUTE: "yes",
+          FOUNDRY_MISSION_LEDGER: files.ledger,
+          MISSION_XRPL_ADDRESS: ISOLATED,
+          MISSION_XRPL_SEED: "test-seed-value",
+        }, {
+          openWallet: () => ({ classicAddress: ISOLATED, sign: () => ({ tx_blob: "BLOB", hash: HASH }) }),
+          submit: () => ({ hash: HASH, engine_result: "tesSUCCESS", network_id: 1 }),
+        });
+        return { ok: true, json: async () => result };
+      },
+    }));
+    assert.equal(submits, 1);
+    assert.equal(proofHashes.length >= 1, true);
+    assert.equal(body.complete, true);
+    assert.equal(body.submitted, true);
+    assert.equal(view(files.ledger, NOW).live_spend_drops, "100012");
+    const mission = view(files.ledger, NOW).missions[body.mission_id];
+    assert.equal(mission.artifact.seller, FOREIGN);
+    assert.equal(mission.budget.network_fee_drops, "12");
+    const denied = await tick(Object.assign({}, files, {
+      env: workerEnv({ FOUNDRY_MISSION_EXECUTE: "yes" }),
+      now: NOW,
+      quoteFee: async () => labsQuote("12"),
+    }));
+    assert.equal(denied.code, "payee_not_allowlisted");
+    assert.equal(JSON.parse(fs.readFileSync(allowPath, "utf8")).payees.includes(outside), false);
   });
 });
 

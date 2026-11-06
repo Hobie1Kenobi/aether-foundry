@@ -90,19 +90,41 @@ function beginSubmit(dir, input) {
   });
 }
 
+function notePresign(dir, missionId, hash) {
+  const now = new Date().toISOString();
+  const upper = String(hash || "").toUpperCase();
+  if (!anchors.HASH_RE.test(upper)) throw coded("presign hash is not a ledger hash", "SUBMIT");
+  return exclusive(dir, (api) => {
+    const mission = fold(api.read()).missions[missionId];
+    if (!mission || mission.submit_state !== "signing") throw coded("no open signing claim", "CLAIM");
+    if (mission.signer_accepted === true) throw coded("claim already handed to the signer", "NO_RETRY");
+    if (mission.presigned_hash && mission.presigned_hash !== upper) throw coded("refusing a second presign", "NO_RETRY");
+    mission.presigned_hash = upper;
+    mission.updated_at = now;
+    api.append({ type: "mission.upsert", at: now, mission });
+    return { mission };
+  });
+}
+
 function finishSubmit(dir, input) {
   const now = input.now || new Date().toISOString();
   return exclusive(dir, (api) => {
     const mission = fold(api.read()).missions[input.mission_id];
     if (!mission) throw coded("mission not found", "PLAN");
     if (mission.submit_state === "settled") return { mission, replay: true, uncertain: false };
-    if (mission.submit_state !== "signing" || mission.signer_accepted !== true) {
+    const delivery = input.delivery || {};
+    const result = input.result || {};
+    if (anchors.EMBEDDED_SEED_RE.test(JSON.stringify(result)) || anchors.EMBEDDED_SEED_RE.test(JSON.stringify(delivery))) {
+      throw coded("refusing a result that contains a seed", "SEED");
+    }
+    const hash = String(result.hash || delivery.hash || "").toUpperCase();
+    const shopSettled = delivery.mode === "shop-settle" && delivery.http_status === 200 && mission.presigned_hash === hash;
+    if (mission.submit_state !== "signing" || (mission.signer_accepted !== true && !shopSettled)) {
       throw coded("no signer-accepted claim", "CLAIM");
     }
-    const result = input.result || {};
-    if (anchors.EMBEDDED_SEED_RE.test(JSON.stringify(result))) throw coded("refusing a result that contains a seed", "SEED");
-    const hash = String(result.hash || "").toUpperCase();
-    const ok = result.submitted === true
+    const delivered = delivery.http_status === 200 && delivery.result && typeof delivery.result === "object";
+    const ok = delivered
+      && (result.submitted === true || shopSettled)
       && result.engine_result === "tesSUCCESS"
       && anchors.HASH_RE.test(hash)
       && Number(result.network_id) === 1;
@@ -163,10 +185,41 @@ function acceptClaim(dir, missionId, tx) {
   });
 }
 
+function releasePrepared(dir, input) {
+  const now = input.now || new Date().toISOString();
+  return exclusive(dir, (api) => {
+    const mission = fold(api.read()).missions[input.mission_id];
+    if (!mission) throw coded("mission not found", "PLAN");
+    if (mission.submit_state || mission.submitted || mission.signer_accepted) {
+      throw coded("refusing to release a claim that may have been signed", "NO_RETRY");
+    }
+    if (mission.hold !== "unsubmitted" || !mission.budget) return { mission, replay: true };
+    api.append({
+      type: "budget.released",
+      at: now,
+      mission_id: mission.id,
+      day: mission.day,
+      drops: mission.budget.budget_drops,
+      reason: input.code || "fee_stale",
+      live: false,
+    });
+    mission.hold = "released";
+    mission.status = "blocked";
+    mission.code = input.code || "FEE_STALE";
+    mission.complete = false;
+    mission.rationale = input.rationale || "The XRPL network fee quote was stale or above the reserved bound. Nothing was signed.";
+    mission.updated_at = now;
+    api.append({ type: "mission.upsert", at: now, mission });
+    return { mission, replay: false };
+  });
+}
+
 module.exports = {
   reservedDrops,
   claimMatches,
   beginSubmit,
   finishSubmit,
+  notePresign,
   acceptClaim,
+  releasePrepared,
 };

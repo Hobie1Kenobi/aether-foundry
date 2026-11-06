@@ -7,13 +7,16 @@
  * This process does not invent sellers, amounts, or payments.
  */
 
+const crypto = require("crypto");
 const fs = require("fs");
 const http = require("http");
 const path = require("path");
 const config = require("./config");
 const { coded, readEvents } = require("./ledger");
-const { fold, startMission, act, evaluate, view } = require("./engine");
-const { beginSubmit, finishSubmit } = require("./submit");
+const { fold, startMission, blockMission, act, evaluate, view } = require("./engine");
+const { beginSubmit, finishSubmit, releasePrepared, notePresign } = require("./submit");
+const networkFee = require("./network-fee");
+const x402Deliver = require("./x402-deliver");
 const missionPolicy = require("./policy");
 const guard = require("./runtime-guard");
 const { uploadSnapshot } = require("./github-publish");
@@ -74,43 +77,130 @@ function loadDiscovery(file) {
   return { items: body.items, reason: body.items.length ? null : "no_discovery" };
 }
 
-const SERVICE_KEYS = new Set(["seller", "asset", "price_drops", "fee_drops", "network", "network_id"]);
+const SERVICE_KEYS = new Set(["seller", "asset", "price_drops", "network", "network_id"]);
 
-function qualifyService(item) {
-  if (!item || typeof item !== "object") return { skip: "invalid_item" };
-  if (!/^[a-z0-9][a-z0-9-]{7,63}$/.test(String(item.id || ""))) return { skip: "invalid_id" };
-  if (item.kind && item.kind !== config.AUTONOMOUS_CLASS) return { skip: "novel_kind" };
-  const service = item.service;
-  if (!service || typeof service !== "object" || Array.isArray(service)) return { skip: "missing_service" };
-  for (const key of Object.keys(service)) {
-    if (!SERVICE_KEYS.has(key)) return { skip: "untrusted_field" };
-  }
-  if (item.payment_drops != null && item.payment_drops !== service.price_drops) return { skip: "untrusted_field" };
-  if (item.network_fee_drops != null && item.network_fee_drops !== service.fee_drops) return { skip: "untrusted_field" };
-  if (service.network !== config.NETWORK || Number(service.network_id) !== config.NETWORK_ID) return { skip: "network" };
-  if (service.asset != null && service.asset !== "XRP") return { skip: "NON_XRP" };
-  if (typeof service.price_drops !== "string" || !/^[1-9][0-9]*$/.test(service.price_drops)) return { skip: "missing_payment" };
-  if (typeof service.fee_drops !== "string" || !/^[0-9]+$/.test(service.fee_drops)) return { skip: "missing_fee" };
-  if (typeof service.seller !== "string") return { skip: "missing_accounts" };
+function candidateKey(item, seller, amount) {
+  if (item && /^[a-z0-9][a-z0-9-]{7,63}$/.test(String(item.id || ""))) return String(item.id);
+  const raw = `${seller || ""}|${amount || ""}|${item && (item.protocol || "")}`;
+  return `cand-${crypto.createHash("sha256").update(raw).digest("hex").slice(0, 16)}`;
+}
+
+function priceDrops(value) {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) return String(value);
+  if (typeof value === "string" && /^[1-9][0-9]*$/.test(value)) return value;
+  return null;
+}
+
+function blocked(item, code, rationale, seller, amount) {
+  return {
+    block: code,
+    code,
+    key: candidateKey(item, seller, amount),
+    rationale,
+  };
+}
+
+function payable(item, seller, amount) {
   const found = missionPolicy.discover({
     network: config.NETWORK,
     network_id: config.NETWORK_ID,
-    accounts: [{ address: service.seller }],
+    accounts: [{ address: seller }],
   });
-  if (found.foreign.length !== 1 || found.foreign[0] !== service.seller || missionPolicy.isHouse(service.seller)) {
-    return { skip: "no_foreign_seller", code: "no_foreign_seller" };
+  if (found.foreign.length !== 1 || found.foreign[0] !== seller || missionPolicy.isHouse(seller)) {
+    return blocked(item, "no_foreign_seller", "The payTo account is not a foreign xrpl:1 seller.", seller, amount);
   }
   return {
+    payable: true,
+    key: candidateKey(item, seller, amount),
+    seller,
+    price_drops: amount,
+  };
+}
+
+function qualifyCandidate(item, now) {
+  if (!item || typeof item !== "object") return { skip: "invalid_item", key: "invalid-item" };
+  if (item.kind && item.kind !== config.AUTONOMOUS_CLASS) return { skip: "novel_kind", key: candidateKey(item) };
+  if (item.protocol && item.protocol !== "x402" && !item.service && !item.x402 && !item.paymentRequired && !item.accept) {
+    return blocked(item, "unsupported_protocol", `Protocol ${String(item.protocol).slice(0, 40)} is not an xrpl:1 XRP payment.`);
+  }
+  const required = item.x402 || item.paymentRequired || (item.accept ? { x402Version: item.x402Version || 2, accepts: [item.accept] } : null);
+  if (required) {
+    if (required.x402Version != null && required.x402Version !== 2) {
+      return blocked(item, "unsupported_protocol", "x402Version is not 2.");
+    }
+    const accepts = Array.isArray(required.accepts) ? required.accepts : [];
+    if (accepts.some((row) => row && (row.network === "xrpl:0" || row.network === "xrpl-mainnet"))) {
+      return blocked(item, "MAINNET", "Refusing an xrpl:0 payment requirement.");
+    }
+    const chosen = accepts.find((row) => row && row.network === "xrpl:1" && (row.scheme == null || row.scheme === "exact") && (row.asset == null || row.asset === "XRP"));
+    if (!chosen) return blocked(item, "unsupported_protocol", "No exact xrpl:1 XRP accept in the payment requirement.");
+    if (chosen.scheme != null && chosen.scheme !== "exact") {
+      return blocked(item, "unsupported_protocol", "The payment scheme is not exact.");
+    }
+    const amount = priceDrops(chosen.amount != null ? chosen.amount : chosen.maxAmountRequired);
+    if (typeof chosen.payTo !== "string" || !amount) {
+      return blocked(item, "unsupported_protocol", "The xrpl:1 accept has no payTo amount.");
+    }
+    const resource = x402Deliver.resourceOf(item, required);
+    if (!resource) {
+      return blocked(item, "undeliverable", "payTo is not a raw Payment. The 402 response has no resource to deliver.", chosen.payTo, amount);
+    }
+    const fresh = x402Deliver.challengeFresh(item, { maxTimeoutSeconds: chosen.maxTimeoutSeconds }, now);
+    if (!fresh.ok) return blocked(item, fresh.code, fresh.rationale, chosen.payTo, amount);
+    const row = payable(item, chosen.payTo, amount);
+    if (row.block) return row;
+    row.resource = resource;
+    row.accept = x402Deliver.acceptOf(chosen, amount);
+    row.required = { x402Version: 2, resource: resource.url, accepts: [row.accept] };
+    return row;
+  }
+  const service = item.service;
+  if (!service || typeof service !== "object" || Array.isArray(service)) return { skip: "missing_service", key: candidateKey(item) };
+  for (const key of Object.keys(service)) {
+    if (!SERVICE_KEYS.has(key)) return { skip: "untrusted_field", key: candidateKey(item) };
+  }
+  if (item.payment_drops != null && item.payment_drops !== service.price_drops) {
+    return { skip: "untrusted_field", key: candidateKey(item) };
+  }
+  if (service.network !== config.NETWORK || Number(service.network_id) !== config.NETWORK_ID) {
+    return blocked(item, "unsupported_protocol", "The service network is not xrpl:1.");
+  }
+  if (service.asset != null && service.asset !== "XRP") return blocked(item, "NON_XRP", "The service asset is not XRP.");
+  const amount = priceDrops(service.price_drops);
+  if (!amount) return { skip: "missing_payment", key: candidateKey(item) };
+  if (typeof service.seller !== "string") return { skip: "missing_accounts", key: candidateKey(item) };
+  const seller = payable(item, service.seller, amount);
+  if (seller.block) return seller;
+  return blocked(item, "undeliverable", "A foreign payTo is not an instruction to send a raw Payment.", service.seller, amount);
+}
+
+async function quotedFee(opts, now) {
+  if (opts && typeof opts.quoteFee === "function") return networkFee.assertFresh(await opts.quoteFee(now), now);
+  return networkFee.quoteNetworkFee({ fetch: opts && opts.fetch, now });
+}
+
+function withFee(built, quote) {
+  const price = BigInt(built.price_drops);
+  const fee = BigInt(quote.fee_drops);
+  if (price + fee > config.PER_MISSION_DROPS) {
+    return blocked({ id: built.key }, "FEE_CAP", "The XRPL network fee plus the payTo amount exceeds 1000000 drops.", built.seller, built.price_drops);
+  }
+  return {
+    key: built.key,
+    seller: built.seller,
+    resource: built.resource,
+    accept: built.accept,
+    required: built.required,
     input: {
-      idempotency_key: item.id,
+      idempotency_key: built.key,
       kind: config.AUTONOMOUS_CLASS,
       observation: {
         network: config.NETWORK,
         network_id: config.NETWORK_ID,
-        accounts: [{ address: service.seller, source: "service" }],
+        accounts: [{ address: built.seller, source: "x402" }],
       },
-      payment_drops: service.price_drops,
-      network_fee_drops: service.fee_drops,
+      payment_drops: built.price_drops,
+      network_fee_drops: quote.fee_drops,
     },
   };
 }
@@ -141,6 +231,30 @@ async function publishIfAsked(ledger, env, now, deps) {
   } catch (error) {
     return { uploaded: false, reason: error.code || "PUBLISH" };
   }
+}
+
+async function defaultPresign(mission, env, opts) {
+  const fetchImpl = (opts && opts.signerFetch) || (opts && opts.fetch) || globalThis.fetch;
+  if (typeof fetchImpl !== "function") return null;
+  const port = guard.assertFreePort(env.FOUNDRY_MISSION_SIGNER_PORT, 8788);
+  const response = await fetchImpl(`http://127.0.0.1:${port}/sign`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${env.FOUNDRY_MISSION_SIGNER_TOKEN || ""}`,
+    },
+    body: JSON.stringify({
+      intent: "mission_spend",
+      execute: true,
+      presign: true,
+      dry_run: false,
+      mission_id: mission.id,
+      tx: mission.unsigned_tx,
+    }),
+  });
+  const body = await response.json();
+  if (!response.ok || !body.tx_blob || !body.hash) return null;
+  return { tx_blob: body.tx_blob, hash: body.hash };
 }
 
 async function maybeSubmit(mission, env, deps) {
@@ -199,17 +313,44 @@ async function tick(options) {
     writeState(files.ledger, { last_tick_at: now, last_reason: error.code || "DISCOVERY" });
     return Object.assign(base, { reason: error.code || "DISCOVERY" });
   }
-  const pending = discovery.items.find((item) => item && !state.consumed[item.id]);
+  const pending = discovery.items.find((item) => item && !state.consumed[candidateKey(item)]);
   if (!pending) {
     writeState(files.ledger, { last_tick_at: now, last_reason: discovery.reason || "idle" });
     return Object.assign(base, { reason: discovery.reason || "idle" });
   }
-  const built = qualifyService(pending);
+  let built = qualifyCandidate(pending, now);
+  if (built.payable) {
+    try {
+      built = withFee(built, await quotedFee(opts, now));
+    } catch (error) {
+      built = blocked(pending, error.code || "FEE", "The XRPL Labs network fee could not be used. A merchant fee was not invented.");
+    }
+  }
+  if (built.block) {
+    const recorded = blockMission(files.ledger, {
+      idempotency_key: built.key,
+      now,
+      code: built.code,
+      rationale: built.rationale,
+    });
+    writeState(files.ledger, {
+      last_tick_at: now,
+      last_reason: built.block,
+      consumed: { [built.key]: { at: now, reason: built.block } },
+    });
+    return Object.assign(base, {
+      reason: built.block,
+      code: recorded.mission.code,
+      mission_id: recorded.mission.id,
+      worked: true,
+      complete: false,
+    });
+  }
   if (built.skip) {
     writeState(files.ledger, {
       last_tick_at: now,
       last_reason: built.skip,
-      consumed: { [String(pending.id || "invalid")]: { at: now, reason: built.skip } },
+      consumed: { [built.key]: { at: now, reason: built.skip } },
     });
     return Object.assign(base, { reason: built.skip, code: built.code || null, worked: false });
   }
@@ -222,7 +363,7 @@ async function tick(options) {
         writeState(files.ledger, {
           last_tick_at: now,
           last_reason: "missing_account",
-          consumed: { [pending.id]: { at: now, reason: "missing_account" } },
+          consumed: { [built.key]: { at: now, reason: "missing_account" } },
         });
         return Object.assign(base, { reason: "missing_account", mission_id: mission.id, worked: true });
       }
@@ -232,12 +373,68 @@ async function tick(options) {
     writeState(files.ledger, {
       last_tick_at: now,
       last_reason: error.code || "ERROR",
-      consumed: { [pending.id]: { at: now, reason: error.code || "ERROR" } },
+      consumed: { [built.key]: { at: now, reason: error.code || "ERROR" } },
     });
     return Object.assign(base, { reason: error.code || "ERROR" });
   }
   let submitted = false;
   if (mission.status === "ready_for_signer" && env.FOUNDRY_MISSION_EXECUTE === "yes") {
+    try {
+      const again = await quotedFee(opts, now);
+      if (BigInt(again.fee_drops) > BigInt(mission.budget.network_fee_drops)) {
+        const released = releasePrepared(files.ledger, {
+          mission_id: mission.id,
+          now,
+          code: "FEE_CAP",
+          rationale: "A fresh XRPL Labs fee is above the reserved network fee. Nothing was signed.",
+        });
+        mission = released.mission;
+        writeState(files.ledger, {
+          last_tick_at: now,
+          last_reason: "FEE_CAP",
+          consumed: { [built.key]: { at: now, reason: "FEE_CAP" } },
+        });
+        return Object.assign(base, { reason: "FEE_CAP", code: "FEE_CAP", mission_id: mission.id, worked: true, submitted: false, complete: false });
+      }
+    } catch (error) {
+      const released = releasePrepared(files.ledger, {
+        mission_id: mission.id,
+        now,
+        code: error.code || "FEE_STALE",
+        rationale: "The XRPL Labs fee quote was not fresh. Nothing was signed.",
+      });
+      mission = released.mission;
+      writeState(files.ledger, {
+        last_tick_at: now,
+        last_reason: mission.code,
+        consumed: { [built.key]: { at: now, reason: mission.code } },
+      });
+      return Object.assign(base, { reason: mission.code, code: mission.code, mission_id: mission.id, worked: true, submitted: false, complete: false });
+    }
+    const probe = opts.resourceFetch || (opts.fetch ? null : globalThis.fetch);
+    const live = await x402Deliver.preflight(built, probe);
+    if (!live.ok) {
+      const released = releasePrepared(files.ledger, {
+        mission_id: mission.id,
+        now,
+        code: live.code,
+        rationale: live.rationale,
+      });
+      writeState(files.ledger, {
+        last_tick_at: now,
+        last_reason: live.code,
+        consumed: { [built.key]: { at: now, reason: live.code } },
+      });
+      return Object.assign(base, {
+        reason: live.code,
+        code: live.code,
+        mission_id: released.mission.id,
+        worked: true,
+        submitted: false,
+        complete: false,
+      });
+    }
+    if (typeof opts.presign !== "function") opts.presign = (mission) => defaultPresign(mission, env, opts);
     let begun;
     try {
       begun = beginSubmit(files.ledger, { mission_id: mission.id, now });
@@ -245,23 +442,61 @@ async function tick(options) {
       writeState(files.ledger, {
         last_tick_at: now,
         last_reason: error.code || "NO_RETRY",
-        consumed: { [pending.id]: { at: now, reason: error.code || "NO_RETRY" } },
+        consumed: { [built.key]: { at: now, reason: error.code || "NO_RETRY" } },
       });
       return Object.assign(base, { reason: error.code || "NO_RETRY", mission_id: mission.id, worked: true, submitted: false, complete: false });
     }
     if (begun.proceed) {
-      let sent = { submitted: false, reason: "signer_uncertain" };
-      try {
-        sent = await maybeSubmit(begun.mission, env, opts);
-      } catch {
-        sent = { submitted: false, reason: "signer_uncertain" };
+      const signed = await opts.presign(begun.mission);
+      if (!signed || !signed.tx_blob || !signed.hash) {
+        writeState(files.ledger, {
+          last_tick_at: now,
+          last_reason: "undeliverable",
+          consumed: { [built.key]: { at: now, reason: "undeliverable" } },
+        });
+        return Object.assign(base, { reason: "undeliverable", code: "undeliverable", mission_id: mission.id, worked: true, submitted: false, complete: false });
       }
-      const finished = sent.submitted
-        ? finishSubmit(files.ledger, { mission_id: mission.id, now, result: sent.result })
-        : { mission: begun.mission, uncertain: true };
-      mission = finished.mission;
-      submitted = mission.submitted === true;
-      if (submitted) {
+      notePresign(files.ledger, mission.id, signed.hash);
+      let submittedOnce = false;
+      let delivered = { http_status: 0, submitted: false, hash: null, mode: "refused", parsed: null };
+      try {
+        delivered = await x402Deliver.deliverProof({
+          fetchImpl: probe,
+          resource: built.resource,
+          required: built.required,
+          accept: built.accept,
+          txBlob: signed.tx_blob,
+          hash: signed.hash,
+          sleep: async () => {},
+          submit: async () => {
+            if (submittedOnce) throw coded("refusing a second submit", "NO_RETRY");
+            submittedOnce = true;
+            const sent = await maybeSubmit(begun.mission, env, opts);
+            if (!sent.submitted) throw coded("signer did not submit", "SUBMIT");
+            return { hash: sent.result.hash, result: sent.result.engine_result, ledger_index: null };
+          },
+        });
+      } catch {
+        delivered = { http_status: 0, submitted: submittedOnce, hash: null, mode: "refused", parsed: null };
+      }
+      const resultBody = delivered.parsed && typeof delivered.parsed === "object" && !delivered.parsed.code ? delivered.parsed : null;
+      if (delivered.http_status === 200 && delivered.hash && resultBody) {
+        const finished = finishSubmit(files.ledger, {
+          mission_id: mission.id,
+          now,
+          result: {
+            hash: delivered.hash,
+            engine_result: "tesSUCCESS",
+            submitted: delivered.submitted === true,
+            network_id: 1,
+          },
+          delivery: {
+            mode: delivered.mode,
+            http_status: 200,
+            hash: delivered.hash,
+            result: resultBody,
+          },
+        });
         mission = evaluate(files.ledger, {
           mission_id: mission.id,
           now,
@@ -270,27 +505,31 @@ async function tick(options) {
             seller: mission.seller,
             network: config.NETWORK,
             network_id: config.NETWORK_ID,
-            hash: mission.proof_hash,
+            hash: finished.mission.proof_hash,
           },
         }).mission;
+        submitted = mission.submitted === true;
+      } else {
+        writeState(files.ledger, {
+          last_tick_at: now,
+          last_reason: "delivery_failed",
+          consumed: { [built.key]: { at: now, reason: "delivery_failed" } },
+        });
+        return Object.assign(base, {
+          reason: "delivery_failed",
+          code: "delivery_failed",
+          mission_id: mission.id,
+          worked: true,
+          submitted: delivered.submitted === true,
+          complete: false,
+        });
       }
     }
-  } else if (mission.status === "ready_for_signer") {
-    mission = evaluate(files.ledger, {
-      mission_id: mission.id,
-      now,
-      payload: {
-        qualified: true,
-        seller: mission.seller,
-        network: config.NETWORK,
-        network_id: config.NETWORK_ID,
-      },
-    }).mission;
   }
   writeState(files.ledger, {
     last_tick_at: now,
     last_reason: mission.status,
-    consumed: { [pending.id]: { at: now, reason: mission.status } },
+    consumed: { [built.key]: { at: now, reason: mission.status } },
   });
   const published = await publishIfAsked(files.ledger, env, now, opts);
   return Object.assign(base, {

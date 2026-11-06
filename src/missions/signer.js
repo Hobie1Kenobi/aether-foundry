@@ -13,7 +13,7 @@ const path = require("path");
 const policy = require("../runtime/policy");
 const guard = require("./runtime-guard");
 const { coded } = require("./ledger");
-const { acceptClaim } = require("./submit");
+const { acceptClaim, notePresign } = require("./submit");
 
 const DEFAULT_PORT = 8788;
 const DEFAULT_WS = "wss://testnet.xrpl-labs.com";
@@ -101,6 +101,22 @@ function health(env, port) {
   };
 }
 
+async function signOnly(tx, env, deps) {
+  const options = deps || {};
+  const xrpl = options.xrpl || require("xrpl");
+  const loaded = accountFile(env);
+  const seed = loaded ? loaded.seed : env.MISSION_XRPL_SEED;
+  const expected = (loaded && loaded.address) || env.MISSION_XRPL_ADDRESS;
+  const wallet = options.openWallet ? options.openWallet(seed) : xrpl.Wallet.fromSeed(seed);
+  const classic = wallet.classicAddress || wallet.address;
+  if (classic !== expected) throw coded("isolated key does not match MISSION_XRPL_ADDRESS", "WALLET");
+  policy.assertMissionSpend(tx, Object.assign({}, env, { MISSION_XRPL_ADDRESS: expected }));
+  const signed = wallet.sign(tx);
+  const hash = String(signed.hash || "").toUpperCase();
+  if (!signed.tx_blob || !hash) throw coded("presign did not produce a blob", "SUBMIT");
+  return { hash, tx_blob: signed.tx_blob };
+}
+
 async function submitPrepared(tx, env, deps) {
   const options = deps || {};
   const xrpl = options.xrpl || require("xrpl");
@@ -167,6 +183,22 @@ async function evaluate(body, env, deps) {
   if (options.io && options.io.readFileSync) throw coded("mission signer does not read a secrets file", "SEED");
   if (!source.FOUNDRY_MISSION_LEDGER) throw coded("mission signer has no ledger claim", "CLAIM");
   if (!signerArmed(source)) throw coded("MISSION_XRPL_SEED is not loaded. Refusing to sign.", "NO_SEED");
+  if (body.presign === true) {
+    const signed = await signOnly(body.tx, source, options);
+    notePresign(source.FOUNDRY_MISSION_LEDGER, body.mission_id, signed.hash);
+    return {
+      dry_run: false,
+      presigned: true,
+      intent: "mission_spend",
+      key_loaded: true,
+      signed: true,
+      submitted: false,
+      live: false,
+      network_id: 1,
+      hash: signed.hash,
+      tx_blob: signed.tx_blob,
+    };
+  }
   acceptClaim(source.FOUNDRY_MISSION_LEDGER, body.mission_id, body.tx);
   const submitted = await submitPrepared(body.tx, source, options);
   const text = JSON.stringify(submitted || {});
