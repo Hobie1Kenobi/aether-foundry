@@ -94,6 +94,10 @@ node src/missions/retry-fee.js
 
 That command writes one audit line and does not sign. It does not clear any other consumed key. The next tick opens `cand-17-51ec932c8e-fee-retry-2` because `fee-retry-1` already exists. Do not mint a new discovery id. A grant written by the earlier command that named every fee key does not open another successor. A successor that is empty or already signed blocks another grant for that parent. Claims with a hash, signer acceptance, or an uncertain hold are not retried. Swap to this release before the next start so the installed worker does not still honor those older grants. `cand-17-51ec932c8e` stays the same key; the worker opens a successor only after that audit.
 
+## Open presign
+
+`msn5b5c3223e5e88526` has presign hash `6022D12A2FBA5C4321FB7A1CED1E10FFC91B75C521F402A725B0518B101A8FEC`. Do not retry it and do not release the 1747-drop hold. `expires_at` `2026-11-06T19:42:16.314Z` is not a release. The mission Payment is signed without `LastLedgerSequence`, so a later ledger index does not by itself make that blob unusable. A public `tx` read on 2026-11-06 returned `txnNotFound`. That is not a release either. The published snapshot does not contain the seller HTTP status or body. If a local worker log still has that response, keep only the status number and whether the body was a JSON object. Do not send the signed blob again to find out.
+
 ## Swap a release
 
 Stop only the dedicated pids. The ledger, arm file, and account file stay in `/workspace/foundry-ops/missions-runtime`, so pending and uncertain holds are kept.

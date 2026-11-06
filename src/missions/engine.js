@@ -231,9 +231,32 @@ function baseMission(key, now) {
   };
 }
 
+function signedLiability(mission) {
+  return Boolean(
+    mission
+    && (
+      mission.presigned_hash
+      || mission.submit_state
+      || mission.signer_accepted === true
+      || mission.signed === true
+      || mission.hold === "uncertain"
+      || mission.retry_blocked === true
+    )
+  );
+}
+
+function signedClaimMayRelease(input) {
+  const last = input && input.lastLedgerSequence;
+  const validated = input && input.validatedLedgerIndex;
+  if (!Number.isInteger(last) || last <= 0) return false;
+  if (!Number.isInteger(validated) || validated <= last) return false;
+  return input.hashFound === false;
+}
+
 function expireHolds(api, state, now) {
   const instant = new Date(now).getTime();
   for (const mission of Object.values(state.missions)) {
+    if (signedLiability(mission)) continue;
     if (!OPEN_HOLDS.has(mission.status) || mission.hold !== "unsubmitted") continue;
     if (!mission.expires_at || new Date(mission.expires_at).getTime() > instant) continue;
     const released = releaseHold(state, mission, "expiry", now);
@@ -1065,6 +1088,8 @@ module.exports = {
   blockMission,
   payeeAllowed,
   safePreSignFee,
+  signedLiability,
+  signedClaimMayRelease,
   feeRetryKey,
   addStep,
   approve,

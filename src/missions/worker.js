@@ -14,7 +14,7 @@ const path = require("path");
 const config = require("./config");
 const { coded, readEvents } = require("./ledger");
 const { fold, startMission, blockMission, act, evaluate, view } = require("./engine");
-const { beginSubmit, finishSubmit, releasePrepared, releaseUnsignedClaim, narrowUnsubmittedFee, notePresign } = require("./submit");
+const { beginSubmit, finishSubmit, releasePrepared, releaseUnsignedClaim, narrowUnsubmittedFee, noteDeliveryFailure, notePresign } = require("./submit");
 const networkFee = require("./network-fee");
 const x402Deliver = require("./x402-deliver");
 const missionPolicy = require("./policy");
@@ -565,6 +565,15 @@ async function tick(options) {
         }).mission;
         submitted = mission.submitted === true;
       } else {
+        try {
+          noteDeliveryFailure(files.ledger, {
+            mission_id: mission.id,
+            now,
+            http_status: delivered.http_status,
+          });
+        } catch {
+          /* The presigned claim stays as it is. */
+        }
         writeState(files.ledger, {
           last_tick_at: now,
           last_reason: "delivery_failed",
@@ -573,6 +582,7 @@ async function tick(options) {
         return Object.assign(base, {
           reason: "delivery_failed",
           code: "delivery_failed",
+          http_status: Number.isInteger(delivered.http_status) ? delivered.http_status : null,
           mission_id: mission.id,
           worked: true,
           submitted: delivered.submitted === true,
