@@ -12,7 +12,7 @@ const http = require("http");
 const xrpl = require("xrpl");
 const { ExactXrplScheme } = require("@x402/xrpl/exact/facilitator");
 const { assertLoopback } = require("../missions/runtime-guard");
-const { boundedSellerReason } = require("../missions/service-result");
+const { boundedSellerReason, publicFacilitatorDetail } = require("../missions/service-result");
 const { challengeAccept } = require("./buyer-diagnostic");
 
 const TESTNET_WS = "wss://s.altnet.rippletest.net:51233";
@@ -111,6 +111,8 @@ async function fulfill(parsed, challenges, scheme, boundary) {
         settled: false,
         paid: false,
         invalid_reason: publicReason(verified && verified.invalidReason, "seller_verify_failed"),
+        error_reason: publicFacilitatorDetail(verified && verified.invalidReason),
+        error_message: publicFacilitatorDetail(verified && verified.invalidMessage),
         official_verify: "rejected",
         official_settle: "not_run",
       },
@@ -120,7 +122,14 @@ async function fulfill(parsed, challenges, scheme, boundary) {
   if (!settled || settled.success !== true || typeof settled.transaction !== "string" || settled.transaction.length === 0) {
     return {
       status: 402,
-      body: { settled: false, paid: false, invalid_reason: publicReason(settled && settled.errorReason, "seller_verify_failed"), official_settle: "not_proven" },
+      body: {
+        settled: false,
+        paid: false,
+        invalid_reason: publicReason(settled && settled.errorReason, "seller_verify_failed"),
+        error_reason: publicFacilitatorDetail(settled && settled.errorReason),
+        error_message: publicFacilitatorDetail(settled && settled.errorMessage),
+        official_settle: "not_proven",
+      },
     };
   }
   return {

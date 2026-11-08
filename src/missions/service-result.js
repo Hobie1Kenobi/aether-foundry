@@ -147,6 +147,18 @@ function boundedSellerReason(value) {
   return null;
 }
 
+function publicFacilitatorDetail(value) {
+  if (typeof value !== "string") return null;
+  const text = value.replace(/[\u0000-\u001f]/g, "").trim();
+  if (!text || text.length > 240) return null;
+  if (/sEd[1-9A-HJ-NP-Za-km-z]{8,}/.test(text)) return null;
+  if (/signedTxBlob|PAYMENT-SIGNATURE|PAYMENT-REQUIRED/i.test(text)) return null;
+  if (/\b[0-9A-Fa-f]{48,}\b/.test(text)) return null;
+  if (diagnosticToken(text) || /^transaction_failed: [A-Za-z0-9_]{1,64}$/.test(text)) return text;
+  if (/^[A-Za-z0-9_ .:\/,'-]{1,240}$/.test(text) && !text.includes("://")) return text;
+  return null;
+}
+
 function sanitizeDiagnostic(parsed) {
   const found = { reason: null, invalid_reason: null, error_reason: null };
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return found;
@@ -163,5 +175,6 @@ module.exports = {
   boundedErrorCode,
   diagnosticToken,
   boundedSellerReason,
+  publicFacilitatorDetail,
   sanitizeDiagnostic,
 };

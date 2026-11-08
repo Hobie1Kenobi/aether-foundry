@@ -15,7 +15,7 @@ const xrpl = require("xrpl");
 const config = require("../missions/config");
 const { coded, readEvents, exclusive } = require("../missions/ledger");
 const { fold, view, startMission, act, observe } = require("../missions/engine");
-const { boundedSellerReason } = require("../missions/service-result");
+const { boundedSellerReason, publicFacilitatorDetail } = require("../missions/service-result");
 const { applyChallenge, stampPrepared, beginSubmit, notePresign, finishSubmit } = require("../missions/submit");
 const { invoiceIdField } = require("../missions/x402-deliver");
 const policy = require("../missions/policy");
@@ -27,10 +27,12 @@ const { SANCTIONS_PAYEE, BLOCKED_PORTS, officialScheme } = require("./controlled
 const { inspectAccount, readHandover } = require("./account-file");
 
 const PHRASE = "DIAGNOSTIC-ONE-XRPL1-PAYMENT";
+const REAUTHORIZE_PHRASE = "REAUTHORIZE-ONE-DIAGNOSTIC-ATTEMPT";
 const PERMANENT_HOLD = "msn5b5c3223e5e88526";
 const LEGACY_DROPS = 1747n;
 const ATTEMPT_FILE = "diagnostic-attempt.jsonl";
 const LOCK_DIR = "diagnostic-attempt.lock";
+const MUTEX_DIR = "diagnostic-attempt.mutex";
 
 function assertPublic(report) {
   const text = JSON.stringify(report);
@@ -98,20 +100,78 @@ function attemptUsed(home) {
   return readAttempts(home).some((row) => row && row.type === "attempt.used");
 }
 
-function consumeAttempt(home, now) {
-  const lock = path.join(home, LOCK_DIR);
+function openGrant(records) {
+  const grants = records.filter((row) => row && row.type === "attempt.granted");
+  const used = records.filter((row) => row && row.type === "attempt.used");
+  if (grants.length !== used.length) return null;
+  const last = records[records.length - 1];
+  if (!last || last.type !== "attempt.granted") return null;
+  return last;
+}
+
+function attemptFileIntact(home) {
   try {
-    fs.mkdirSync(lock);
+    readAttempts(home);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function mutateAttempts(home, build) {
+  const mutex = path.join(home, MUTEX_DIR);
+  try {
+    fs.mkdirSync(mutex);
   } catch (error) {
-    if (error && error.code === "EEXIST") throw coded("diagnostic attempt lock is held", "NO_RETRY");
+    if (error && error.code === "EEXIST") throw coded("diagnostic attempt mutation is in progress", "NO_RETRY");
     throw error;
   }
-  if (attemptUsed(home)) throw coded("the diagnostic attempt was already used", "NO_RETRY");
-  return appendAttempt(home, {
-    type: "attempt.used",
-    attempt: crypto.randomBytes(16).toString("hex"),
-    used_at: now,
-    max_ticks: 1,
+  let committed = false;
+  try {
+    const records = readAttempts(home);
+    const fields = build(records);
+    const written = appendAttempt(home, fields);
+    committed = true;
+    return written;
+  } finally {
+    if (committed || attemptFileIntact(home)) {
+      try {
+        fs.rmdirSync(mutex);
+      } catch {
+        // A failed removal leaves the mutex. The history file is unchanged or already committed.
+      }
+    }
+  }
+}
+
+function consumeAttempt(home, now) {
+  return mutateAttempts(home, (records) => {
+    const grant = openGrant(records);
+    if (grant) {
+      return {
+        type: "attempt.used",
+        attempt: grant.grant_id,
+        generation: grant.generation,
+        used_at: now,
+        max_ticks: 1,
+      };
+    }
+    if (records.some((row) => row && row.type === "attempt.used") || fs.existsSync(path.join(home, LOCK_DIR))) {
+      throw coded("the diagnostic attempt was already used", "NO_RETRY");
+    }
+    try {
+      fs.mkdirSync(path.join(home, LOCK_DIR));
+    } catch (error) {
+      if (error && error.code === "EEXIST") throw coded("diagnostic attempt lock is held", "NO_RETRY");
+      throw error;
+    }
+    return {
+      type: "attempt.used",
+      attempt: crypto.randomBytes(16).toString("hex"),
+      generation: 1,
+      used_at: now,
+      max_ticks: 1,
+    };
   });
 }
 
@@ -203,7 +263,9 @@ function preflight(env, now) {
   }
   const blocking = Object.values(state.missions).find(unreconciled);
   if (blocking) throw coded("a signed claim is still unreconciled", "NO_RETRY");
-  if (fs.existsSync(path.join(home, LOCK_DIR)) || attemptUsed(home)) throw coded("the diagnostic attempt was already used", "NO_RETRY");
+  if (!openGrant(readAttempts(home)) && (fs.existsSync(path.join(home, LOCK_DIR)) || attemptUsed(home))) {
+    throw coded("the diagnostic attempt was already used", "NO_RETRY");
+  }
   const seller = sellerUrl(env.FOUNDRY_DIAGNOSTIC_SELLER);
   const payee = env.FOUNDRY_DIAGNOSTIC_PAYEE;
   if (typeof payee !== "string" || payee.length === 0) throw coded("authorized seller address is missing", "PAYEE");
@@ -319,6 +381,8 @@ function classifySeller(posted, receipt, hash) {
   const http = posted && Number.isInteger(posted.status) ? posted.status : null;
   const raw = receipt && (receipt.invalid_reason || receipt.invalidReason || receipt.errorReason || receipt.error_reason);
   const invalid = boundedSellerReason(raw);
+  const errorReason = publicFacilitatorDetail(receipt && (receipt.error_reason || receipt.errorReason));
+  const errorMessage = publicFacilitatorDetail(receipt && (receipt.error_message || receipt.errorMessage));
   const receiptHash = String(receipt && receipt.transaction || "").toUpperCase();
   const paid = http === 200 && receipt && receipt.paid === true && receiptHash === hash;
   let stage = "seller_unparsed";
@@ -329,6 +393,8 @@ function classifySeller(posted, receipt, hash) {
   return {
     http_status: http != null && http >= 100 && http <= 599 ? http : null,
     invalid_reason: invalid,
+    error_reason: errorReason,
+    error_message: errorMessage,
     stage,
     paid,
     official_settle: settleLabel(receipt && receipt.official_settle),
@@ -343,6 +409,8 @@ function rememberSeller(dir, missionId, note) {
     if (!mission || mission.id === PERMANENT_HOLD) return;
     mission.seller_stage = SELLER_STAGES.has(note.stage) ? note.stage : "seller_unparsed";
     mission.seller_invalid_reason = boundedSellerReason(note.invalid_reason);
+    mission.seller_error_reason = publicFacilitatorDetail(note.error_reason);
+    mission.seller_error_message = publicFacilitatorDetail(note.error_message);
     const status = note.http_status;
     mission.seller_http_status = Number.isInteger(status) && status >= 100 && status <= 599 ? status : null;
     mission.updated_at = note.now;
@@ -469,6 +537,8 @@ async function runControlledPurchase(env, opts) {
         now,
         stage: seller.stage,
         invalid_reason: seller.invalid_reason,
+        error_reason: seller.error_reason,
+        error_message: seller.error_message,
         http_status: seller.http_status,
       });
       return assertPublic({
@@ -481,6 +551,8 @@ async function runControlledPurchase(env, opts) {
         official_settle: seller.official_settle,
         seller_stage: seller.stage,
         seller_invalid_reason: seller.invalid_reason,
+        seller_error_reason: seller.error_reason,
+        seller_error_message: seller.error_message,
         seller_http_status: seller.http_status,
         reason: proof.reason || seller.reason,
         mission_id: missionId,
@@ -511,6 +583,99 @@ async function runControlledPurchase(env, opts) {
     if (missionId) park(plan.ledger, missionId, now);
     throw error;
   }
+}
+
+function diagnosticSignedClaim(mission) {
+  if (!mission || mission.id === PERMANENT_HOLD) return false;
+  const key = typeof mission.idempotency_key === "string" ? mission.idempotency_key : "";
+  const diagnostic = key.startsWith("diag-") || mission.seller_stage != null || mission.seller_invalid_reason != null;
+  if (!diagnostic) return false;
+  return Boolean(
+    mission.presigned_hash
+    || mission.signed === true
+    || mission.submit_state
+    || mission.signer_accepted === true
+    || mission.hold === "uncertain"
+    || mission.hold === "spent"
+    || mission.hold === "released"
+    || mission.settlement === "xrpl_validated"
+  );
+}
+
+function claimReconciled(mission) {
+  return mission.hold === "released" || mission.hold === "spent" || mission.settlement === "xrpl_validated";
+}
+
+function reauthorizeAttempt(env, opts) {
+  const options = opts || {};
+  const now = options.now || new Date().toISOString();
+  guard.assertNoHouseSeeds(env || {});
+  if (!env || env.FOUNDRY_MISSION_EXECUTE === "yes" || env.FOUNDRY_DIAGNOSTIC_LIVE === "yes") {
+    throw coded("reauthorization does not sign or settle", "AUTH");
+  }
+  if (env.FOUNDRY_DIAGNOSTIC_REAUTHORIZE_PHRASE !== REAUTHORIZE_PHRASE) {
+    throw coded("reauthorize phrase is missing", "AUTH");
+  }
+  const token = env.FOUNDRY_DIAGNOSTIC_REAUTHORIZE_TOKEN;
+  if (typeof token !== "string" || token.length < 32) throw coded("reauthorize token is missing", "AUTH");
+  if (token === env.FOUNDRY_DIAGNOSTIC_TOKEN || token === env.FOUNDRY_MISSION_EXECUTE_TOKEN || token === env.FOUNDRY_MISSION_AUTHORIZE_TOKEN) {
+    throw coded("reauthorize token must be distinct", "AUTH");
+  }
+  const home = guard.assertIsolated(env.FOUNDRY_MISSION_HOME);
+  const ledger = guard.assertIsolated(env.FOUNDRY_MISSION_LEDGER);
+  if (!workerAsleep(home)) throw coded("the worker is not asleep", "ASLEEP");
+  const state = view(ledger, now);
+  if (!state.spending_enabled) throw coded("spending is not activated", "SPENDING_DISABLED");
+  const retained = retainedLegacyDrops(ledger);
+  const legacy = state.missions[PERMANENT_HOLD];
+  if (!legacy || legacy.hold === "released" || legacy.hold === "spent" || retained < LEGACY_DROPS) {
+    throw coded("legacy hold msn5b5c3223e5e88526 is not counting 1747 drops", "CAP");
+  }
+  const claims = Object.values(state.missions).filter(diagnosticSignedClaim);
+  if (claims.some((mission) => !claimReconciled(mission))) {
+    throw coded("a diagnostic claim is still unreconciled", "NO_RETRY");
+  }
+  const payment = BigInt(env.FOUNDRY_DIAGNOSTIC_PAYMENT_DROPS || "10");
+  const fee = BigInt(env.FOUNDRY_DIAGNOSTIC_FEE_DROPS || "10");
+  if (payment <= 0n || fee <= 0n || fee > 10000n || payment + fee > config.PER_MISSION_DROPS) {
+    throw coded("payment exceeds the mission cap", "CAP");
+  }
+  if (policy.dayUsed(state, chicagoDay(now)) + payment + fee > config.DAILY_DROPS) {
+    throw coded("Chicago-day cap would be exceeded", "CAP");
+  }
+  if (!fs.existsSync(path.join(home, LOCK_DIR))) throw coded("diagnostic attempt lock is missing", "NO_RETRY");
+  const events = path.join(ledger, "events.jsonl");
+  const before = fs.readFileSync(events);
+  const prior = readAttempts(home).map((row) => row.hash);
+  const granted = mutateAttempts(home, (records) => {
+    if (!records.some((row) => row && row.type === "attempt.used")) {
+      throw coded("diagnostic attempt lock is missing", "NO_RETRY");
+    }
+    if (openGrant(records)) throw coded("a diagnostic attempt is already granted", "NO_RETRY");
+    const generation = records.filter((row) => row && (row.type === "attempt.used" || row.type === "attempt.granted")).length + 1;
+    return {
+      type: "attempt.granted",
+      generation,
+      grant_id: crypto.randomBytes(16).toString("hex"),
+      granted_at: now,
+      max_ticks: 1,
+    };
+  });
+  if (!fs.readFileSync(events).equals(before)) throw coded("reauthorization changed the mission ledger", "TAMPER");
+  if (!fs.existsSync(path.join(home, LOCK_DIR))) throw coded("diagnostic attempt lock is missing", "NO_RETRY");
+  const after = readAttempts(home);
+  if (prior.some((hash, index) => !after[index] || after[index].hash !== hash)) {
+    throw coded("diagnostic attempt history was rewritten", "TAMPER");
+  }
+  return assertPublic({
+    granted: true,
+    generation: granted.generation,
+    max_ticks: 1,
+    attempt_reset: false,
+    legacy_hold: PERMANENT_HOLD,
+    legacy_drops: retained.toString(),
+    daily_used: policy.dayUsed(state, chicagoDay(now)).toString(),
+  });
 }
 
 async function inspectUncertain(env, opts) {
@@ -550,7 +715,12 @@ async function inspectUncertain(env, opts) {
 }
 
 if (require.main === module) {
-  const command = process.argv[2] === "lookup" ? inspectUncertain(process.env) : runControlledPurchase(process.env);
+  const requested = process.argv[2];
+  const command = requested === "lookup"
+    ? inspectUncertain(process.env)
+    : requested === "reauthorize"
+      ? Promise.resolve(reauthorizeAttempt(process.env))
+      : runControlledPurchase(process.env);
   command.then((result) => {
     process.stdout.write(`${JSON.stringify(assertPublic(result))}\n`);
   }).catch((error) => {
@@ -561,6 +731,7 @@ if (require.main === module) {
 
 module.exports = {
   PHRASE,
+  REAUTHORIZE_PHRASE,
   PERMANENT_HOLD,
   officialScheme,
   preflight,
@@ -570,5 +741,6 @@ module.exports = {
   retainedLegacyDrops,
   ledgerEndpoint,
   inspectUncertain,
+  reauthorizeAttempt,
   runControlledPurchase,
 };

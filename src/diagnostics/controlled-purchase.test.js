@@ -9,11 +9,21 @@ const xrpl = require("xrpl");
 const anchors = require("../director/anchors");
 const config = require("../missions/config");
 const { control, view } = require("../missions/engine");
+const { releasePassedWindow } = require("../missions/submit");
 const { invoiceIdField } = require("../missions/x402-deliver");
 const { buildSignaturePayload } = require("../x402-outbound-guard");
 const { writePrivateAccount, writeHandover } = require("./account-file");
 const { startSeller, SANCTIONS_PAYEE, assertDiagnosticPort, DIAGNOSTIC_PORT, TESTNET_WS, fulfill } = require("./controlled-seller");
-const { PERMANENT_HOLD, PHRASE, officialScheme, consumeAttempt, inspectUncertain, runControlledPurchase } = require("./controlled-purchase");
+const {
+  PERMANENT_HOLD,
+  PHRASE,
+  REAUTHORIZE_PHRASE,
+  officialScheme,
+  consumeAttempt,
+  inspectUncertain,
+  reauthorizeAttempt,
+  runControlledPurchase,
+} = require("./controlled-purchase");
 
 const TOKEN = "mission-internal-16";
 const NOW = "2026-11-06T18:00:00.000Z";
@@ -425,8 +435,96 @@ describe("controlled purchase", () => {
         settle: async () => ({ success: false, transaction: "", errorReason: "transaction_failed: tecUNFUNDED_PAYMENT", errorMessage: secret }),
       }, "testnet");
       assert.equal(dynamic.body.invalid_reason, "transaction_failed");
-      assert.equal(JSON.stringify(dynamic.body).includes("tecUNFUNDED_PAYMENT"), false);
+      assert.equal(dynamic.body.error_reason, "transaction_failed: tecUNFUNDED_PAYMENT");
+      assert.equal(dynamic.body.error_message, null);
       assert.equal(JSON.stringify(dynamic.body).includes(secret), false);
+    } finally {
+      await seller.close();
+    }
+  });
+
+  it("grants one new attempt only after the diagnostic claim is reconciled", async () => {
+    const payer = xrpl.Wallet.generate();
+    const payee = xrpl.Wallet.generate().address;
+    const { home, ledger } = tmpHome();
+    control(ledger, { action: "activate", confirm: config.ACTIVATE_PHRASE, token: TOKEN, now: NOW }, { token: TOKEN });
+    seedLegacy(ledger);
+    const seller = await startSeller({
+      payTo: payee,
+      scheme: {
+        verify: async () => ({ isValid: false, invalidReason: "invalid_exact_xrpl_payload_sequence_not_current", invalidMessage: "sequence is not current" }),
+        settle: async () => { throw new Error("settle must not run"); },
+      },
+    });
+    const token = "reauthorize-token-32-characters-min";
+    const paymentToken = DIAG_TOKEN;
+    const base = {
+      FOUNDRY_MISSION_HOME: home,
+      FOUNDRY_MISSION_LEDGER: ledger,
+      FOUNDRY_DIAGNOSTIC_REAUTHORIZE_PHRASE: REAUTHORIZE_PHRASE,
+      FOUNDRY_DIAGNOSTIC_REAUTHORIZE_TOKEN: token,
+      FOUNDRY_DIAGNOSTIC_TOKEN: paymentToken,
+      FOUNDRY_DIAGNOSTIC_PAYMENT_DROPS: "10",
+      FOUNDRY_DIAGNOSTIC_FEE_DROPS: "10",
+    };
+    try {
+      const failed = await runControlledPurchase(Object.assign(baseEnv(home, ledger, seller.url, payee), arm(home, payer, payee)), {
+        now: NOW,
+        ledgerFetch: ledgerRpc(payer.address, payee, 10),
+      });
+      const legacy = JSON.stringify(view(ledger, NOW).missions[PERMANENT_HOLD]);
+      assert.equal(failed.seller_error_reason, "invalid_exact_xrpl_payload_sequence_not_current");
+      assert.equal(failed.seller_error_message, "sequence is not current");
+      assert.equal(view(ledger, NOW).missions[failed.mission_id].seller_http_status, 402);
+      const firstLine = fs.readFileSync(path.join(home, "diagnostic-attempt.jsonl"), "utf8").split("\n")[0];
+      await assert.rejects(async () => reauthorizeAttempt(base, { now: NOW }), (error) => error.code === "NO_RETRY");
+      await assert.rejects(
+        async () => reauthorizeAttempt(Object.assign({}, base, { FOUNDRY_DIAGNOSTIC_REAUTHORIZE_PHRASE: "nope" }), { now: NOW }),
+        (error) => error.code === "AUTH"
+      );
+      await assert.rejects(
+        async () => reauthorizeAttempt(Object.assign({}, base, { FOUNDRY_DIAGNOSTIC_REAUTHORIZE_TOKEN: paymentToken }), { now: NOW }),
+        (error) => error.code === "AUTH"
+      );
+      releasePassedWindow(ledger, {
+        mission_id: failed.mission_id,
+        now: NOW,
+        validatedLedger: 10021,
+        hashFound: false,
+        creationProven: true,
+        historyCoversCreationThroughLast: true,
+      });
+      assert.equal(view(ledger, NOW).missions[failed.mission_id].hold, "released");
+      const granted = reauthorizeAttempt(base, { now: NOW });
+      assert.equal(granted.granted, true);
+      assert.equal(granted.generation, 2);
+      assert.equal(granted.attempt_reset, false);
+      assert.equal(granted.legacy_drops, "1747");
+      assert.equal(fs.existsSync(path.join(home, "diagnostic-attempt.lock")), true);
+      const lines = fs.readFileSync(path.join(home, "diagnostic-attempt.jsonl"), "utf8").trim().split("\n");
+      assert.equal(lines[0], firstLine);
+      assert.equal(JSON.parse(lines[1]).type, "attempt.granted");
+      assert.equal(JSON.stringify(view(ledger, NOW).missions[PERMANENT_HOLD]), legacy);
+      await assert.rejects(async () => reauthorizeAttempt(base, { now: NOW }), (error) => error.code === "NO_RETRY");
+      const used = consumeAttempt(home, NOW);
+      assert.equal(used.generation, 2);
+      assert.equal(used.type, "attempt.used");
+      const kept = fs.readFileSync(path.join(home, "diagnostic-attempt.jsonl"), "utf8").trim().split("\n");
+      assert.equal(kept[0], firstLine);
+      assert.equal(kept.length, 3);
+      await assert.rejects(async () => consumeAttempt(home, NOW), (error) => error.code === "NO_RETRY");
+      assert.equal(fs.readFileSync(path.join(home, "diagnostic-attempt.jsonl"), "utf8").trim().split("\n")[0], firstLine);
+      fs.appendFileSync(path.join(ledger, "events.jsonl"), `${JSON.stringify({
+        type: "budget.uncertain",
+        at: NOW,
+        mission_id: PERMANENT_HOLD,
+        day: "2026-11-06",
+        drops: "4998243",
+        settlement: "submit_unknown",
+        live: true,
+      })}\n`);
+      await assert.rejects(async () => reauthorizeAttempt(base, { now: NOV9 }), (error) => error.code === "CAP");
+      assert.equal(fs.readFileSync(path.join(home, "diagnostic-attempt.jsonl"), "utf8").trim().split("\n").length, 3);
     } finally {
       await seller.close();
     }
@@ -439,7 +537,7 @@ describe("controlled purchase", () => {
     const before = fs.readFileSync(file);
     await assert.rejects(async () => consumeAttempt(home, NOV8), (error) => error.code === "NO_RETRY");
     assert.equal(fs.readFileSync(file).equals(before), true);
-    assert.equal(fs.existsSync(path.join(home, "diagnostic-attempt.lock")), true);
+    assert.equal(fs.existsSync(path.join(home, "diagnostic-attempt.mutex")), true);
     await assert.rejects(async () => consumeAttempt(home, NOV8), (error) => error.code === "NO_RETRY");
     assert.equal(fs.readFileSync(file).equals(before), true);
     const other = fs.mkdtempSync(path.join(os.tmpdir(), "diag-race-"));

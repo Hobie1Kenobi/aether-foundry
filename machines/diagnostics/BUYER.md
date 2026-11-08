@@ -90,4 +90,18 @@ node src/diagnostics/controlled-purchase.js lookup
 
 That lookup is not a release. Release stays on the existing reconcile history guard.
 
+## One more attempt, after reconcile
+
+The first live attempt keeps `diagnostic-attempt.lock` and its jsonl line forever. After every diagnostic signed claim is released or settled, including the legacy 1747-drop hold still counting, the owner can append one new grant. This does not delete the lock, does not sign, and does not reserve a new hold:
+
+```sh
+FOUNDRY_MISSION_HOME=... \
+FOUNDRY_MISSION_LEDGER=... \
+FOUNDRY_DIAGNOSTIC_REAUTHORIZE_PHRASE=REAUTHORIZE-ONE-DIAGNOSTIC-ATTEMPT \
+FOUNDRY_DIAGNOSTIC_REAUTHORIZE_TOKEN=... \
+node src/diagnostics/controlled-purchase.js reauthorize
+```
+
+The reauthorize token must be distinct from the payment token. A second grant is refused until that new attempt has itself been used and reconciled. The payment command is unchanged and still requires `FOUNDRY_DIAGNOSTIC_LIVE=yes`. A failed seller response records the allowlisted reason, stage, and HTTP status, plus the facilitator `errorReason` and `errorMessage` when those strings contain no secret, blob, or header.
+
 Install the packed sources with `npm ci --ignore-scripts` from the pack root. The pack contains `package.json` and `package-lock.json`.
