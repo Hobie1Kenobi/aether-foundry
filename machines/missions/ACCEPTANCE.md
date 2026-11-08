@@ -40,6 +40,14 @@ The parent approved a new isolated Testnet account. The code path is separate fr
 
 `bin/publish` writes a health snapshot with `worker_asleep: true` and `execute: false` while purchase execution is off. The asleep worker also refreshes that snapshot when `FOUNDRY_MISSION_PUBLISH=yes`, at most every four minutes, so an idle feed does not sit on an old observation time. Neither path signs. The Vercel ingest secret is still not approved for production. Until the same secret is on the desk and in mode-0600 `tokens.env`, publish writes the local snapshot and returns `no_ingest_secret`. No token is read from the desk.
 
+## Challenge echo
+
+The payment header echoes the selected live xrpl:1 accept. It does not add `areFeesSponsored` when the challenge omits it, and it keeps the boolean when the challenge includes it. Invoice binding remains SHA-256 of the invoice string, with no `Memos` and no `NetworkID` on the signed payment. `signed_fields` records that omission for new lines. Older ledger lines that stored `NetworkID: 1` are not rewritten. A 402 diagnostic stores only short `reason`, `invalidReason`, and `errorReason` tokens. `@x402/xrpl` 2.30.0 still rejects a challenge whose extra lacks `areFeesSponsored`. The public seller 402 does not show whether its facilitator adds that field. Exact echo is not proof the next attempt will verify. The facilitator host named in discussion is `https://xrpl-facilitator-testnet.t54.ai`. No successful envelope was available, and this tree does not call it.
+
+## Claim absence
+
+`./bin/reconcile` does not release because a validated head is past `LastLedgerSequence` and a pruned server says `txnNotFound`. The selector is `FOUNDRY_MISSION_RECONCILE_MISSION`. Omitting it exits `PLAN`. A report-only run sets that selector and not `FOUNDRY_MISSION_RECONCILE_PHRASE`. `released` stays false. An apply run also sets `FOUNDRY_MISSION_RECONCILE_PHRASE=AUDIT-RELEASE-PASSED-WINDOW` and uses the reconcile token already in the environment. Release requires a validated account-creation proof and `complete_ledgers` continuous from that creation ledger through `LastLedgerSequence`. The creation ledger is read from the validated account and its creating transaction. It is not saved back onto the claim as a guessed earliest ledger. `msn5b5c3223e5e88526` still has no `LastLedgerSequence` and is not released. A testnet full-history range may start at 32570 rather than ledger 1.
+
 ## Exact next ops
 
 These are parent actions. This cloud run does not perform them, does not sign, and does not change either account file.

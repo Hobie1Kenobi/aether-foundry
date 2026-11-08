@@ -1,6 +1,13 @@
 #!/bin/sh
-# Read one signed claim. Release only with the audit phrase, and only when
-# the validated ledger is past LastLedgerSequence and the hash is absent.
+# Report one signed claim, or release it only with the audit phrase.
+# The mission selector is FOUNDRY_MISSION_RECONCILE_MISSION. Without it the
+# process exits PLAN and does not release.
+# Report only: set the selector and do not set FOUNDRY_MISSION_RECONCILE_PHRASE.
+# Release: also set FOUNDRY_MISSION_RECONCILE_PHRASE=AUDIT-RELEASE-PASSED-WINDOW
+# and FOUNDRY_MISSION_RECONCILE_TOKEN (at least 32 characters, from the
+# environment, not this file). Release still requires a validated creation
+# proof and complete_ledgers covering that creation ledger through
+# LastLedgerSequence. txnNotFound alone is not a release.
 # This does not sign, retry, or print the environment.
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)

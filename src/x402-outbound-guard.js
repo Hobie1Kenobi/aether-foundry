@@ -229,19 +229,29 @@ function buildPaymentTx({ account, accept }) {
   return tx;
 }
 
+function plainClone(value) {
+  if (value == null || typeof value !== "object") return value;
+  return JSON.parse(JSON.stringify(value));
+}
+
 function buildSignaturePayload({ required, accept, txBlob, hash }) {
+  // Echo the selected accept unchanged. A captured seller challenge extra
+  // contains invoiceId and sourceTag only. @x402/xrpl 2.30.0 rejects that
+  // shape unless both sides also set areFeesSponsored to false. Whether this
+  // seller's facilitator does that is unproven, so the client does not add
+  // the field. This is not a claim of live interoperability.
   const payload = {};
   if (typeof txBlob === "string" && txBlob.length > 0) payload.signedTxBlob = txBlob;
   if (typeof hash === "string" && hash.length > 0) payload.transaction = hash;
-  const extra = Object.assign({}, accept && accept.extra && typeof accept.extra === "object" ? accept.extra : {});
-  if (extra.areFeesSponsored == null) extra.areFeesSponsored = false;
-  if (typeof extra.invoiceId === "string" && extra.invoiceId.length > 0) {
+  const accepted = plainClone(accept);
+  const extra = accepted && accepted.extra && typeof accepted.extra === "object" ? accepted.extra : null;
+  if (extra && typeof extra.invoiceId === "string" && extra.invoiceId.length > 0) {
     payload.invoiceId = extra.invoiceId;
   }
   return {
     x402Version: 2,
     resource: required && required.resource,
-    accepted: Object.assign({}, accept, { extra }),
+    accepted,
     payload,
   };
 }

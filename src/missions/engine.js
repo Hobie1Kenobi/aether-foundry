@@ -7,6 +7,7 @@ const { chicagoDay } = require("./clock");
 const { exclusive, readEvents, coded } = require("./ledger");
 const policy = require("./policy");
 const { assertPublic } = require("./redact");
+const serviceResult = require("./service-result");
 const axelarStatus = require("../bridge/axelar/status");
 
 const OPEN_HOLDS = new Set(["awaiting_human_approval", "spending_disabled"]);
@@ -250,7 +251,13 @@ function signedClaimMayRelease(input) {
   const validated = input && input.validatedLedgerIndex;
   if (!Number.isInteger(last) || last <= 0) return false;
   if (!Number.isInteger(validated) || validated <= last) return false;
-  return input.hashFound === false;
+  if (input.hashFound !== false) return false;
+  // A pruned txnNotFound is not absence. The validated creation ledger and a
+  // continuous complete_ledgers span through LastLedgerSequence are required.
+  // Those facts are not invented from Sequence or the clock.
+  if (input.creationProven !== true) return false;
+  if (input.historyCoversCreationThroughLast !== true) return false;
+  return true;
 }
 
 function expireHolds(api, state, now) {
@@ -1032,9 +1039,10 @@ function publicFeed(dir, now) {
     sequence: Number.isSafeInteger(mission.sequence) ? mission.sequence : null,
     last_ledger_sequence: Number.isSafeInteger(mission.last_ledger_sequence) ? mission.last_ledger_sequence : null,
     delivery_http_status: Number.isInteger(mission.delivery_http_status) ? mission.delivery_http_status : null,
-    delivery_error_code: typeof mission.delivery_error_code === "string" && /^[a-z0-9_]{1,40}$/.test(mission.delivery_error_code)
-      ? mission.delivery_error_code
-      : null,
+    delivery_error_code: serviceResult.diagnosticToken(mission.delivery_error_code),
+    delivery_reason: serviceResult.diagnosticToken(mission.delivery_reason),
+    delivery_invalid_reason: serviceResult.diagnosticToken(mission.delivery_invalid_reason),
+    delivery_error_reason: serviceResult.diagnosticToken(mission.delivery_error_reason),
     explorer: mission.explorer,
     prior_claim_id: typeof mission.prior_claim_id === "string" && /^msn[a-f0-9]{16}$/.test(mission.prior_claim_id)
       ? mission.prior_claim_id

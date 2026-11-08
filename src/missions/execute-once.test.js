@@ -216,12 +216,21 @@ describe("production one-shot entrypoint", () => {
     fs.writeFileSync(path.join(home, "discovery.json"), discovery);
     fs.writeFileSync(path.join(home, "worker.json"), JSON.stringify({ asleep: true }));
     fs.writeFileSync(path.join(home, "allowlist.json"), JSON.stringify({ payees: [{ address: REVIEWED, resource: SANCTIONS }] }));
-    const freshAt = new Date().toISOString();
-    fs.writeFileSync(path.join(home, "challenge.json"), JSON.stringify(challenge(INVOICE, "1753", freshAt)));
+    fs.writeFileSync(path.join(home, "challenge.json"), JSON.stringify(challenge(INVOICE, "1753", NOW)));
     const proof = path.join(home, "proofs.txt");
     fs.writeFileSync(proof, "");
     fs.writeFileSync(path.join(home, "preload.js"), `
       const fs = require("fs");
+      const fixed = Date.parse(${JSON.stringify(NOW)});
+      const RealDate = Date;
+      class FixedDate extends RealDate {
+        constructor(...args) {
+          if (args.length === 0) super(fixed);
+          else super(...args);
+        }
+        static now() { return fixed; }
+      }
+      globalThis.Date = FixedDate;
       const original = globalThis.fetch;
       globalThis.fetch = async (url, init) => {
         const target = String(url);

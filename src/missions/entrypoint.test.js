@@ -801,7 +801,14 @@ describe("resource allowlist and fee retry", () => {
     assert.equal(signedClaimMayRelease({ lastLedgerSequence: null, validatedLedgerIndex: 99999999, hashFound: false }), false);
     assert.equal(signedClaimMayRelease({ lastLedgerSequence: 100, validatedLedgerIndex: 100, hashFound: false }), false);
     assert.equal(signedClaimMayRelease({ lastLedgerSequence: 100, validatedLedgerIndex: 101, hashFound: true }), false);
-    assert.equal(signedClaimMayRelease({ lastLedgerSequence: 100, validatedLedgerIndex: 101, hashFound: false }), true);
+    assert.equal(signedClaimMayRelease({ lastLedgerSequence: 100, validatedLedgerIndex: 101, hashFound: false }), false);
+    assert.equal(signedClaimMayRelease({
+      lastLedgerSequence: 100,
+      validatedLedgerIndex: 101,
+      hashFound: false,
+      creationProven: true,
+      historyCoversCreationThroughLast: true,
+    }), true);
     const kept = releasePassedWindow(ledger, {
       mission_id: ready.id,
       now: later,

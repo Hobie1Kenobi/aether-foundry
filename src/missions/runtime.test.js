@@ -673,15 +673,27 @@ describe("x402 qualification and network fee", () => {
     let phase = "challenge";
     let submits = 0;
     const proofHashes = [];
+    const challengeAccept = {
+      scheme: "exact",
+      network: "xrpl:1",
+      asset: "XRP",
+      amount: "100000",
+      payTo: FOREIGN,
+      maxTimeoutSeconds: 300,
+      extra: { invoiceId: "inv-1", sourceTag: 26100014 },
+    };
     const resourceFetch = async (url, init) => {
       assert.equal(url, "https://api.stablecoingateways.com/v1/sanctions/address?address=0x098B716B8Aaf21512996dC57EB0615e2383E2f96");
       const header = init && init.headers && (init.headers["PAYMENT-SIGNATURE"] || init.headers["payment-signature"]);
       if (!header) {
-        return { status: 402, json: async () => x402Item("deliver-item-1").x402 };
+        return { status: 402, json: async () => ({ x402Version: 2, accepts: [challengeAccept] }) };
       }
       const payload = JSON.parse(Buffer.from(header, "base64").toString("utf8"));
       proofHashes.push(payload);
       assert.equal(payload.x402Version, 2);
+      assert.deepEqual(payload.accepted, challengeAccept);
+      assert.equal(payload.accepted === challengeAccept, false);
+      assert.equal(Object.prototype.hasOwnProperty.call(challengeAccept.extra, "areFeesSponsored"), false);
       assert.equal(payload.accepted.payTo, FOREIGN);
       assert.equal(payload.accepted.amount, "100000");
       assert.equal(payload.accepted.fee_drops, undefined);
@@ -875,8 +887,9 @@ describe("release pack", () => {
     fs.writeFileSync(path.join(home, "allowlist.json"), JSON.stringify({
       payees: [{ address: "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs", resource: sanctions }],
     }));
+    const fixedNow = "2026-11-06T21:40:00.000Z";
     fs.writeFileSync(path.join(home, "challenge.json"), JSON.stringify({
-      retrieved_at: new Date().toISOString(),
+      retrieved_at: fixedNow,
       http_status: 402,
       paid: false,
       proof_sent: false,
@@ -896,6 +909,16 @@ describe("release pack", () => {
     }));
     const preload = path.join(home, "preload.js");
     fs.writeFileSync(preload, `
+      const fixed = Date.parse(${JSON.stringify("2026-11-06T21:40:00.000Z")});
+      const RealDate = Date;
+      class FixedDate extends RealDate {
+        constructor(...args) {
+          if (args.length === 0) super(fixed);
+          else super(...args);
+        }
+        static now() { return fixed; }
+      }
+      globalThis.Date = FixedDate;
       const original = globalThis.fetch;
       globalThis.fetch = async (url, init) => {
         const target = String(url);
@@ -968,6 +991,7 @@ describe("release pack", () => {
       const published = runBin("publish", Object.assign({}, bare, {
         FOUNDRY_MISSION_PUBLISH_TOKEN: "publish-health-token-32chars-minimum",
         FOUNDRY_MISSION_PUBLISH_PHRASE: "PUBLISH-HEALTH-SNAPSHOT",
+        NODE_OPTIONS: `--require ${preload}`,
       }));
       assert.equal(published.status, 0, redact(`${published.stderr}\n${published.stdout}`));
       assert.equal(published.stderr.includes("MODULE_NOT_FOUND"), false);
