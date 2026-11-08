@@ -2,9 +2,10 @@
 
 /**
  * One opt-in Testnet payment against the loopback seller.
- * Budget, uncertainty, and settlement use the existing mission ledger.
- * The sanctions lease file is not read or written. The worker is not started.
- * Without FOUNDRY_DIAGNOSTIC_LIVE=yes this command only reports the cap.
+ * Preview only reads the shared mission ledger. The attempt lock is taken
+ * after the challenge, the funded accounts, and the validated ledger are known.
+ * The seller verifies and settles. This command then requires a matching
+ * validated tx lookup before it marks the budget spent.
  */
 
 const crypto = require("crypto");
@@ -22,12 +23,14 @@ const { chicagoDay } = require("../missions/clock");
 const guard = require("../missions/runtime-guard");
 const { canonicalReconcileRpc, boundReconcileFetch } = require("../missions/reconcile-endpoint");
 const { buildSignaturePayload } = require("../x402-outbound-guard");
-const { SANCTIONS_PAYEE } = require("./controlled-seller");
+const { SANCTIONS_PAYEE, BLOCKED_PORTS } = require("./controlled-seller");
+const { inspectAccount, readHandover } = require("./account-file");
 
 const PHRASE = "DIAGNOSTIC-ONE-XRPL1-PAYMENT";
 const PERMANENT_HOLD = "msn5b5c3223e5e88526";
 const LEGACY_DROPS = 1747n;
 const ATTEMPT_FILE = "diagnostic-attempt.jsonl";
+const LOCK_DIR = "diagnostic-attempt.lock";
 
 function assertPublic(report) {
   const text = JSON.stringify(report);
@@ -46,25 +49,42 @@ function canonical(record) {
   return JSON.stringify(copy);
 }
 
+function attemptPath(home) {
+  return path.join(home, ATTEMPT_FILE);
+}
+
 function readAttempts(home) {
-  const file = path.join(home, ATTEMPT_FILE);
+  const file = attemptPath(home);
   if (!fs.existsSync(file)) return [];
   const text = fs.readFileSync(file, "utf8");
   if (!text) return [];
-  return text.split("\n").filter(Boolean).map((line) => JSON.parse(line));
+  if (!text.endsWith("\n")) throw coded("diagnostic attempt file is ambiguous", "NO_RETRY");
+  let prev = "";
+  const records = [];
+  for (const line of text.split("\n")) {
+    if (!line) continue;
+    let record;
+    try {
+      record = JSON.parse(line);
+    } catch {
+      throw coded("diagnostic attempt file is ambiguous", "NO_RETRY");
+    }
+    const hash = crypto.createHash("sha256").update(canonical(record)).digest("hex");
+    if (!record || record.hash !== hash || record.prev_hash !== prev) {
+      throw coded("diagnostic attempt file is ambiguous", "NO_RETRY");
+    }
+    prev = record.hash;
+    records.push(record);
+  }
+  return records;
 }
 
 function appendAttempt(home, fields) {
   const records = readAttempts(home);
-  let prev = "";
-  for (const record of records) {
-    const hash = crypto.createHash("sha256").update(canonical(record)).digest("hex");
-    if (record.hash !== hash || record.prev_hash !== prev) throw coded("diagnostic attempt chain is broken", "TAMPER");
-    prev = record.hash;
-  }
+  const prev = records.length ? records[records.length - 1].hash : "";
   const record = Object.assign({}, fields, { prev_hash: prev });
   record.hash = crypto.createHash("sha256").update(canonical(record)).digest("hex");
-  const fd = fs.openSync(path.join(home, ATTEMPT_FILE), "a");
+  const fd = fs.openSync(attemptPath(home), "a");
   try {
     fs.writeSync(fd, `${JSON.stringify(record)}\n`);
     fs.fsyncSync(fd);
@@ -76,6 +96,23 @@ function appendAttempt(home, fields) {
 
 function attemptUsed(home) {
   return readAttempts(home).some((row) => row && row.type === "attempt.used");
+}
+
+function consumeAttempt(home, now) {
+  const lock = path.join(home, LOCK_DIR);
+  try {
+    fs.mkdirSync(lock);
+  } catch (error) {
+    if (error && error.code === "EEXIST") throw coded("diagnostic attempt lock is held", "NO_RETRY");
+    throw error;
+  }
+  if (attemptUsed(home)) throw coded("the diagnostic attempt was already used", "NO_RETRY");
+  return appendAttempt(home, {
+    type: "attempt.used",
+    attempt: crypto.randomBytes(16).toString("hex"),
+    used_at: now,
+    max_ticks: 1,
+  });
 }
 
 function workerAsleep(home) {
@@ -91,12 +128,20 @@ function legacyUncertain(state) {
   return uncertain;
 }
 
-function heldAccount(mission) {
-  if (!mission) return null;
-  if (mission.account) return mission.account;
-  if (mission.unsigned_tx && mission.unsigned_tx.Account) return mission.unsigned_tx.Account;
-  if (mission.claim && mission.claim.account) return mission.claim.account;
-  return null;
+function missionAccounts(state) {
+  const found = new Set();
+  for (const mission of Object.values((state && state.missions) || {})) {
+    const values = [
+      mission.account,
+      mission.unsigned_tx && mission.unsigned_tx.Account,
+      mission.claim && mission.claim.account,
+      mission.signed_fields && mission.signed_fields.Account,
+    ];
+    for (const value of values) {
+      if (typeof value === "string" && value.length > 0) found.add(value);
+    }
+  }
+  return found;
 }
 
 function unreconciled(mission) {
@@ -115,11 +160,20 @@ function sellerUrl(raw) {
   if (url.protocol !== "http:" || url.username || url.password || url.hash) throw coded("controlled seller URL is not allowed", "HOST");
   const host = url.hostname.toLowerCase();
   if (host !== "127.0.0.1" && host !== "[::1]" && host !== "::1") throw coded("controlled seller must be loopback", "HOST");
-  if (host === "api.stablecoingateways.com" || String(raw).includes("stablecoingateways")) {
-    throw coded("refusing the existing seller", "HOST");
-  }
+  if (String(raw).includes("stablecoingateways")) throw coded("refusing the existing seller", "HOST");
   if (url.pathname !== "/paid") throw coded("controlled seller path is not allowed", "HOST");
+  if (!url.port || BLOCKED_PORTS.has(Number(url.port))) throw coded("refusing a port owned by an existing service", "BIND");
   return url;
+}
+
+function assertAccounts(buyer, seller, state) {
+  const reserved = missionAccounts(state);
+  if (!seller || policy.isHouse(seller)) throw coded("refusing a house wallet", "W0");
+  if (seller === SANCTIONS_PAYEE) throw coded("refusing the sanctions payee", "CLAIM");
+  if (reserved.has(seller)) throw coded("refusing a current or legacy mission account", "ACCOUNT");
+  if (buyer == null) return;
+  if (policy.isHouse(buyer)) throw coded("refusing a house wallet", "W0");
+  if (buyer === seller || reserved.has(buyer)) throw coded("refusing a current or legacy mission account", "ACCOUNT");
 }
 
 function preflight(env, now) {
@@ -141,8 +195,11 @@ function preflight(env, now) {
   if (legacyUncertain(state) < LEGACY_DROPS) throw coded("legacy 1747 drops are not in the day accounting", "CAP");
   const blocking = Object.values(state.missions).find(unreconciled);
   if (blocking) throw coded("a signed claim is still unreconciled", "NO_RETRY");
-  if (attemptUsed(home)) throw coded("the diagnostic attempt was already used", "NO_RETRY");
+  if (fs.existsSync(path.join(home, LOCK_DIR)) || attemptUsed(home)) throw coded("the diagnostic attempt was already used", "NO_RETRY");
   const seller = sellerUrl(env.FOUNDRY_DIAGNOSTIC_SELLER);
+  const payee = env.FOUNDRY_DIAGNOSTIC_PAYEE;
+  if (typeof payee !== "string" || payee.length === 0) throw coded("authorized seller address is missing", "PAYEE");
+  assertAccounts(null, payee, state);
   const payment = BigInt(env.FOUNDRY_DIAGNOSTIC_PAYMENT_DROPS || "10");
   const fee = BigInt(env.FOUNDRY_DIAGNOSTIC_FEE_DROPS || "10");
   if (payment <= 0n || fee <= 0n || fee > 10000n || payment + fee > config.PER_MISSION_DROPS) {
@@ -153,13 +210,17 @@ function preflight(env, now) {
   return {
     home,
     ledger,
+    state,
     seller: seller.toString(),
+    payee,
     payment: payment.toString(),
     fee: fee.toString(),
     budget: (payment + fee).toString(),
     used: used.toString(),
+    day: chicagoDay(now),
     legacy,
     live: env.FOUNDRY_DIAGNOSTIC_LIVE === "yes",
+    simulated: env.FOUNDRY_DIAGNOSTIC_SIMULATE === "yes",
   };
 }
 
@@ -167,19 +228,34 @@ function officialScheme() {
   return { hook_source: "official_default", scheme: new ExactXrplScheme({}) };
 }
 
-function loadWallet(env, override) {
-  if (override) return override;
-  const file = env.FOUNDRY_DIAGNOSTIC_ACCOUNT_FILE;
-  if (!file) throw coded("diagnostic account file is missing", "AUTH");
-  const resolved = path.resolve(file);
-  if (resolved.startsWith("/workspace/aether-foundry/")) throw coded("refusing an account file inside the checkout", "ISOLATED");
-  const body = JSON.parse(fs.readFileSync(resolved, "utf8"));
-  const wallet = xrpl.Wallet.fromSeed(body.seed);
-  if (wallet.address !== body.address) throw coded("diagnostic account file does not match", "AUTH");
-  return wallet;
+function ledgerEndpoint(env) {
+  if (env && env.FOUNDRY_DIAGNOSTIC_SIMULATE === "yes") {
+    let url;
+    try {
+      url = new URL(String(env.FOUNDRY_DIAGNOSTIC_SIM_RPC || ""));
+    } catch {
+      throw coded("simulated RPC must be loopback", "HOST");
+    }
+    const host = url.hostname.toLowerCase();
+    if (url.protocol !== "http:" || (host !== "127.0.0.1" && host !== "::1" && host !== "[::1]") || !url.port) {
+      throw coded("simulated RPC must be loopback", "HOST");
+    }
+    return { endpoint: url.origin, boundary: "simulated" };
+  }
+  return { endpoint: canonicalReconcileRpc(env && env.FOUNDRY_MISSION_RECONCILE_RPC), boundary: "testnet" };
 }
 
-async function readChallenge(url, payment, fetchImpl) {
+async function rpc(endpoint, method, params, fetchImpl) {
+  const bounded = boundReconcileFetch(fetchImpl);
+  const response = await bounded(endpoint, {
+    method: "POST",
+    body: JSON.stringify({ method, params: [params] }),
+  });
+  const body = await response.json();
+  return body && (body.result || body);
+}
+
+async function readChallenge(url, payment, payee, shape, fetchImpl) {
   const response = await fetchImpl(url, {
     method: "GET",
     redirect: "error",
@@ -193,23 +269,38 @@ async function readChallenge(url, payment, fetchImpl) {
   if (!accept || accept.scheme !== "exact" || accept.network !== "xrpl:1" || accept.asset !== "XRP") {
     throw coded("controlled challenge is not exact xrpl:1 XRP", "MAINNET");
   }
-  if (accept.payTo === SANCTIONS_PAYEE) throw coded("refusing the sanctions payee", "CLAIM");
+  if (accept.payTo !== payee) throw coded("challenge payee does not match the authorized seller", "CLAIM");
   if (accept.amount !== payment) throw coded("controlled challenge amount does not match the authorized payment", "CAP");
-  if (!accept.extra || accept.extra.areFeesSponsored !== false) {
-    throw coded("live attempt requires the issued challenge to already say areFeesSponsored false", "TX");
+  const present = accept.extra && Object.prototype.hasOwnProperty.call(accept.extra, "areFeesSponsored");
+  if (shape === "vendor" && present) throw coded("vendor challenge is not the missing-flag shape", "TX");
+  if (shape === "official" && (!accept.extra || accept.extra.areFeesSponsored !== false)) {
+    throw coded("official challenge does not already say areFeesSponsored false", "TX");
   }
   return accept;
 }
 
-async function proveSettlement(hash, expected, fetchImpl) {
-  const endpoint = canonicalReconcileRpc(undefined);
-  const bounded = boundReconcileFetch(fetchImpl);
-  const response = await bounded(endpoint, {
-    method: "POST",
-    body: JSON.stringify({ method: "tx", params: [{ transaction: hash }] }),
-  });
-  const body = await response.json();
-  const result = body && (body.result || body);
+async function readFacts(endpoint, buyer, seller, payment, fee, fetchImpl) {
+  const info = await rpc(endpoint, "server_info", {}, fetchImpl);
+  const validated = info && info.info && info.info.validated_ledger && info.info.validated_ledger.seq;
+  if (info && info.info && info.info.network_id !== 1) throw coded("refusing a ledger that is not xrpl:1", "MAINNET");
+  if (!Number.isInteger(validated) || validated <= 0) throw coded("validated ledger is missing", "LEDGER");
+  const buyerInfo = await rpc(endpoint, "account_info", { account: buyer, ledger_index: "validated" }, fetchImpl);
+  const sellerInfo = await rpc(endpoint, "account_info", { account: seller, ledger_index: "validated" }, fetchImpl);
+  const funded = (row, who) => {
+    if (!row || row.error === "actNotFound") throw coded(`${who} account is not funded`, "UNFUNDED");
+    const data = row.account_data;
+    if (!row.validated || !data || data.Account !== (who === "buyer" ? buyer : seller)) throw coded("validated account is missing", "LEDGER");
+    return data;
+  };
+  const buyerData = funded(buyerInfo, "buyer");
+  funded(sellerInfo, "seller");
+  if (!Number.isInteger(buyerData.Sequence) || buyerData.Sequence <= 0) throw coded("validated account sequence is missing", "LEDGER");
+  if (BigInt(buyerData.Balance) < BigInt(payment) + BigInt(fee)) throw coded("buyer balance cannot cover the payment and fee", "UNFUNDED");
+  return { validated, sequence: buyerData.Sequence };
+}
+
+async function proveSettlement(hash, expected, fetchImpl, endpoint) {
+  const result = await rpc(endpoint, "tx", { transaction: hash }, fetchImpl);
   if (!result || result.validated !== true || result.error) return { validated: false, reason: "not_validated" };
   const tx = result.tx_json || result;
   const meta = result.meta || {};
@@ -235,37 +326,41 @@ async function runControlledPurchase(env, opts) {
       signed: false,
       submitted: false,
       settled: false,
+      attempt_consumed: false,
+      vendor_signed: false,
       official_verify: "not_run",
       official_settle: "not_run",
       daily_used: plan.used,
+      day: plan.day,
       budget_drops: plan.budget,
       legacy_hold: PERMANENT_HOLD,
     });
   }
-  const wallet = loadWallet(env, options.wallet);
-  if (policy.isHouse(wallet.address) || wallet.address === heldAccount(plan.legacy)) {
-    throw coded("the diagnostic account is a house wallet or the held mission account", "W0");
+  const wallet = options.wallet || inspectAccount(env.FOUNDRY_DIAGNOSTIC_ACCOUNT_FILE).wallet;
+  const handover = readHandover(env.FOUNDRY_DIAGNOSTIC_HANDOVER);
+  if (handover.buyer !== wallet.address || handover.seller !== plan.payee) {
+    throw coded("handover addresses do not match the account and the authorized seller", "AUTH");
   }
-  const attempt = crypto.randomBytes(16).toString("hex");
-  appendAttempt(plan.home, { type: "attempt.used", attempt, used_at: now, max_ticks: 1 });
+  assertAccounts(wallet.address, plan.payee, plan.state);
+  const fetchImpl = options.fetch || globalThis.fetch;
+  const endpoint = options.endpoint || ledgerEndpoint(env);
+  await readChallenge(`${plan.seller}?shape=vendor`, plan.payment, plan.payee, "vendor", fetchImpl);
+  const accept = await readChallenge(`${plan.seller}?shape=official`, plan.payment, plan.payee, "official", fetchImpl);
+  const facts = options.ledgerFacts || await readFacts(endpoint.endpoint, wallet.address, plan.payee, plan.payment, plan.fee, options.ledgerFetch || fetchImpl);
+  const consumed = consumeAttempt(plan.home, now);
   let missionId = null;
   try {
-    const fetchImpl = options.fetch || globalThis.fetch;
-    const accept = await readChallenge(`${plan.seller}?shape=official`, plan.payment, fetchImpl);
-    const validated = options.validatedLedger;
-    const sequence = options.sequence;
-    if (!Number.isSafeInteger(validated) || !Number.isSafeInteger(sequence)) {
-      throw coded("validated ledger facts are missing", "LEDGER");
-    }
     const opened = startMission(plan.ledger, {
-      idempotency_key: `diag-${attempt.slice(0, 24)}`,
+      idempotency_key: `diag-${consumed.attempt.slice(0, 24)}`,
       now,
-      observation: { network: "xrpl:1", network_id: 1, accounts: [{ address: accept.payTo }] },
+      observation: { network: "xrpl:1", network_id: 1, accounts: [{ address: plan.payee }] },
       payment_drops: plan.payment,
       network_fee_drops: plan.fee,
       resource_url: plan.seller,
-    }, { allowlist: { payees: [accept.payTo] } });
-    if (!opened.mission || opened.mission.status === "blocked") throw coded("diagnostic mission was not reserved", "CAP");
+    }, { allowlist: { payees: [plan.payee] } });
+    if (!opened.mission || opened.mission.status === "blocked" || opened.mission.seller !== plan.payee) {
+      throw coded("diagnostic mission was not reserved for the authorized seller", "CAP");
+    }
     missionId = opened.mission.id;
     if (options.afterReserve) await options.afterReserve(missionId);
     act(plan.ledger, { mission_id: missionId, now }, { wallet: { address: wallet.address } });
@@ -276,29 +371,41 @@ async function runControlledPurchase(env, opts) {
       invoiceId: accept.extra.invoiceId,
       invoiceIdField: invoiceIdField(accept.extra.invoiceId),
     });
-    stampPrepared(plan.ledger, { mission_id: missionId, now, sequence, lastLedgerSequence: validated + 20 });
+    stampPrepared(plan.ledger, { mission_id: missionId, now, sequence: facts.sequence, lastLedgerSequence: facts.validated + 20 });
     const begun = beginSubmit(plan.ledger, { mission_id: missionId, now });
     if (!begun.proceed) throw coded("diagnostic submit did not open", "NO_RETRY");
     if (options.beforeSign) await options.beforeSign(missionId);
-    const selected = options.scheme || officialScheme();
-    if (!selected || selected.hook_source !== "official_default" || !selected.scheme || typeof selected.scheme.settle !== "function") {
-      throw coded("injected verifier cannot settle", "VERIFY");
-    }
     const signed = wallet.sign(begun.tx);
     const hash = xrpl.hashes.hashSignedTx(signed.tx_blob).toUpperCase();
     notePresign(plan.ledger, missionId, hash, { tx: begun.tx });
     const payload = buildSignaturePayload({ required: { resource: { url: plan.seller } }, accept, txBlob: signed.tx_blob });
-    const settled = await selected.scheme.settle(payload, accept);
-    const settledHash = String(settled && settled.transaction || "").toUpperCase();
-    const proof = settled && settled.success === true && settledHash === hash
-      ? await proveSettlement(hash, { destination: accept.payTo, amount: plan.payment }, options.proofFetch || fetchImpl)
-      : { validated: false, reason: "facilitator_not_proven" };
+    const posted = await fetchImpl(plan.seller, {
+      method: "POST",
+      redirect: "error",
+      signal: AbortSignal.timeout(10000),
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+        "payment-signature": Buffer.from(JSON.stringify(payload)).toString("base64"),
+        "user-agent": "aether-foundry-missions",
+      },
+      body: "{}",
+    });
+    const receipt = posted && typeof posted.json === "function" ? await posted.json() : {};
+    const receiptHash = String(receipt && receipt.transaction || "").toUpperCase();
+    const sellerPaid = posted && posted.status === 200 && receipt && receipt.paid === true && receiptHash === hash;
+    const proof = sellerPaid
+      ? await proveSettlement(hash, { destination: plan.payee, amount: plan.payment }, options.proofFetch || options.ledgerFetch || fetchImpl, options.proofEndpoint || endpoint.endpoint)
+      : { validated: false, reason: "seller_not_paid" };
     if (!proof.validated) {
       return assertPublic({
         live: true,
         signed: true,
         submitted: false,
         settled: false,
+        simulated: plan.simulated,
+        attempt_consumed: true,
+        vendor_signed: false,
         official_settle: "not_proven",
         reason: proof.reason,
         mission_id: missionId,
@@ -316,7 +423,11 @@ async function runControlledPurchase(env, opts) {
       signed: true,
       submitted: true,
       settled: true,
-      official_settle: options.scheme ? "supplied_scheme" : "exact_xrpl_scheme",
+      simulated: endpoint.boundary === "simulated" || plan.simulated,
+      network_boundary: endpoint.boundary,
+      attempt_consumed: true,
+      vendor_signed: false,
+      official_settle: receipt.official_settle || "exact_xrpl_scheme",
       ledger_proof: "validated",
       mission_id: missionId,
       legacy_hold: PERMANENT_HOLD,
@@ -341,5 +452,8 @@ module.exports = {
   PERMANENT_HOLD,
   officialScheme,
   preflight,
+  consumeAttempt,
+  assertAccounts,
+  proveSettlement,
   runControlledPurchase,
 };

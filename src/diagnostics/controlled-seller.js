@@ -1,18 +1,21 @@
 "use strict";
 
 /**
- * Loopback seller for the buyer diagnostic. It issues an exact xrpl:1
- * challenge and reports structural verifier results. It does not settle,
- * does not open an XRPL socket, and does not log a payment header.
+ * Loopback seller for one diagnostic payment.
+ * The payee is the funded address the operator names. This process does not
+ * generate a wallet. Port 8794 is the mission worker and is refused.
+ * A vendor-shaped challenge is rejected before settle. The official shape
+ * is verified and settled, then answered with a receipt that has no blob.
  */
 
 const http = require("http");
-const xrpl = require("xrpl");
 const { ExactXrplScheme } = require("@x402/xrpl/exact/facilitator");
 const { assertLoopback } = require("../missions/runtime-guard");
-const { challengeAccept, structuralResult } = require("./buyer-diagnostic");
+const { challengeAccept } = require("./buyer-diagnostic");
 
 const SANCTIONS_PAYEE = "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs";
+const DIAGNOSTIC_PORT = 8795;
+const BLOCKED_PORTS = new Set([8787, 8788, 8792, 8793, 8794]);
 
 function coded(message, code) {
   const error = new Error(message);
@@ -20,35 +23,107 @@ function coded(message, code) {
   return error;
 }
 
+function assertDiagnosticPort(raw) {
+  if (raw === 0 || raw === "0") return 0;
+  const port = Number(raw == null || raw === "" ? DIAGNOSTIC_PORT : raw);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw coded("refusing port", "BIND");
+  if (BLOCKED_PORTS.has(port)) throw coded(`refusing port ${port} because an existing service owns it`, "BIND");
+  return port;
+}
+
+function send(res, status, body) {
+  res.writeHead(status, { "content-type": "application/json" });
+  res.end(JSON.stringify(body));
+}
+
+function challengesFor(payTo, amount, invoiceId) {
+  const vendor = challengeAccept("vendor", payTo, invoiceId);
+  const official = challengeAccept("official", payTo, `${invoiceId}-official`);
+  vendor.amount = amount;
+  official.amount = amount;
+  return { vendor, official };
+}
+
+async function fulfill(parsed, challenges, scheme, boundary) {
+  const echoed = parsed && parsed.accepted;
+  const vendor = JSON.stringify(echoed) === JSON.stringify(challenges.vendor);
+  const official = JSON.stringify(echoed) === JSON.stringify(challenges.official);
+  const missingFlag = !echoed || !echoed.extra || !Object.prototype.hasOwnProperty.call(echoed.extra, "areFeesSponsored");
+  if (vendor || missingFlag || !official) {
+    return {
+      status: 402,
+      body: {
+        settled: false,
+        paid: false,
+        invalid_reason: vendor || missingFlag ? "invalid_exact_xrpl_fees_sponsored_unsupported" : "payment_requirements_mismatch",
+        official_verify: "not_run",
+        official_settle: "not_run",
+      },
+    };
+  }
+  if (!scheme || typeof scheme.verify !== "function" || typeof scheme.settle !== "function") {
+    return { status: 402, body: { settled: false, paid: false, invalid_reason: "seller_verify_failed", official_settle: "not_run" } };
+  }
+  const verified = await scheme.verify(parsed, challenges.official);
+  if (!verified || verified.isValid !== true) {
+    return {
+      status: 402,
+      body: {
+        settled: false,
+        paid: false,
+        invalid_reason: (verified && verified.invalidReason) || "seller_verify_failed",
+        official_verify: "rejected",
+        official_settle: "not_run",
+      },
+    };
+  }
+  const settled = await scheme.settle(parsed, challenges.official);
+  if (!settled || settled.success !== true || typeof settled.transaction !== "string" || settled.transaction.length === 0) {
+    return {
+      status: 402,
+      body: { settled: false, paid: false, invalid_reason: (settled && settled.errorReason) || "seller_verify_failed", official_settle: "not_proven" },
+    };
+  }
+  return {
+    status: 200,
+    body: {
+      paid: true,
+      settled: true,
+      transaction: settled.transaction.toUpperCase(),
+      network: "xrpl:1",
+      payer: settled.payer || verified.payer || null,
+      network_boundary: boundary,
+      official_settle: boundary === "testnet" ? "exact_xrpl_scheme" : boundary,
+    },
+  };
+}
+
 function startSeller(options) {
   const opts = options || {};
   const host = assertLoopback(opts.host || "127.0.0.1");
-  const payTo = opts.payTo || xrpl.Wallet.generate().address;
+  const port = assertDiagnosticPort(opts.port == null ? 0 : opts.port);
+  const payTo = opts.payTo;
+  if (typeof payTo !== "string" || payTo.length === 0) throw coded("controlled seller payee is missing", "PAYEE");
   if (payTo === SANCTIONS_PAYEE) throw coded("controlled seller cannot use the sanctions payee", "CLAIM");
   const amount = opts.amount || "10";
   if (!/^[1-9][0-9]*$/.test(amount) || BigInt(amount) > 1000000n) throw coded("controlled price is outside the mission cap", "CAP");
-  const invoiceId = opts.invoiceId || "diag-controlled-1";
-  const scheme = new ExactXrplScheme({});
-  const issued = new Map();
+  const challenges = challengesFor(payTo, amount, opts.invoiceId || "diag-controlled-1");
+  const scheme = opts.scheme || new ExactXrplScheme({});
+  const boundary = opts.boundary || (opts.scheme ? "supplied_scheme" : "testnet");
   const server = http.createServer((req, res) => {
     const url = new URL(req.url || "/", "http://127.0.0.1");
     if (req.method === "GET" && url.pathname === "/health") {
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ ok: true, pay_to: payTo, settles: false }));
+      send(res, 200, { ok: true, pay_to: payTo, port, settles: true });
       return;
     }
     if (url.pathname !== "/paid") {
-      res.writeHead(404, { "content-type": "application/json" });
-      res.end(JSON.stringify({ settled: false }));
+      send(res, 404, { settled: false });
       return;
     }
     const shape = url.searchParams.get("shape") === "official" ? "official" : "vendor";
-    const accept = issued.get(shape) || challengeAccept(shape, payTo, shape === "official" ? `${invoiceId}-official` : invoiceId);
-    accept.amount = amount;
-    issued.set(shape, accept);
     if (req.method === "GET") {
-      const body = { x402Version: 2, accepts: [accept] };
-      const header = Buffer.from(JSON.stringify(body)).toString("base64");
+      const accept = challenges[shape];
+      const header = Buffer.from(JSON.stringify({ x402Version: 2, accepts: [accept] })).toString("base64");
       res.writeHead(402, { "content-type": "application/json", "payment-required": header });
       res.end(JSON.stringify({
         error: "payment_required",
@@ -59,35 +134,34 @@ function startSeller(options) {
       return;
     }
     if (req.method !== "POST") {
-      res.writeHead(405, { "content-type": "application/json" });
-      res.end(JSON.stringify({ settled: false }));
+      send(res, 405, { settled: false });
       return;
     }
-    const encoded = req.headers["payment-signature"];
-    let report = { official_verify: "not_run", official_settle: "not_run", settled: false, invalid_reason: "unparsed" };
-    try {
-      const parsed = JSON.parse(Buffer.from(String(encoded || ""), "base64").toString("utf8"));
-      const blob = parsed && parsed.payload && parsed.payload.signedTxBlob;
-      const tx = xrpl.decode(blob);
-      const echoed = parsed.accepted;
-      const same = JSON.stringify(echoed) === JSON.stringify(accept);
-      const structural = structuralResult(scheme, accept, { sign: () => ({ tx_blob: blob }) }, tx, opts.validatedLedger || tx.LastLedgerSequence - 20);
-      report = {
-        echo_exact: same,
-        structural_reason: structural.structural.envelope_reason || structural.structural.structure_reason || structural.structural.expiry_reason,
-        official_verify: "not_run",
-        official_settle: "not_run",
-        settled: false,
-      };
-    } catch {
-      report = { official_verify: "not_run", official_settle: "not_run", settled: false, invalid_reason: "unparsed" };
-    }
-    res.writeHead(402, { "content-type": "application/json" });
-    res.end(JSON.stringify(report));
+    req.resume();
+    req.on("end", () => {
+      let parsed = null;
+      try {
+        const encoded = req.headers["payment-signature"];
+        parsed = JSON.parse(Buffer.from(String(encoded || ""), "base64").toString("utf8"));
+      } catch {
+        send(res, 402, { settled: false, paid: false, invalid_reason: "unparsed", official_settle: "not_run" });
+        return;
+      }
+      fulfill(parsed, challenges, scheme, boundary).then((result) => {
+        const text = JSON.stringify(result.body);
+        if (text.includes("signedTxBlob") || text.includes("PAYMENT-SIGNATURE") || /sEd[1-9A-HJ-NP-Za-km-z]{15,}/.test(text)) {
+          send(res, 402, { settled: false, invalid_reason: "unparsed" });
+          return;
+        }
+        send(res, result.status, result.body);
+      }).catch(() => {
+        send(res, 402, { settled: false, paid: false, invalid_reason: "seller_verify_failed", official_settle: "not_run" });
+      });
+    });
   });
   return new Promise((resolve, reject) => {
     server.on("error", reject);
-    server.listen(opts.port || 0, host, () => {
+    server.listen(port, host, () => {
       const address = server.address();
       resolve({
         server,
@@ -102,12 +176,25 @@ function startSeller(options) {
 }
 
 if (require.main === module) {
-  startSeller({ port: Number(process.env.FOUNDRY_DIAGNOSTIC_PORT || 8794) }).then((seller) => {
-    process.stdout.write(`${JSON.stringify({ url: seller.url, pay_to: seller.payTo, settles: false })}\n`);
-  }).catch((error) => {
+  try {
+    const sellerPort = assertDiagnosticPort(process.env.FOUNDRY_DIAGNOSTIC_PORT || DIAGNOSTIC_PORT);
+    startSeller({ payTo: process.env.FOUNDRY_DIAGNOSTIC_PAYEE, port: sellerPort }).then((seller) => {
+      process.stdout.write(`${JSON.stringify({ url: seller.url, pay_to: seller.payTo, port: seller.port })}\n`);
+    }).catch((error) => {
+      process.stderr.write(`${error.code || "DIAGNOSTIC"}\n`);
+      process.exit(1);
+    });
+  } catch (error) {
     process.stderr.write(`${error.code || "DIAGNOSTIC"}\n`);
     process.exit(1);
-  });
+  }
 }
 
-module.exports = { startSeller, SANCTIONS_PAYEE };
+module.exports = {
+  SANCTIONS_PAYEE,
+  DIAGNOSTIC_PORT,
+  BLOCKED_PORTS,
+  assertDiagnosticPort,
+  startSeller,
+  fulfill,
+};

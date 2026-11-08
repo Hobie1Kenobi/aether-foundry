@@ -6,14 +6,21 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const xrpl = require("xrpl");
+const anchors = require("../director/anchors");
 const config = require("../missions/config");
 const { control, view } = require("../missions/engine");
-const { startSeller, SANCTIONS_PAYEE } = require("./controlled-seller");
-const { PERMANENT_HOLD, PHRASE, officialScheme, runControlledPurchase } = require("./controlled-purchase");
+const { invoiceIdField } = require("../missions/x402-deliver");
+const { buildSignaturePayload } = require("../x402-outbound-guard");
+const { writePrivateAccount, writeHandover } = require("./account-file");
+const { startSeller, SANCTIONS_PAYEE, assertDiagnosticPort, DIAGNOSTIC_PORT } = require("./controlled-seller");
+const { PERMANENT_HOLD, PHRASE, officialScheme, consumeAttempt, runControlledPurchase } = require("./controlled-purchase");
 
 const TOKEN = "mission-internal-16";
 const NOW = "2026-11-06T18:00:00.000Z";
+const NOV8 = "2026-11-08T18:00:00.000Z";
+const NOV9 = "2026-11-09T18:00:00.000Z";
 const DIAG_TOKEN = "diagnostic-token-32-characters-min";
+const HOUSE = anchors.WALLETS.W0.address;
 
 function tmpHome() {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "diag-purchase-"));
@@ -42,28 +49,34 @@ function seedLegacy(ledger, drops) {
     { type: "budget.uncertain", at: NOW, mission_id: mission.id, day: "2026-11-06", drops: "1747", settlement: "submit_unknown", live: true },
   ];
   if (drops) {
-    lines.push({
-      type: "budget.spent",
-      at: NOW,
-      mission_id: "msnspent0000000001",
-      day: "2026-11-06",
-      drops,
-      live: false,
-    });
+    lines.push({ type: "budget.spent", at: NOW, mission_id: "msnspent0000000001", day: "2026-11-06", drops, live: false });
   }
-  fs.appendFileSync(path.join(ledger, "events.jsonl"), lines.map((row) => JSON.stringify(row)).join("\n") + "\n");
+  fs.appendFileSync(path.join(ledger, "events.jsonl"), `${lines.map((row) => JSON.stringify(row)).join("\n")}\n`);
 }
 
-function env(home, ledger, seller, extra) {
+function baseEnv(home, ledger, seller, payee, extra) {
   return Object.assign({
     FOUNDRY_MISSION_HOME: home,
     FOUNDRY_MISSION_LEDGER: ledger,
     FOUNDRY_DIAGNOSTIC_PHRASE: PHRASE,
     FOUNDRY_DIAGNOSTIC_TOKEN: DIAG_TOKEN,
     FOUNDRY_DIAGNOSTIC_SELLER: seller,
+    FOUNDRY_DIAGNOSTIC_PAYEE: payee,
     FOUNDRY_DIAGNOSTIC_PAYMENT_DROPS: "10",
     FOUNDRY_DIAGNOSTIC_FEE_DROPS: "10",
   }, extra || {});
+}
+
+function arm(home, payer, payee) {
+  const account = path.join(home, "buyer.json");
+  const handover = path.join(home, "handover.json");
+  writePrivateAccount(account, payer);
+  writeHandover(handover, { buyer: payer.address, seller: payee });
+  return {
+    FOUNDRY_DIAGNOSTIC_ACCOUNT_FILE: account,
+    FOUNDRY_DIAGNOSTIC_HANDOVER: handover,
+    FOUNDRY_DIAGNOSTIC_LIVE: "yes",
+  };
 }
 
 function proof(payTo, found) {
@@ -86,92 +99,152 @@ function proof(payTo, found) {
 
 function schemeFor(hashBox) {
   return {
-    hook_source: "official_default",
-    scheme: {
-      settle: async (payload) => {
-        const blob = payload.payload.signedTxBlob;
-        hashBox.hash = xrpl.hashes.hashSignedTx(blob).toUpperCase();
-        return { success: true, transaction: hashBox.hash };
-      },
+    verify: async () => ({ isValid: true, payer: hashBox.payer || null }),
+    settle: async (payload) => {
+      hashBox.settles = (hashBox.settles || 0) + 1;
+      hashBox.hash = xrpl.hashes.hashSignedTx(payload.payload.signedTxBlob).toUpperCase();
+      return { success: true, transaction: hashBox.hash, payer: hashBox.payer || null };
     },
   };
 }
 
 describe("controlled purchase", () => {
-  it("previews the shared cap and does not write", async () => {
+  it("previews the shared cap, including the Nov 6 hold on later Chicago days", async () => {
+    assert.equal(DIAGNOSTIC_PORT, 8795);
+    assert.throws(() => assertDiagnosticPort(8794), (error) => error.code === "BIND");
+    assert.throws(() => assertDiagnosticPort(8788), (error) => error.code === "BIND");
     const { home, ledger } = tmpHome();
     control(ledger, { action: "activate", confirm: config.ACTIVATE_PHRASE, token: TOKEN, now: NOW }, { token: TOKEN });
     seedLegacy(ledger);
     const before = fs.readFileSync(path.join(ledger, "events.jsonl"));
-    const seller = await startSeller();
+    const payee = xrpl.Wallet.generate().address;
+    const hashBox = { settles: 0, payer: payee };
+    const armed = await startSeller({ payTo: payee, scheme: schemeFor(hashBox) });
     try {
-      const vendor = await fetch(`${seller.url}?shape=vendor`);
+      const vendor = await fetch(`${armed.url}?shape=vendor`);
       const vendorBody = JSON.parse(Buffer.from(vendor.headers.get("payment-required"), "base64").toString("utf8"));
       assert.equal(Object.prototype.hasOwnProperty.call(vendorBody.accepts[0].extra, "areFeesSponsored"), false);
-      const official = await fetch(`${seller.url}?shape=official`);
-      const officialBody = JSON.parse(Buffer.from(official.headers.get("payment-required"), "base64").toString("utf8"));
-      assert.equal(officialBody.accepts[0].extra.areFeesSponsored, false);
-      const report = await runControlledPurchase(env(home, ledger, seller.url), { now: NOW });
-      assert.equal(report.live, false);
-      assert.equal(report.settled, false);
-      assert.equal(report.official_settle, "not_run");
-      assert.equal(report.daily_used, "1747");
-      assert.equal(report.legacy_hold, PERMANENT_HOLD);
+      const payer = xrpl.Wallet.generate();
+      const tx = {
+        TransactionType: "Payment",
+        Account: payer.address,
+        Destination: payee,
+        Amount: "10",
+        Fee: "10",
+        Sequence: 10,
+        LastLedgerSequence: 10020,
+        SourceTag: vendorBody.accepts[0].extra.sourceTag,
+        InvoiceID: invoiceIdField(vendorBody.accepts[0].extra.invoiceId),
+      };
+      const payload = buildSignaturePayload({
+        required: { resource: { url: armed.url } },
+        accept: vendorBody.accepts[0],
+        txBlob: payer.sign(tx).tx_blob,
+      });
+      const rejected = await fetch(armed.url, {
+        method: "POST",
+        headers: { "payment-signature": Buffer.from(JSON.stringify(payload)).toString("base64") },
+        body: "{}",
+      });
+      assert.equal(rejected.status, 402);
+      assert.equal(hashBox.settles, 0);
+      for (const instant of [NOW, NOV8, NOV9]) {
+        const report = await runControlledPurchase(baseEnv(home, ledger, armed.url, payee), { now: instant });
+        assert.equal(report.live, false);
+        assert.equal(report.attempt_consumed, false);
+        assert.equal(report.daily_used, "1747");
+        assert.equal(report.settled, false);
+      }
       assert.equal(fs.readFileSync(path.join(ledger, "events.jsonl")).equals(before), true);
       assert.equal(fs.existsSync(path.join(home, "diagnostic-attempt.jsonl")), false);
-      assert.equal(fs.existsSync(path.join(home, "lease-history.jsonl")), false);
-      assert.equal(fs.existsSync(path.join(home, "allowlist.json")), false);
+      assert.equal(fs.existsSync(path.join(home, "diagnostic-attempt.lock")), false);
     } finally {
-      await seller.close();
+      await armed.close();
     }
   });
 
-  it("refuses a reset ledger, a woken worker, the sanctions host, and a cap breach", async () => {
+  it("refuses a reset ledger, the worker port, a house payee, and a fee-inclusive cap breach", async () => {
     const { home, ledger } = tmpHome();
     control(ledger, { action: "activate", confirm: config.ACTIVATE_PHRASE, token: TOKEN, now: NOW }, { token: TOKEN });
-    const seller = "http://127.0.0.1:8794/paid";
-    await assert.rejects(() => runControlledPurchase(env(home, ledger, seller), { now: NOW }), (error) => error.code === "CAP");
+    const payee = xrpl.Wallet.generate().address;
+    const seller = "http://127.0.0.1:8795/paid";
+    await assert.rejects(() => runControlledPurchase(baseEnv(home, ledger, seller, payee), { now: NOW }), (error) => error.code === "CAP");
     seedLegacy(ledger);
     fs.writeFileSync(path.join(home, "worker.json"), JSON.stringify({ asleep: false }));
-    await assert.rejects(() => runControlledPurchase(env(home, ledger, seller), { now: NOW }), (error) => error.code === "ASLEEP");
+    await assert.rejects(() => runControlledPurchase(baseEnv(home, ledger, seller, payee), { now: NOW }), (error) => error.code === "ASLEEP");
     fs.writeFileSync(path.join(home, "worker.json"), JSON.stringify({ asleep: true }));
     await assert.rejects(
-      () => runControlledPurchase(env(home, ledger, "https://api.stablecoingateways.com/paid"), { now: NOW }),
+      () => runControlledPurchase(baseEnv(home, ledger, "https://api.stablecoingateways.com/paid", payee), { now: NOW }),
       (error) => error.code === "HOST"
     );
     await assert.rejects(
-      () => runControlledPurchase(env(home, ledger, seller, { FOUNDRY_MISSION_EXECUTE: "yes" }), { now: NOW }),
+      () => runControlledPurchase(baseEnv(home, ledger, "http://127.0.0.1:8794/paid", payee), { now: NOW }),
+      (error) => error.code === "BIND"
+    );
+    await assert.rejects(
+      () => runControlledPurchase(baseEnv(home, ledger, seller, HOUSE), { now: NOW }),
+      (error) => error.code === "W0"
+    );
+    await assert.rejects(
+      () => runControlledPurchase(baseEnv(home, ledger, seller, payee, { FOUNDRY_MISSION_EXECUTE: "yes" }), { now: NOW }),
       (error) => error.code === "AUTH"
     );
-    seedLegacy(ledger, "4998253");
-    await assert.rejects(() => runControlledPurchase(env(home, ledger, seller), { now: NOW }), (error) => error.code === "CAP");
+    fs.appendFileSync(path.join(ledger, "events.jsonl"), `${JSON.stringify({
+      type: "budget.uncertain",
+      at: NOW,
+      mission_id: PERMANENT_HOLD,
+      day: "2026-11-06",
+      drops: "4998243",
+      settlement: "submit_unknown",
+      live: true,
+    })}\n`);
+    await assert.rejects(() => runControlledPurchase(baseEnv(home, ledger, seller, payee), { now: NOV8 }), (error) => error.code === "CAP");
+    await assert.rejects(() => runControlledPurchase(baseEnv(home, ledger, seller, payee), { now: NOV9 }), (error) => error.code === "CAP");
     assert.equal(fs.existsSync(path.join(home, "diagnostic-attempt.jsonl")), false);
   });
 
-  it("keeps the legacy hold and blocks a second attempt after a crash or an unproven settle", async () => {
+  it("does not consume the attempt when the ledger read fails, and blocks a second run after a crash", async () => {
     const { home, ledger } = tmpHome();
     control(ledger, { action: "activate", confirm: config.ACTIVATE_PHRASE, token: TOKEN, now: NOW }, { token: TOKEN });
     seedLegacy(ledger);
-    const seller = await startSeller();
-    const legacy = JSON.stringify(view(ledger, NOW).missions[PERMANENT_HOLD]);
     const payer = xrpl.Wallet.generate();
+    const payee = xrpl.Wallet.generate().address;
+    const seller = await startSeller({ payTo: payee, scheme: schemeFor({}) });
+    const legacy = JSON.stringify(view(ledger, NOW).missions[PERMANENT_HOLD]);
     try {
       await assert.rejects(
-        () => runControlledPurchase(env(home, ledger, seller.url, { FOUNDRY_DIAGNOSTIC_LIVE: "yes" }), {
+        () => runControlledPurchase(Object.assign(baseEnv(home, ledger, seller.url, payee), arm(home, payer, payee)), {
           now: NOW,
-          wallet: payer,
-          validatedLedger: 10000,
-          sequence: 10,
           fetch: async () => { throw Object.assign(new Error("timeout"), { code: "ABORT" }); },
         }),
         (error) => error.code === "ABORT"
       );
-      assert.equal(fs.existsSync(path.join(home, "diagnostic-attempt.jsonl")), true);
-      assert.equal(JSON.stringify(view(ledger, NOW).missions[PERMANENT_HOLD]), legacy);
+      assert.equal(fs.existsSync(path.join(home, "diagnostic-attempt.jsonl")), false);
+      assert.equal(fs.existsSync(path.join(home, "diagnostic-attempt.lock")), false);
+      const loose = path.join(home, "loose.json");
+      fs.writeFileSync(loose, JSON.stringify({ address: payer.address, seed: payer.seed }), { mode: 0o644 });
       await assert.rejects(
-        () => runControlledPurchase(env(home, ledger, seller.url, { FOUNDRY_DIAGNOSTIC_LIVE: "yes" }), { now: NOW, wallet: payer }),
-        (error) => error.code === "NO_RETRY"
+        () => runControlledPurchase(baseEnv(home, ledger, seller.url, payee, {
+          FOUNDRY_DIAGNOSTIC_LIVE: "yes",
+          FOUNDRY_DIAGNOSTIC_ACCOUNT_FILE: loose,
+          FOUNDRY_DIAGNOSTIC_HANDOVER: path.join(home, "handover.json"),
+        }), { now: NOW, ledgerFacts: { validated: 10000, sequence: 10 } }),
+        (error) => error.code === "AUTH"
       );
+      assert.equal(fs.existsSync(path.join(home, "diagnostic-attempt.lock")), false);
+      fs.appendFileSync(path.join(ledger, "events.jsonl"), `${JSON.stringify({
+        type: "mission.upsert",
+        at: NOW,
+        mission: { id: "msncurrent000000001", hold: "unsubmitted", signed: false, unsigned_tx: { Account: payer.address } },
+      })}\n`);
+      await assert.rejects(
+        () => runControlledPurchase(Object.assign(baseEnv(home, ledger, seller.url, payee), arm(home, payer, payee)), {
+          now: NOW,
+          ledgerFacts: { validated: 10000, sequence: 10 },
+        }),
+        (error) => error.code === "ACCOUNT"
+      );
+      assert.equal(fs.existsSync(path.join(home, "diagnostic-attempt.lock")), false);
     } finally {
       await seller.close();
     }
@@ -179,63 +252,54 @@ describe("controlled purchase", () => {
     const second = tmpHome();
     control(second.ledger, { action: "activate", confirm: config.ACTIVATE_PHRASE, token: TOKEN, now: NOW }, { token: TOKEN });
     seedLegacy(second.ledger);
-    const seller2 = await startSeller();
-    const legacy2 = JSON.stringify(view(second.ledger, NOW).missions[PERMANENT_HOLD]);
-    const hashBox = {};
+    const seller2 = await startSeller({ payTo: payee, scheme: schemeFor({ payer: payer.address }) });
     try {
-      const unproven = await runControlledPurchase(env(second.home, second.ledger, seller2.url, { FOUNDRY_DIAGNOSTIC_LIVE: "yes" }), {
-        now: NOW,
-        wallet: payer,
-        validatedLedger: 10000,
-        sequence: 10,
-        scheme: schemeFor(hashBox),
-        proofFetch: proof(seller2.payTo, false),
-      });
-      assert.equal(unproven.settled, false);
-      assert.equal(unproven.official_settle, "not_proven");
-      assert.equal(unproven.reason, "not_validated");
-      const mission = view(second.ledger, NOW).missions[unproven.mission_id];
-      assert.equal(mission.hold, "uncertain");
-      assert.equal(mission.seller, seller2.payTo);
-      assert.notEqual(mission.seller, SANCTIONS_PAYEE);
-      assert.equal(JSON.stringify(view(second.ledger, NOW).missions[PERMANENT_HOLD]), legacy2);
       await assert.rejects(
-        () => runControlledPurchase(env(second.home, second.ledger, seller2.url, { FOUNDRY_DIAGNOSTIC_LIVE: "yes" }), { now: NOW, wallet: payer }),
+        () => runControlledPurchase(Object.assign(baseEnv(second.home, second.ledger, seller2.url, payee), arm(second.home, payer, payee)), {
+          now: NOW,
+          ledgerFacts: { validated: 10000, sequence: 10 },
+          beforeSign: async () => { throw Object.assign(new Error("crash"), { code: "CRASH" }); },
+        }),
+        (error) => error.code === "CRASH"
+      );
+      assert.equal(fs.existsSync(path.join(second.home, "diagnostic-attempt.lock")), true);
+      assert.equal(JSON.stringify(view(second.ledger, NOW).missions[PERMANENT_HOLD]), legacy);
+      await assert.rejects(
+        () => runControlledPurchase(Object.assign(baseEnv(second.home, second.ledger, seller2.url, payee), arm(second.home, payer, payee)), { now: NOW }),
         (error) => error.code === "NO_RETRY"
       );
-      const text = JSON.stringify(unproven);
-      assert.equal(text.includes(payer.seed), false);
-      assert.equal(text.includes("signedTxBlob"), false);
     } finally {
       await seller2.close();
     }
   });
 
-  it("settles only after an independent validated ledger proof", async () => {
-    const { home, ledger } = tmpHome();
-    control(ledger, { action: "activate", confirm: config.ACTIVATE_PHRASE, token: TOKEN, now: NOW }, { token: TOKEN });
-    seedLegacy(ledger);
-    const seller = await startSeller();
-    const payer = xrpl.Wallet.generate();
-    const hashBox = {};
+  it("settles only after the seller receipt and an independent validated proof", async () => {
     const empty = officialScheme();
     assert.equal(empty.hook_source, "official_default");
     assert.deepEqual(empty.scheme.options, {});
+    const payer = xrpl.Wallet.generate();
+    const payee = xrpl.Wallet.generate().address;
+    const hashBox = { payer: payer.address, settles: 0 };
+    const { home, ledger } = tmpHome();
+    control(ledger, { action: "activate", confirm: config.ACTIVATE_PHRASE, token: TOKEN, now: NOW }, { token: TOKEN });
+    seedLegacy(ledger);
+    const seller = await startSeller({ payTo: payee, scheme: schemeFor(hashBox), boundary: "supplied_scheme" });
+    const legacy = JSON.stringify(view(ledger, NOW).missions[PERMANENT_HOLD]);
     try {
-      await assert.rejects(
-        () => runControlledPurchase(env(home, ledger, seller.url, { FOUNDRY_DIAGNOSTIC_LIVE: "yes" }), {
-          now: NOW,
-          wallet: payer,
-          validatedLedger: 10000,
-          sequence: 10,
-          scheme: { hook_source: "injected", scheme: { settle: async () => ({ success: true, transaction: "ab".repeat(32) }) } },
-        }),
-        (error) => error.code === "VERIFY"
-      );
-      const parked = view(ledger, NOW);
-      const created = Object.values(parked.missions).find((mission) => mission.id !== PERMANENT_HOLD);
-      assert.equal(created.hold, "uncertain");
-      assert.equal(parked.missions[PERMANENT_HOLD].hold, "uncertain");
+      const unproven = await runControlledPurchase(Object.assign(baseEnv(home, ledger, seller.url, payee), arm(home, payer, payee)), {
+        now: NOW,
+        ledgerFacts: { validated: 10000, sequence: 10 },
+        proofFetch: proof(payee, false),
+      });
+      assert.equal(unproven.settled, false);
+      assert.equal(unproven.reason, "not_validated");
+      assert.equal(unproven.vendor_signed, false);
+      assert.equal(hashBox.settles, 1);
+      const mission = view(ledger, NOW).missions[unproven.mission_id];
+      assert.equal(mission.hold, "uncertain");
+      assert.equal(mission.seller, payee);
+      assert.equal(JSON.stringify(view(ledger, NOW).missions[PERMANENT_HOLD]), legacy);
+      assert.equal(JSON.stringify(unproven).includes(payer.seed), false);
     } finally {
       await seller.close();
     }
@@ -243,27 +307,58 @@ describe("controlled purchase", () => {
     const fresh = tmpHome();
     control(fresh.ledger, { action: "activate", confirm: config.ACTIVATE_PHRASE, token: TOKEN, now: NOW }, { token: TOKEN });
     seedLegacy(fresh.ledger);
-    const seller2 = await startSeller();
+    const proved = { payer: payer.address, settles: 0 };
+    const seller2 = await startSeller({ payTo: payee, scheme: schemeFor(proved), boundary: "supplied_scheme" });
     try {
-      const proven = await runControlledPurchase(env(fresh.home, fresh.ledger, seller2.url, { FOUNDRY_DIAGNOSTIC_LIVE: "yes" }), {
+      const result = await runControlledPurchase(Object.assign(baseEnv(fresh.home, fresh.ledger, seller2.url, payee), arm(fresh.home, payer, payee)), {
         now: NOW,
-        wallet: payer,
-        validatedLedger: 10000,
-        sequence: 11,
-        scheme: schemeFor(hashBox),
-        proofFetch: proof(seller2.payTo, true),
+        ledgerFacts: { validated: 10000, sequence: 11 },
+        proofFetch: proof(payee, true),
       });
-      assert.equal(proven.settled, true);
-      assert.equal(proven.ledger_proof, "validated");
-      assert.equal(proven.official_settle, "supplied_scheme");
+      assert.equal(result.settled, true);
+      assert.equal(result.ledger_proof, "validated");
+      assert.equal(result.official_settle, "supplied_scheme");
+      assert.equal(result.vendor_signed, false);
+      assert.equal(proved.settles, 1);
       const state = view(fresh.ledger, NOW);
-      assert.equal(state.missions[proven.mission_id].hold, "spent");
+      assert.equal(state.missions[result.mission_id].hold, "spent");
       assert.equal(state.missions[PERMANENT_HOLD].hold, "uncertain");
       assert.equal(state.days["2026-11-06"].uncertain, "1747");
       assert.equal(state.days["2026-11-06"].spent, "20");
-      assert.equal(JSON.stringify(proven).includes(payer.seed), false);
+      assert.equal(JSON.stringify(result).includes(payer.seed), false);
     } finally {
       await seller2.close();
     }
+  });
+
+  it("keeps an ambiguous attempt and lets only one of two processes take the lock", async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "diag-lock-"));
+    const file = path.join(home, "diagnostic-attempt.jsonl");
+    fs.writeFileSync(file, "{\"type\":\"attempt.used\"");
+    const before = fs.readFileSync(file);
+    await assert.rejects(async () => consumeAttempt(home, NOV8), (error) => error.code === "NO_RETRY");
+    assert.equal(fs.readFileSync(file).equals(before), true);
+    assert.equal(fs.existsSync(path.join(home, "diagnostic-attempt.lock")), true);
+    await assert.rejects(async () => consumeAttempt(home, NOV8), (error) => error.code === "NO_RETRY");
+    assert.equal(fs.readFileSync(file).equals(before), true);
+    const other = fs.mkdtempSync(path.join(os.tmpdir(), "diag-race-"));
+    const { spawn } = require("child_process");
+    const root = path.resolve(__dirname, "..", "..");
+    const run = () => new Promise((resolve) => {
+      const child = spawn(process.execPath, ["-e", "try { require('./src/diagnostics/controlled-purchase').consumeAttempt(process.env.DIAG_HOME, '2026-11-08T18:00:00.000Z'); process.exit(0); } catch (error) { process.stderr.write(error.code || 'ERR'); process.exit(1); }"], {
+        cwd: root,
+        env: Object.assign({}, process.env, { DIAG_HOME: other }),
+      });
+      let err = "";
+      child.stderr.on("data", (chunk) => { err += chunk; });
+      child.on("close", (status) => resolve({ status, err }));
+    });
+    const [left, right] = await Promise.all([run(), run()]);
+    const statuses = [left.status, right.status].sort();
+    assert.deepEqual(statuses, [0, 1]);
+    const loser = left.status === 0 ? right : left;
+    assert.equal(loser.err, "NO_RETRY");
+    const lines = fs.readFileSync(path.join(other, "diagnostic-attempt.jsonl"), "utf8").trim().split("\n");
+    assert.equal(lines.length, 1);
   });
 });
