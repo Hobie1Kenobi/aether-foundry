@@ -129,10 +129,34 @@ const DIAGNOSTIC_CODES = new Set([
   "invalid_exact_xrpl_payload_signer_not_authorized",
   "invalid_exact_xrpl_payload_sequence_not_current",
   "invalid_exact_xrpl_payload_ticket_not_available",
+  "seller_not_paid",
+  "seller_timeout",
+  "transaction_failed",
+  "duplicate_settlement",
+  "verification_failed",
 ]);
 
 function diagnosticToken(value) {
   return typeof value === "string" && DIAGNOSTIC_CODES.has(value) ? value : null;
+}
+
+function boundedSellerReason(value) {
+  const exact = diagnosticToken(value);
+  if (exact) return exact;
+  if (typeof value === "string" && value.startsWith("transaction_failed:")) return "transaction_failed";
+  return null;
+}
+
+function publicFacilitatorDetail(value) {
+  if (typeof value !== "string") return null;
+  const text = value.replace(/[\u0000-\u001f]/g, "").trim();
+  if (!text || text.length > 240) return null;
+  if (/sEd[1-9A-HJ-NP-Za-km-z]{8,}/.test(text)) return null;
+  if (/signedTxBlob|PAYMENT-SIGNATURE|PAYMENT-REQUIRED/i.test(text)) return null;
+  if (/\b[0-9A-Fa-f]{48,}\b/.test(text)) return null;
+  if (diagnosticToken(text) || /^transaction_failed: [A-Za-z0-9_]{1,64}$/.test(text)) return text;
+  if (/^[A-Za-z0-9_ .:\/,'-]{1,240}$/.test(text) && !text.includes("://")) return text;
+  return null;
 }
 
 function sanitizeDiagnostic(parsed) {
@@ -150,5 +174,7 @@ module.exports = {
   validatePurchasedService,
   boundedErrorCode,
   diagnosticToken,
+  boundedSellerReason,
+  publicFacilitatorDetail,
   sanitizeDiagnostic,
 };
