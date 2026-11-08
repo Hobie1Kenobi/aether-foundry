@@ -98,6 +98,29 @@ That command writes one audit line and does not sign. It does not clear any othe
 
 `msn5b5c3223e5e88526` has presign hash `6022D12A2FBA5C4321FB7A1CED1E10FFC91B75C521F402A725B0518B101A8FEC`. Do not retry it and do not release the 1747-drop hold. `expires_at` `2026-11-06T19:42:16.314Z` is not a release. The mission Payment was signed without `Sequence` or `LastLedgerSequence`. A generated-wallet decode shows an omitted Sequence is not stored as 0. That does not prove why the seller refused, and it does not release this claim. Future signatures require the validated account sequence and a LastLedgerSequence at most 20 ledgers ahead. A clock time does not release a signed claim. A public `tx` read on 2026-11-06 returned `txnNotFound`. That is not a release either. The published snapshot does not contain the seller HTTP status or body. If a local worker log still has that response, keep only the status number and whether the body was a JSON object. Do not send the signed blob again to find out.
 
+`txnNotFound` on a pruned server is not a release. `./bin/reconcile` with no `FOUNDRY_MISSION_RECONCILE_MISSION` exits `PLAN` and releases nothing. That variable is the claim selector.
+
+Report only, no audit phrase and no release:
+
+```bash
+FOUNDRY_MISSION_RECONCILE_MISSION=<mission id> \
+FOUNDRY_MISSION_HOME=/workspace/foundry-ops/missions-runtime \
+./bin/reconcile
+```
+
+The JSON fields `release_allowed`, `released`, `reason`, `creation_ledger`, `complete_ledgers`, and `history_covers` are the report. `released` stays false. The command does not write the ledger and does not store a guessed earliest ledger.
+
+Apply the release only when that report has `release_allowed` true. The token stays in the environment. It is not printed and it is not the execute token.
+
+```bash
+FOUNDRY_MISSION_RECONCILE_MISSION=<mission id> \
+FOUNDRY_MISSION_RECONCILE_PHRASE=AUDIT-RELEASE-PASSED-WINDOW \
+FOUNDRY_MISSION_HOME=/workspace/foundry-ops/missions-runtime \
+./bin/reconcile
+```
+
+`FOUNDRY_MISSION_RECONCILE_TOKEN` must already be set and be at least 32 characters. A release also requires network id 1, a validated head past `LastLedgerSequence`, `txnNotFound` for the signed hash, a validated `CreatedNode` of this account's `AccountRoot`, `actNotFound` on the previous ledger, one account transaction from the covered history start through `LastLedgerSequence` with no pagination marker, and `complete_ledgers` continuous from that creation ledger through `LastLedgerSequence`. A testnet history that starts at ledger 32570 can cover a later creation. Ledger 1 is not required. Sequence and the clock are not a lower bound. `msn5b5c3223e5e88526` has no `LastLedgerSequence` and stays held. Any other gap, recreation, or ledger mismatch stays held.
+
 ## Swap a release
 
 Stop only the dedicated pids. The ledger, arm file, and account file stay in `/workspace/foundry-ops/missions-runtime`, so pending and uncertain holds are kept.

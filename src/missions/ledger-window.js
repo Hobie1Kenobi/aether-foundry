@@ -114,4 +114,5 @@ module.exports = {
   bindWindow,
   readValidatedAccount,
   hashFound,
+  rpc,
 };

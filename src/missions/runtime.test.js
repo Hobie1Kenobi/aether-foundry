@@ -887,8 +887,9 @@ describe("release pack", () => {
     fs.writeFileSync(path.join(home, "allowlist.json"), JSON.stringify({
       payees: [{ address: "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs", resource: sanctions }],
     }));
+    const fixedNow = "2026-11-06T21:40:00.000Z";
     fs.writeFileSync(path.join(home, "challenge.json"), JSON.stringify({
-      retrieved_at: new Date().toISOString(),
+      retrieved_at: fixedNow,
       http_status: 402,
       paid: false,
       proof_sent: false,
@@ -908,6 +909,16 @@ describe("release pack", () => {
     }));
     const preload = path.join(home, "preload.js");
     fs.writeFileSync(preload, `
+      const fixed = Date.parse(${JSON.stringify("2026-11-06T21:40:00.000Z")});
+      const RealDate = Date;
+      class FixedDate extends RealDate {
+        constructor(...args) {
+          if (args.length === 0) super(fixed);
+          else super(...args);
+        }
+        static now() { return fixed; }
+      }
+      globalThis.Date = FixedDate;
       const original = globalThis.fetch;
       globalThis.fetch = async (url, init) => {
         const target = String(url);
@@ -980,6 +991,7 @@ describe("release pack", () => {
       const published = runBin("publish", Object.assign({}, bare, {
         FOUNDRY_MISSION_PUBLISH_TOKEN: "publish-health-token-32chars-minimum",
         FOUNDRY_MISSION_PUBLISH_PHRASE: "PUBLISH-HEALTH-SNAPSHOT",
+        NODE_OPTIONS: `--require ${preload}`,
       }));
       assert.equal(published.status, 0, redact(`${published.stderr}\n${published.stdout}`));
       assert.equal(published.stderr.includes("MODULE_NOT_FOUND"), false);

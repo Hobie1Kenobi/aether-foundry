@@ -11,7 +11,7 @@ const { view, signedClaimMayRelease } = require("./engine");
 const { coded } = require("./ledger");
 const guard = require("./runtime-guard");
 const { releasePassedWindow } = require("./submit");
-const ledgerWindow = require("./ledger-window");
+const { proveSignedAbsence } = require("./absence-proof");
 
 const PHRASE = "AUDIT-RELEASE-PASSED-WINDOW";
 const OLD_CLAIM = "msn5b5c3223e5e88526";
@@ -51,20 +51,30 @@ async function reconcileClaim(dir, missionId, opts) {
   }
   const fetchImpl = options.fetch;
   if (typeof fetchImpl !== "function") throw coded("validated ledger RPC is not configured", "LEDGER");
-  const window = await ledgerWindow.readValidatedAccount(fetchImpl, account);
-  const hashFound = await ledgerWindow.hashFound(fetchImpl, mission.presigned_hash);
+  const shown = proveSignedAbsence(fetchImpl, {
+    account,
+    hash: mission.presigned_hash,
+    lastLedgerSequence: mission.last_ledger_sequence,
+    sequence: mission.sequence,
+  });
+  const absence = await shown;
   const releaseAllowed = signedClaimMayRelease({
     lastLedgerSequence: mission.last_ledger_sequence,
-    validatedLedgerIndex: window.validated,
-    hashFound,
-  });
+    validatedLedgerIndex: absence.validated_ledger,
+    hashFound: absence.hash_found,
+    creationProven: absence.creation_proven === true,
+    historyCoversCreationThroughLast: absence.history_covers === true,
+  }) && absence.proven === true;
   const base = report({
     release_allowed: releaseAllowed,
-    reason: releaseAllowed ? "ledger_window" : (hashFound === null ? "lookup_unknown" : (hashFound ? "hash_present" : "window_open")),
+    reason: releaseAllowed ? "ledger_window" : absence.reason,
     mission_id: missionId,
     last_ledger_sequence: mission.last_ledger_sequence,
-    validated_ledger: window.validated,
-    hash_found: hashFound,
+    validated_ledger: absence.validated_ledger,
+    hash_found: absence.hash_found,
+    creation_ledger: absence.creation_ledger,
+    complete_ledgers: absence.complete_ledgers,
+    history_covers: absence.history_covers === true,
     network_id: 1,
   });
   if (!releaseAllowed || options.audit !== true) return base;
@@ -75,8 +85,10 @@ async function reconcileClaim(dir, missionId, opts) {
   const released = releasePassedWindow(dir, {
     mission_id: missionId,
     now: options.now,
-    validatedLedger: window.validated,
+    validatedLedger: absence.validated_ledger,
     hashFound: false,
+    creationProven: true,
+    historyCoversCreationThroughLast: true,
   });
   return Object.assign(base, {
     released: released.released === true,
@@ -101,6 +113,9 @@ if (require.main === module) {
         last_ledger_sequence: result.last_ledger_sequence == null ? null : result.last_ledger_sequence,
         validated_ledger: result.validated_ledger == null ? null : result.validated_ledger,
         hash_found: result.hash_found == null ? null : result.hash_found,
+        creation_ledger: result.creation_ledger == null ? null : result.creation_ledger,
+        complete_ledgers: result.complete_ledgers == null ? null : result.complete_ledgers,
+        history_covers: result.history_covers === true,
       })}\n`);
     })
     .catch((error) => {

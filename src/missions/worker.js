@@ -17,6 +17,7 @@ const { fold, startMission, blockMission, act, evaluate, view } = require("./eng
 const { beginSubmit, finishSubmit, releasePrepared, releaseUnsignedClaim, narrowUnsubmittedFee, noteDeliveryFailure, applyChallenge, stampPrepared, releasePassedWindow } = require("./submit");
 const networkFee = require("./network-fee");
 const ledgerWindow = require("./ledger-window");
+const { proveSignedAbsence } = require("./absence-proof");
 const serviceResult = require("./service-result");
 const x402Deliver = require("./x402-deliver");
 const missionPolicy = require("./policy");
@@ -324,23 +325,30 @@ async function expireProvenWindows(ledger, fetchImpl, now) {
   for (const mission of Object.values(state.missions || {})) {
     if (!Number.isInteger(mission.last_ledger_sequence) || !mission.presigned_hash) continue;
     if (mission.complete === true || mission.hold === "released" || mission.hold === "spent") continue;
-    const account = mission.signed_fields && mission.signed_fields.Account;
+    const account = (mission.claim && mission.claim.account) || (mission.signed_fields && mission.signed_fields.Account);
     if (!account) continue;
-    let found;
-    let validated;
+    if (mission.claim && mission.claim.account && mission.signed_fields && mission.signed_fields.Account
+      && mission.claim.account !== mission.signed_fields.Account) continue;
+    let absence;
     try {
-      found = await ledgerWindow.hashFound(fetchImpl, mission.presigned_hash);
-      if (found !== false) continue;
-      validated = (await ledgerWindow.readValidatedAccount(fetchImpl, account)).validated;
+      absence = await proveSignedAbsence(fetchImpl, {
+        account,
+        hash: mission.presigned_hash,
+        lastLedgerSequence: mission.last_ledger_sequence,
+        sequence: mission.sequence,
+      });
     } catch {
       continue;
     }
+    if (!absence || absence.proven !== true) continue;
     try {
       releasePassedWindow(ledger, {
         mission_id: mission.id,
         now,
-        validatedLedger: validated,
+        validatedLedger: absence.validated_ledger,
         hashFound: false,
+        creationProven: true,
+        historyCoversCreationThroughLast: true,
       });
     } catch {
       /* An unproven window stays open. */

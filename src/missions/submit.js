@@ -458,6 +458,8 @@ function releasePassedWindow(dir, input) {
       lastLedgerSequence: mission.last_ledger_sequence,
       validatedLedgerIndex: input.validatedLedger,
       hashFound: input.hashFound,
+      creationProven: input.creationProven,
+      historyCoversCreationThroughLast: input.historyCoversCreationThroughLast,
     })) {
       return { released: false, reason: "not_proven", mission };
     }
@@ -483,7 +485,7 @@ function releasePassedWindow(dir, input) {
     mission.submitted = false;
     mission.live = false;
     mission.retry_blocked = true;
-    mission.rationale = "The validated ledger passed LastLedgerSequence and the hash was absent. The hold was released. This is not a completed purchase.";
+    mission.rationale = "A validated account-creation proof and continuous ledger history through LastLedgerSequence showed the hash absent. The hold was released. This is not a completed purchase.";
     mission.updated_at = now;
     api.append({ type: "mission.upsert", at: now, mission });
     return { released: true, mission };

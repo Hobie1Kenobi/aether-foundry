@@ -251,7 +251,13 @@ function signedClaimMayRelease(input) {
   const validated = input && input.validatedLedgerIndex;
   if (!Number.isInteger(last) || last <= 0) return false;
   if (!Number.isInteger(validated) || validated <= last) return false;
-  return input.hashFound === false;
+  if (input.hashFound !== false) return false;
+  // A pruned txnNotFound is not absence. The validated creation ledger and a
+  // continuous complete_ledgers span through LastLedgerSequence are required.
+  // Those facts are not invented from Sequence or the clock.
+  if (input.creationProven !== true) return false;
+  if (input.historyCoversCreationThroughLast !== true) return false;
+  return true;
 }
 
 function expireHolds(api, state, now) {
