@@ -129,10 +129,22 @@ const DIAGNOSTIC_CODES = new Set([
   "invalid_exact_xrpl_payload_signer_not_authorized",
   "invalid_exact_xrpl_payload_sequence_not_current",
   "invalid_exact_xrpl_payload_ticket_not_available",
+  "seller_not_paid",
+  "seller_timeout",
+  "transaction_failed",
+  "duplicate_settlement",
+  "verification_failed",
 ]);
 
 function diagnosticToken(value) {
   return typeof value === "string" && DIAGNOSTIC_CODES.has(value) ? value : null;
+}
+
+function boundedSellerReason(value) {
+  const exact = diagnosticToken(value);
+  if (exact) return exact;
+  if (typeof value === "string" && value.startsWith("transaction_failed:")) return "transaction_failed";
+  return null;
 }
 
 function sanitizeDiagnostic(parsed) {
@@ -150,5 +162,6 @@ module.exports = {
   validatePurchasedService,
   boundedErrorCode,
   diagnosticToken,
+  boundedSellerReason,
   sanitizeDiagnostic,
 };

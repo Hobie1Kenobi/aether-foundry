@@ -9,9 +9,14 @@
  */
 
 const http = require("http");
+const xrpl = require("xrpl");
 const { ExactXrplScheme } = require("@x402/xrpl/exact/facilitator");
 const { assertLoopback } = require("../missions/runtime-guard");
+const { boundedSellerReason } = require("../missions/service-result");
 const { challengeAccept } = require("./buyer-diagnostic");
+
+const TESTNET_WS = "wss://s.altnet.rippletest.net:51233";
+const SELLER_TIMEOUT_MS = 15000;
 
 const SANCTIONS_PAYEE = "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs";
 const DIAGNOSTIC_PORT = 8795;
@@ -29,6 +34,40 @@ function assertDiagnosticPort(raw) {
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw coded("refusing port", "BIND");
   if (BLOCKED_PORTS.has(port)) throw coded(`refusing port ${port} because an existing service owns it`, "BIND");
   return port;
+}
+
+function officialScheme() {
+  return new ExactXrplScheme({
+    clientFactory(url) {
+      if (url !== TESTNET_WS) {
+        const error = new Error("refusing an unapproved XRPL socket");
+        error.code = "HOST";
+        throw error;
+      }
+      return new xrpl.Client(url, { timeout: 8000, connectionTimeout: 5000 });
+    },
+  });
+}
+
+function publicReason(value, fallback) {
+  return boundedSellerReason(value) || fallback;
+}
+
+function withTimeout(work, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      const error = new Error("timeout");
+      error.code = "SELLER_TIMEOUT";
+      reject(error);
+    }, ms);
+    work.then((value) => {
+      clearTimeout(timer);
+      resolve(value);
+    }, (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
 }
 
 function send(res, status, body) {
@@ -71,7 +110,7 @@ async function fulfill(parsed, challenges, scheme, boundary) {
       body: {
         settled: false,
         paid: false,
-        invalid_reason: (verified && verified.invalidReason) || "seller_verify_failed",
+        invalid_reason: publicReason(verified && verified.invalidReason, "seller_verify_failed"),
         official_verify: "rejected",
         official_settle: "not_run",
       },
@@ -81,7 +120,7 @@ async function fulfill(parsed, challenges, scheme, boundary) {
   if (!settled || settled.success !== true || typeof settled.transaction !== "string" || settled.transaction.length === 0) {
     return {
       status: 402,
-      body: { settled: false, paid: false, invalid_reason: (settled && settled.errorReason) || "seller_verify_failed", official_settle: "not_proven" },
+      body: { settled: false, paid: false, invalid_reason: publicReason(settled && settled.errorReason, "seller_verify_failed"), official_settle: "not_proven" },
     };
   }
   return {
@@ -108,7 +147,7 @@ function startSeller(options) {
   const amount = opts.amount || "10";
   if (!/^[1-9][0-9]*$/.test(amount) || BigInt(amount) > 1000000n) throw coded("controlled price is outside the mission cap", "CAP");
   const challenges = challengesFor(payTo, amount, opts.invoiceId || "diag-controlled-1");
-  const scheme = opts.scheme || new ExactXrplScheme({});
+  const scheme = opts.scheme || officialScheme();
   const boundary = opts.boundary || (opts.scheme ? "supplied_scheme" : "testnet");
   const server = http.createServer((req, res) => {
     const url = new URL(req.url || "/", "http://127.0.0.1");
@@ -147,15 +186,21 @@ function startSeller(options) {
         send(res, 402, { settled: false, paid: false, invalid_reason: "unparsed", official_settle: "not_run" });
         return;
       }
-      fulfill(parsed, challenges, scheme, boundary).then((result) => {
+      withTimeout(fulfill(parsed, challenges, scheme, boundary), SELLER_TIMEOUT_MS).then((result) => {
         const text = JSON.stringify(result.body);
         if (text.includes("signedTxBlob") || text.includes("PAYMENT-SIGNATURE") || /sEd[1-9A-HJ-NP-Za-km-z]{15,}/.test(text)) {
           send(res, 402, { settled: false, invalid_reason: "unparsed" });
           return;
         }
         send(res, result.status, result.body);
-      }).catch(() => {
-        send(res, 402, { settled: false, paid: false, invalid_reason: "seller_verify_failed", official_settle: "not_run" });
+      }).catch((error) => {
+        const timedOut = error && error.code === "SELLER_TIMEOUT";
+        send(res, 402, {
+          settled: false,
+          paid: false,
+          invalid_reason: timedOut ? "seller_timeout" : "seller_verify_failed",
+          official_settle: "not_run",
+        });
       });
     });
   });
@@ -194,7 +239,9 @@ module.exports = {
   SANCTIONS_PAYEE,
   DIAGNOSTIC_PORT,
   BLOCKED_PORTS,
+  TESTNET_WS,
   assertDiagnosticPort,
+  officialScheme,
   startSeller,
   fulfill,
 };

@@ -12,8 +12,8 @@ const { control, view } = require("../missions/engine");
 const { invoiceIdField } = require("../missions/x402-deliver");
 const { buildSignaturePayload } = require("../x402-outbound-guard");
 const { writePrivateAccount, writeHandover } = require("./account-file");
-const { startSeller, SANCTIONS_PAYEE, assertDiagnosticPort, DIAGNOSTIC_PORT } = require("./controlled-seller");
-const { PERMANENT_HOLD, PHRASE, officialScheme, consumeAttempt, runControlledPurchase } = require("./controlled-purchase");
+const { startSeller, SANCTIONS_PAYEE, assertDiagnosticPort, DIAGNOSTIC_PORT, TESTNET_WS, fulfill } = require("./controlled-seller");
+const { PERMANENT_HOLD, PHRASE, officialScheme, consumeAttempt, inspectUncertain, runControlledPurchase } = require("./controlled-purchase");
 
 const TOKEN = "mission-internal-16";
 const NOW = "2026-11-06T18:00:00.000Z";
@@ -309,8 +309,10 @@ describe("controlled purchase", () => {
 
   it("settles only after the seller receipt and an independent validated proof", async () => {
     const empty = officialScheme();
-    assert.equal(empty.hook_source, "official_default");
-    assert.deepEqual(empty.scheme.options, {});
+    assert.throws(() => empty.options.clientFactory("wss://s1.ripple.com:51233"), (error) => error.code === "HOST");
+    const client = empty.options.clientFactory(TESTNET_WS);
+    assert.equal(client.connection.config.timeout, 8000);
+    assert.equal(client.connection.config.connectionTimeout, 5000);
     const payer = xrpl.Wallet.generate();
     const payee = xrpl.Wallet.generate().address;
     const hashBox = { payer: payer.address, settles: 0 };
@@ -367,6 +369,66 @@ describe("controlled purchase", () => {
       assert.equal(JSON.stringify(result).includes(payer.seed), false);
     } finally {
       await seller2.close();
+    }
+  });
+
+  it("keeps the allowlisted seller reason and does not release on a read-only lookup", async () => {
+    const payer = xrpl.Wallet.generate();
+    const payee = xrpl.Wallet.generate().address;
+    const secret = "sEdSecretValueShouldNotAppear000";
+    const { home, ledger } = tmpHome();
+    control(ledger, { action: "activate", confirm: config.ACTIVATE_PHRASE, token: TOKEN, now: NOW }, { token: TOKEN });
+    seedLegacy(ledger);
+    const legacy = JSON.stringify(view(ledger, NOW).missions[PERMANENT_HOLD]);
+    const seller = await startSeller({
+      payTo: payee,
+      scheme: {
+        verify: async () => ({ isValid: false, invalidReason: "invalid_exact_xrpl_payload_sequence_not_current", invalidMessage: secret }),
+        settle: async () => { throw new Error(secret); },
+      },
+    });
+    try {
+      const failed = await runControlledPurchase(Object.assign(baseEnv(home, ledger, seller.url, payee), arm(home, payer, payee)), {
+        now: NOW,
+        ledgerFetch: ledgerRpc(payer.address, payee, 10),
+      });
+      assert.equal(failed.settled, false);
+      assert.equal(failed.reason, "invalid_exact_xrpl_payload_sequence_not_current");
+      assert.equal(failed.seller_stage, "seller_verify");
+      assert.equal(failed.seller_http_status, 402);
+      const stored = view(ledger, NOW).missions[failed.mission_id];
+      assert.equal(stored.hold, "uncertain");
+      assert.equal(stored.seller_invalid_reason, "invalid_exact_xrpl_payload_sequence_not_current");
+      const text = fs.readFileSync(path.join(ledger, "events.jsonl"), "utf8") + JSON.stringify(failed);
+      assert.equal(text.includes(secret), false);
+      assert.equal(text.includes("signedTxBlob"), false);
+      assert.equal(JSON.stringify(view(ledger, NOW).missions[PERMANENT_HOLD]), legacy);
+      const before = fs.readFileSync(path.join(ledger, "events.jsonl"));
+      const looked = await inspectUncertain({
+        FOUNDRY_MISSION_LEDGER: ledger,
+        FOUNDRY_DIAGNOSTIC_MISSION: failed.mission_id,
+      }, { now: NOW, proofFetch: proof(payee, false) });
+      assert.equal(looked.release_allowed, false);
+      assert.equal(looked.attempt_reset, false);
+      assert.equal(looked.settled, false);
+      assert.equal(looked.ledger_proof, "not_validated");
+      assert.equal(fs.readFileSync(path.join(ledger, "events.jsonl")).equals(before), true);
+      const dynamic = await fulfill({
+        x402Version: 2,
+        accepted: { scheme: "exact", network: "xrpl:1", asset: "XRP", amount: "10", payTo: payee, maxTimeoutSeconds: 600, extra: { invoiceId: "diag-controlled-1-official", sourceTag: 7, areFeesSponsored: false } },
+        payload: { signedTxBlob: "00" },
+      }, {
+        official: { scheme: "exact", network: "xrpl:1", asset: "XRP", amount: "10", payTo: payee, maxTimeoutSeconds: 600, extra: { invoiceId: "diag-controlled-1-official", sourceTag: 7, areFeesSponsored: false } },
+        vendor: { extra: {} },
+      }, {
+        verify: async () => ({ isValid: true, payer: payee }),
+        settle: async () => ({ success: false, transaction: "", errorReason: "transaction_failed: tecUNFUNDED_PAYMENT", errorMessage: secret }),
+      }, "testnet");
+      assert.equal(dynamic.body.invalid_reason, "transaction_failed");
+      assert.equal(JSON.stringify(dynamic.body).includes("tecUNFUNDED_PAYMENT"), false);
+      assert.equal(JSON.stringify(dynamic.body).includes(secret), false);
+    } finally {
+      await seller.close();
     }
   });
 

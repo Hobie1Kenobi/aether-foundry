@@ -12,10 +12,10 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const xrpl = require("xrpl");
-const { ExactXrplScheme } = require("@x402/xrpl/exact/facilitator");
 const config = require("../missions/config");
-const { coded, readEvents } = require("../missions/ledger");
-const { view, startMission, act, observe } = require("../missions/engine");
+const { coded, readEvents, exclusive } = require("../missions/ledger");
+const { fold, view, startMission, act, observe } = require("../missions/engine");
+const { boundedSellerReason } = require("../missions/service-result");
 const { applyChallenge, stampPrepared, beginSubmit, notePresign, finishSubmit } = require("../missions/submit");
 const { invoiceIdField } = require("../missions/x402-deliver");
 const policy = require("../missions/policy");
@@ -23,7 +23,7 @@ const { chicagoDay } = require("../missions/clock");
 const guard = require("../missions/runtime-guard");
 const { canonicalReconcileRpc, boundReconcileFetch } = require("../missions/reconcile-endpoint");
 const { buildSignaturePayload } = require("../x402-outbound-guard");
-const { SANCTIONS_PAYEE, BLOCKED_PORTS } = require("./controlled-seller");
+const { SANCTIONS_PAYEE, BLOCKED_PORTS, officialScheme } = require("./controlled-seller");
 const { inspectAccount, readHandover } = require("./account-file");
 
 const PHRASE = "DIAGNOSTIC-ONE-XRPL1-PAYMENT";
@@ -232,9 +232,15 @@ function preflight(env, now) {
   };
 }
 
-function officialScheme() {
-  return { hook_source: "official_default", scheme: new ExactXrplScheme({}) };
-}
+const SELLER_STAGES = new Set([
+  "seller_verify",
+  "seller_settle",
+  "seller_timeout",
+  "seller_unparsed",
+  "seller_hash_mismatch",
+  "ledger_lookup",
+]);
+const SETTLE_LABELS = new Set(["not_run", "not_proven", "exact_xrpl_scheme", "supplied_scheme"]);
 
 function ledgerEndpoint(env) {
   return canonicalReconcileRpc(env && env.FOUNDRY_MISSION_RECONCILE_RPC);
@@ -303,6 +309,45 @@ async function proveSettlement(hash, expected, fetchImpl, endpoint) {
   if (meta.TransactionResult !== "tesSUCCESS") return { validated: false, reason: "not_success" };
   if (tx.Destination !== expected.destination || String(tx.Amount) !== expected.amount) return { validated: false, reason: "payment_mismatch" };
   return { validated: true, reason: null };
+}
+
+function settleLabel(value) {
+  return SETTLE_LABELS.has(value) ? value : "not_proven";
+}
+
+function classifySeller(posted, receipt, hash) {
+  const http = posted && Number.isInteger(posted.status) ? posted.status : null;
+  const raw = receipt && (receipt.invalid_reason || receipt.invalidReason || receipt.errorReason || receipt.error_reason);
+  const invalid = boundedSellerReason(raw);
+  const receiptHash = String(receipt && receipt.transaction || "").toUpperCase();
+  const paid = http === 200 && receipt && receipt.paid === true && receiptHash === hash;
+  let stage = "seller_unparsed";
+  if (posted && (posted.name === "TimeoutError" || posted.code === "ABORT_ERR")) stage = "seller_timeout";
+  else if (paid) stage = "seller_settle";
+  else if (http === 200 && receiptHash && receiptHash !== hash) stage = "seller_hash_mismatch";
+  else if (http != null) stage = "seller_verify";
+  return {
+    http_status: http != null && http >= 100 && http <= 599 ? http : null,
+    invalid_reason: invalid,
+    stage,
+    paid,
+    official_settle: settleLabel(receipt && receipt.official_settle),
+    reason: invalid || (paid ? null : (stage === "seller_timeout" ? "seller_timeout" : "seller_not_paid")),
+  };
+}
+
+function rememberSeller(dir, missionId, note) {
+  if (!missionId || missionId === PERMANENT_HOLD) return;
+  exclusive(dir, (api) => {
+    const mission = fold(api.read()).missions[missionId];
+    if (!mission || mission.id === PERMANENT_HOLD) return;
+    mission.seller_stage = SELLER_STAGES.has(note.stage) ? note.stage : "seller_unparsed";
+    mission.seller_invalid_reason = boundedSellerReason(note.invalid_reason);
+    const status = note.http_status;
+    mission.seller_http_status = Number.isInteger(status) && status >= 100 && status <= 599 ? status : null;
+    mission.updated_at = note.now;
+    api.append({ type: "mission.upsert", at: note.now, mission });
+  });
 }
 
 function park(ledger, missionId, now) {
@@ -375,25 +420,30 @@ async function runControlledPurchase(env, opts) {
     const hash = xrpl.hashes.hashSignedTx(signed.tx_blob).toUpperCase();
     notePresign(plan.ledger, missionId, hash, { tx: begun.tx });
     const payload = buildSignaturePayload({ required: { resource: { url: plan.seller } }, accept, txBlob: signed.tx_blob });
-    const posted = await fetchImpl(plan.seller, {
-      method: "POST",
-      redirect: "error",
-      signal: AbortSignal.timeout(10000),
-      headers: {
-        accept: "application/json",
-        "content-type": "application/json",
-        "payment-signature": Buffer.from(JSON.stringify(payload)).toString("base64"),
-        "user-agent": "aether-foundry-missions",
-      },
-      body: "{}",
-    });
-    const receipt = posted && typeof posted.json === "function" ? await posted.json() : {};
-    const receiptHash = String(receipt && receipt.transaction || "").toUpperCase();
-    const sellerPaid = posted && posted.status === 200 && receipt && receipt.paid === true && receiptHash === hash;
-    const proof = sellerPaid
-      ? await proveSettlement(hash, { destination: plan.payee, amount: plan.payment }, options.proofFetch || fetchImpl, endpoint)
-      : { validated: false, reason: "seller_not_paid" };
-    if (!proof.validated) {
+    let posted = null;
+    let receipt = {};
+    try {
+      posted = await fetchImpl(plan.seller, {
+        method: "POST",
+        redirect: "error",
+        signal: AbortSignal.timeout(20000),
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          "payment-signature": Buffer.from(JSON.stringify(payload)).toString("base64"),
+          "user-agent": "aether-foundry-missions",
+        },
+        body: "{}",
+      });
+      receipt = posted && typeof posted.json === "function" ? await posted.json() : {};
+    } catch (error) {
+      const timedOut = error && (error.name === "TimeoutError" || error.code === "ABORT_ERR");
+      const failure = {
+        stage: timedOut ? "seller_timeout" : "seller_unparsed",
+        invalid_reason: timedOut ? "seller_timeout" : null,
+        http_status: null,
+      };
+      rememberSeller(plan.ledger, missionId, Object.assign({ now }, failure));
       return assertPublic({
         live: true,
         signed: true,
@@ -402,7 +452,37 @@ async function runControlledPurchase(env, opts) {
         attempt_consumed: true,
         vendor_signed: false,
         official_settle: "not_proven",
-        reason: proof.reason,
+        seller_stage: failure.stage,
+        seller_invalid_reason: failure.invalid_reason,
+        reason: failure.invalid_reason || "seller_not_paid",
+        mission_id: missionId,
+        legacy_hold: PERMANENT_HOLD,
+        legacy_drops: plan.retained,
+      });
+    }
+    const seller = classifySeller(posted, receipt, hash);
+    const proof = seller.paid
+      ? await proveSettlement(hash, { destination: plan.payee, amount: plan.payment }, options.proofFetch || fetchImpl, endpoint)
+      : { validated: false, reason: seller.reason };
+    if (!proof.validated) {
+      rememberSeller(plan.ledger, missionId, {
+        now,
+        stage: seller.stage,
+        invalid_reason: seller.invalid_reason,
+        http_status: seller.http_status,
+      });
+      return assertPublic({
+        live: true,
+        signed: true,
+        submitted: false,
+        settled: false,
+        attempt_consumed: true,
+        vendor_signed: false,
+        official_settle: seller.official_settle,
+        seller_stage: seller.stage,
+        seller_invalid_reason: seller.invalid_reason,
+        seller_http_status: seller.http_status,
+        reason: proof.reason || seller.reason,
         mission_id: missionId,
         legacy_hold: PERMANENT_HOLD,
         legacy_drops: plan.retained,
@@ -422,7 +502,7 @@ async function runControlledPurchase(env, opts) {
       network_boundary: "testnet",
       attempt_consumed: true,
       vendor_signed: false,
-      official_settle: receipt.official_settle || "exact_xrpl_scheme",
+      official_settle: settleLabel(receipt.official_settle) === "not_proven" && receipt.official_settle == null ? "exact_xrpl_scheme" : settleLabel(receipt.official_settle),
       ledger_proof: "validated",
       mission_id: missionId,
       legacy_hold: PERMANENT_HOLD,
@@ -433,8 +513,45 @@ async function runControlledPurchase(env, opts) {
   }
 }
 
+async function inspectUncertain(env, opts) {
+  const options = opts || {};
+  guard.assertNoHouseSeeds(env || {});
+  if (env && env.FOUNDRY_DIAGNOSTIC_LIVE === "yes") throw coded("lookup does not sign or settle", "AUTH");
+  const ledger = guard.assertIsolated(env && env.FOUNDRY_MISSION_LEDGER);
+  const id = env && env.FOUNDRY_DIAGNOSTIC_MISSION;
+  if (!id || id === PERMANENT_HOLD) throw coded("lookup does not touch the legacy hold", "CLAIM");
+  const before = fs.readFileSync(path.join(ledger, "events.jsonl"));
+  const mission = view(ledger, options.now || new Date().toISOString()).missions[id];
+  if (!mission || mission.hold !== "uncertain" || typeof mission.presigned_hash !== "string") {
+    throw coded("lookup needs an uncertain signed mission", "CLAIM");
+  }
+  const endpoint = ledgerEndpoint(env);
+  const proof = await proveSettlement(
+    mission.presigned_hash,
+    { destination: mission.seller, amount: mission.claim && mission.claim.amount },
+    options.proofFetch || options.fetch || globalThis.fetch,
+    endpoint
+  );
+  const after = fs.readFileSync(path.join(ledger, "events.jsonl"));
+  if (!after.equals(before)) throw coded("lookup changed the mission ledger", "TAMPER");
+  return assertPublic({
+    schema: "aether.diagnostics.lookup",
+    mission_id: id,
+    signed: true,
+    submitted: false,
+    settled: false,
+    release_allowed: false,
+    attempt_reset: false,
+    legacy_hold: PERMANENT_HOLD,
+    seller_stage: "ledger_lookup",
+    ledger_proof: proof.validated ? "validated" : proof.reason,
+    reason: proof.validated ? null : proof.reason,
+  });
+}
+
 if (require.main === module) {
-  runControlledPurchase(process.env).then((result) => {
+  const command = process.argv[2] === "lookup" ? inspectUncertain(process.env) : runControlledPurchase(process.env);
+  command.then((result) => {
     process.stdout.write(`${JSON.stringify(assertPublic(result))}\n`);
   }).catch((error) => {
     process.stderr.write(`${error.code || "DIAGNOSTIC"}\n`);
@@ -452,5 +569,6 @@ module.exports = {
   proveSettlement,
   retainedLegacyDrops,
   ledgerEndpoint,
+  inspectUncertain,
   runControlledPurchase,
 };
