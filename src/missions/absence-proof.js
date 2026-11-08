@@ -150,7 +150,7 @@ async function proveSignedAbsence(fetchImpl, claim) {
     return proof(Object.assign({ reason: "lookup_unknown", hash_found: null }, base));
   }
 
-  const current = await rpc(fetchImpl, "account_info", { account, ledger_index: "validated" });
+  const current = await rpc(fetchImpl, "account_info", { account, ledger_index: validated });
   const currentResult = (current && current.result) || {};
   if (currentResult.validated !== true || !sameLedger(currentResult.ledger_index, validated)) {
     return proof(Object.assign({ reason: "ledger_mismatch", hash_found: false }, base));

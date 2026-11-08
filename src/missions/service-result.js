@@ -57,45 +57,90 @@ function validatePurchasedService(resourceUrl, httpStatus, parsed) {
 }
 
 function boundedErrorCode(parsed, httpStatus) {
-  const raw = parsed && typeof parsed === "object" ? (parsed.code || parsed.error) : "";
-  if (typeof raw === "string" && /^[a-z0-9_]{1,40}$/.test(raw)) return raw;
+  const code = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed.code : "";
+  const error = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed.error : "";
+  const known = diagnosticToken(code) || diagnosticToken(error);
+  if (known) return known;
   if (httpStatus === 200) return "unusable_body";
   if (!parsed) return "unparsed";
   return "refused";
 }
 
-const DIAGNOSTIC_TOKEN = /^[a-z0-9_.:-]{1,80}$/;
-const DIAGNOSTIC_FIELDS = {
-  reason: "reason",
-  invalidReason: "invalid_reason",
-  errorReason: "error_reason",
-};
+// Exact public protocol codes. A prefix, suffix, or unknown lowercase token
+// is not public data. The dynamic simulation failure string is omitted
+// because it appends an engine result.
+const DIAGNOSTIC_CODES = new Set([
+  "refused",
+  "unparsed",
+  "unusable_body",
+  "verify_failed",
+  "seller_verify_failed",
+  "payment_requirements_mismatch",
+  "payment_not_on_ledger",
+  "payment_not_validated",
+  "invalid_exact_xrpl_asset_transfer_method",
+  "invalid_exact_xrpl_asset_transfer_method_mismatch",
+  "invalid_exact_xrpl_payload_signing_pub_key",
+  "invalid_exact_xrpl_payload_signature",
+  "invalid_exact_xrpl_payload_transaction_type",
+  "invalid_exact_xrpl_facilitator_error",
+  "invalid_exact_xrpl_network_mismatch",
+  "invalid_exact_xrpl_asset_mismatch",
+  "invalid_exact_xrpl_amount_mismatch",
+  "invalid_exact_xrpl_pay_to_mismatch",
+  "invalid_exact_xrpl_max_timeout_mismatch",
+  "invalid_exact_xrpl_fees_sponsored_unsupported",
+  "invalid_exact_xrpl_invoice_mismatch",
+  "invalid_exact_xrpl_destination_tag_mismatch",
+  "invalid_exact_xrpl_iou_issuer_missing",
+  "invalid_exact_xrpl_iou_issuer_mismatch",
+  "invalid_exact_xrpl_payload_destination_mismatch",
+  "invalid_exact_xrpl_destination_tag_malformed",
+  "invalid_exact_xrpl_payload_destination_tag_mismatch",
+  "invalid_exact_xrpl_payload_delegate_not_allowed",
+  "invalid_exact_xrpl_payload_multisig_not_supported",
+  "invalid_exact_xrpl_payload_network_id_for_standard_network",
+  "invalid_exact_xrpl_payload_network_id_mismatch",
+  "invalid_exact_xrpl_payload_amount_xrp",
+  "invalid_exact_xrpl_payload_amount_mismatch",
+  "invalid_exact_xrpl_payload_sendmax_not_allowed",
+  "invalid_exact_xrpl_payload_paths_not_allowed",
+  "invalid_exact_xrpl_payload_delivermin_not_allowed",
+  "invalid_exact_xrpl_payload_partial_payment_not_allowed",
+  "invalid_exact_xrpl_payload_iou_amount",
+  "invalid_exact_xrpl_payload_iou_currency_mismatch",
+  "invalid_exact_xrpl_payload_iou_issuer_mismatch",
+  "invalid_exact_xrpl_payload_iou_value_mismatch",
+  "invalid_exact_xrpl_payload_sendmax_required",
+  "invalid_exact_xrpl_payload_sendmax_iou_mismatch",
+  "invalid_exact_xrpl_payload_sendmax_too_low",
+  "invalid_exact_xrpl_payload_memos_not_allowed",
+  "invalid_exact_xrpl_payload_invoice_missing",
+  "invalid_exact_xrpl_payload_invoice_id_mismatch",
+  "invalid_exact_xrpl_payload_fee_missing",
+  "invalid_exact_xrpl_payload_fee_too_high",
+  "invalid_exact_xrpl_payload_lastledgersequence_missing",
+  "invalid_exact_xrpl_payload_expired",
+  "invalid_exact_xrpl_payload_lastledgersequence_too_large",
+  "invalid_exact_xrpl_payload_ticket_sequence_not_allowed",
+  "invalid_exact_xrpl_payload_sequence_missing",
+  "invalid_exact_xrpl_payload_sequence_must_be_zero",
+  "invalid_exact_xrpl_payload_ticket_sequence_missing",
+  "invalid_exact_xrpl_payload_signer_not_authorized",
+  "invalid_exact_xrpl_payload_sequence_not_current",
+  "invalid_exact_xrpl_payload_ticket_not_available",
+]);
 
 function diagnosticToken(value) {
-  if (typeof value !== "string" || !DIAGNOSTIC_TOKEN.test(value)) return null;
-  if (/^[0-9a-f]{16,}$/.test(value)) return null;
-  return value;
+  return typeof value === "string" && DIAGNOSTIC_CODES.has(value) ? value : null;
 }
 
 function sanitizeDiagnostic(parsed) {
   const found = { reason: null, invalid_reason: null, error_reason: null };
-  const budget = { n: 0 };
-  function walk(node, depth) {
-    if (budget.n > 40 || depth > 4 || !node || typeof node !== "object") return;
-    budget.n += 1;
-    const entries = Array.isArray(node) ? node.slice(0, 8).map((item) => [null, item]) : Object.entries(node);
-    const nested = [];
-    for (const [key, value] of entries) {
-      const slot = DIAGNOSTIC_FIELDS[key];
-      if (slot && !found[slot]) {
-        const token = diagnosticToken(value);
-        if (token) found[slot] = token;
-      }
-      if (value && typeof value === "object") nested.push(value);
-    }
-    for (const child of nested) walk(child, depth + 1);
-  }
-  walk(parsed, 0);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return found;
+  found.reason = diagnosticToken(parsed.reason);
+  found.invalid_reason = diagnosticToken(parsed.invalidReason);
+  found.error_reason = diagnosticToken(parsed.errorReason);
   return found;
 }
 

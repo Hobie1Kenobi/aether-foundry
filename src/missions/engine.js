@@ -1039,9 +1039,7 @@ function publicFeed(dir, now) {
     sequence: Number.isSafeInteger(mission.sequence) ? mission.sequence : null,
     last_ledger_sequence: Number.isSafeInteger(mission.last_ledger_sequence) ? mission.last_ledger_sequence : null,
     delivery_http_status: Number.isInteger(mission.delivery_http_status) ? mission.delivery_http_status : null,
-    delivery_error_code: typeof mission.delivery_error_code === "string" && /^[a-z0-9_]{1,40}$/.test(mission.delivery_error_code)
-      ? mission.delivery_error_code
-      : null,
+    delivery_error_code: serviceResult.diagnosticToken(mission.delivery_error_code),
     delivery_reason: serviceResult.diagnosticToken(mission.delivery_reason),
     delivery_invalid_reason: serviceResult.diagnosticToken(mission.delivery_invalid_reason),
     delivery_error_reason: serviceResult.diagnosticToken(mission.delivery_error_reason),

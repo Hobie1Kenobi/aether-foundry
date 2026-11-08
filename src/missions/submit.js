@@ -309,9 +309,7 @@ function noteDeliveryFailure(dir, input) {
     mission.live = false;
     const diagnostic = serviceResult.sanitizeDiagnostic(input.parsed);
     mission.delivery_http_status = Number.isInteger(status) ? status : null;
-    mission.delivery_error_code = typeof input.error_code === "string" && /^[a-z0-9_]{1,40}$/.test(input.error_code)
-      ? input.error_code
-      : "unparsed";
+    mission.delivery_error_code = serviceResult.diagnosticToken(input.error_code) || "unparsed";
     mission.delivery_reason = diagnostic.reason;
     mission.delivery_invalid_reason = diagnostic.invalid_reason;
     mission.delivery_error_reason = diagnostic.error_reason;

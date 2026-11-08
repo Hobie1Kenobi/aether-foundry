@@ -11,7 +11,7 @@ const { applyChallenge, stampPrepared, beginSubmit, notePresign, noteDeliveryFai
 const { bindChallenge, invoiceIdField } = require("./x402-deliver");
 const { exactXrplPayment } = require("./x402-exact");
 const guard = require("../x402-outbound-guard");
-const { sanitizeDiagnostic } = require("./service-result");
+const { sanitizeDiagnostic, boundedErrorCode } = require("./service-result");
 const { tick } = require("./worker");
 
 const FOREIGN = "rQsPPdwiBeVDqsdDnFcVmu7xTVHMjXRFqN";
@@ -20,7 +20,8 @@ const TOKEN = "mission-internal-16";
 const NOW = "2026-11-06T18:00:00.000Z";
 const INVOICE = "inv-1";
 const HASH = "AB".repeat(32);
-const ECHOED = "ECHOED-SECRET-VALUE";
+const SECRET = "lowercase_api_token123";
+const SUFFIX = "invalid_exact_xrpl_fees_sponsored_unsupported_secret";
 const BLOB = "ab".repeat(40);
 
 function ledgerDir() {
@@ -181,40 +182,58 @@ describe("exact challenge echo", () => {
     const hostile = {
       error: "verify_failed",
       invalidReason: "invalid_exact_xrpl_fees_sponsored_unsupported",
-      payload: {
-        signedTxBlob: BLOB,
-        reason: "Not A Token",
-        accepted: { extra: { invoiceId: INVOICE, echoed: ECHOED } },
-      },
-      nested: [{ errorReason: "seller_verify_failed", authorization: ECHOED }],
-      reason: ECHOED,
+      errorReason: "seller_verify_failed",
+      reason: SECRET,
     };
+    hostile.payload = {
+      signedTxBlob: BLOB,
+      reason: SECRET,
+      invalidReason: "payment_requirements_mismatch",
+      accepted: { reason: SUFFIX, extra: { invoiceId: INVOICE } },
+    };
+    for (let i = 0; i < 5000; i += 1) hostile[`k${i}`] = SECRET;
+    const seen = [];
+    const guarded = new Proxy(hostile, {
+      get(target, prop, receiver) {
+        if (typeof prop === "string") seen.push(prop);
+        return Reflect.get(target, prop, receiver);
+      },
+    });
     const before = JSON.stringify(hostile);
-    const diagnostic = sanitizeDiagnostic(hostile);
+    const diagnostic = sanitizeDiagnostic(guarded);
     assert.equal(JSON.stringify(hostile), before);
     assert.equal(diagnostic.invalid_reason, "invalid_exact_xrpl_fees_sponsored_unsupported");
     assert.equal(diagnostic.error_reason, "seller_verify_failed");
     assert.equal(diagnostic.reason, null);
+    assert.equal(seen.includes("payload"), false);
+    assert.equal(seen.includes("accepted"), false);
+    assert.equal(seen.length <= 3, true);
+    const suffixed = sanitizeDiagnostic({ reason: SUFFIX, invalidReason: "payment_requirements_mismatch" });
+    assert.equal(suffixed.reason, null);
+    assert.equal(boundedErrorCode({ code: SECRET }, 402), "refused");
+    assert.equal(boundedErrorCode({ error: "verify_failed" }, 402), "verify_failed");
     noteDeliveryFailure(ledger, {
       mission_id: mission.id,
       now: NOW,
       http_status: 402,
-      error_code: "verify_failed",
+      error_code: SECRET,
       parsed: hostile,
     });
     const stored = fs.readFileSync(path.join(ledger, "events.jsonl"), "utf8");
-    assert.equal(stored.includes(ECHOED), false);
+    assert.equal(stored.includes(SECRET), false);
+    assert.equal(stored.includes(SUFFIX), false);
     assert.equal(stored.includes(BLOB), false);
     assert.equal(stored.includes("signedTxBlob"), false);
-    assert.equal(stored.includes("Not A Token"), false);
+    assert.equal(stored.includes("payment_requirements_mismatch"), false);
     const feed = publicFeed(ledger, NOW);
     const row = feed.missions.find((item) => item.id === mission.id);
     assert.equal(row.delivery_http_status, 402);
-    assert.equal(row.delivery_error_code, "verify_failed");
+    assert.equal(row.delivery_error_code, "unparsed");
     assert.equal(row.delivery_invalid_reason, "invalid_exact_xrpl_fees_sponsored_unsupported");
     assert.equal(row.delivery_error_reason, "seller_verify_failed");
     assert.equal(row.delivery_reason, null);
-    assert.equal(JSON.stringify(feed).includes(ECHOED), false);
+    assert.equal(JSON.stringify(feed).includes(SECRET), false);
+    assert.equal(JSON.stringify(feed).includes(SUFFIX), false);
     const day = view(ledger, NOW).days["2026-11-06"];
     assert.equal(day.uncertain, "100012");
     assert.equal(view(ledger, NOW).missions[mission.id].retry_blocked, true);
