@@ -84,7 +84,9 @@ Do not set `FOUNDRY_MISSION_EXECUTE`. The command has no simulate switch. Set th
 FOUNDRY_DIAGNOSTIC_XRPL_WSS=wss://testnet.xrpl-labs.com
 ```
 
-`wss://testnet.honeycluster.io` is the other allowed socket. The command reads `server_info` for that host and requires network id 1 and a validated ledger before it signs. The same host, or `FOUNDRY_MISSION_RECONCILE_RPC=https://testnet.honeycluster.io`, is what lookup and settlement proof use for the 20-drop claim.
+`wss://testnet.honeycluster.io` is the other allowed socket. Before anything is signed, the buyer opens that websocket and reads `server_info` on it. The read has to show network id 1 and a validated ledger. Account sequence and the later settlement proof still use HTTPS JSON-RPC: the same host, or `FOUNDRY_MISSION_RECONCILE_RPC=https://testnet.honeycluster.io` for the 20-drop claim.
+
+The production mission signer does not use `@x402/xrpl`. Its default socket is already `wss://testnet.xrpl-labs.com`. The SDK default port 51233 is only the fallback inside `ExactXrplScheme` when `wsUrlByNetwork` is omitted. The diagnostic seller sets that option. The offline structural check constructs a scheme and does not call `verify` or `settle`, so it does not open a socket.
 
 The command reads the validated ledger, both account sequences, and both challenges before it takes the attempt lock. The 1747 drops have to be the retained balance of `msn5b5c3223e5e88526`, not some other uncertain mission. The authorized seller address has to equal the challenge `payTo`. One lock is kept after a crash or an ambiguous attempt file, and a second process cannot sign. The seller performs verify and settle. This command marks the budget spent only after a validated `tx` lookup matches the hash, `tesSUCCESS`, the payee, and the amount. A timeout or a failed proof leaves the new claim uncertain and records only an allowlisted reason code. The 1747-drop hold is not released.
 
@@ -110,6 +112,6 @@ FOUNDRY_DIAGNOSTIC_REAUTHORIZE_TOKEN=... \
 node src/diagnostics/controlled-purchase.js reauthorize
 ```
 
-The reauthorize token must be distinct from the payment token. A second grant is refused until that new attempt has itself been used and reconciled. The payment command is unchanged and still requires `FOUNDRY_DIAGNOSTIC_LIVE=yes`. A failed seller response records the allowlisted reason, stage, and HTTP status, plus the facilitator `errorReason` and `errorMessage` when those strings contain no secret, blob, or header.
+The reauthorize token must be distinct from the payment token. Grant numbers count `attempt.granted` records only, so the first grant is 1 and the next is 2. A second grant is refused until that new attempt has itself been used and reconciled. A diagnostic mission whose hold is spent and whose settlement is `xrpl_validated` is marked complete. A mission that still has an artifact to qualify stays incomplete; `finishSubmit` itself is unchanged. The payment command is unchanged and still requires `FOUNDRY_DIAGNOSTIC_LIVE=yes`. A failed seller response records the allowlisted reason, stage, and HTTP status, plus the facilitator `errorReason` and `errorMessage` when those strings contain no secret, blob, or header.
 
 Install the packed sources with `npm ci --ignore-scripts` from the pack root. The pack contains `package.json` and `package-lock.json`.

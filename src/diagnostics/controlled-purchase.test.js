@@ -91,6 +91,14 @@ function arm(home, payer, payee) {
   };
 }
 
+function socketClient(networkId, seq) {
+  return {
+    async request() {
+      return { result: { info: { network_id: networkId == null ? 1 : networkId, validated_ledger: { seq: seq || 10000 } } } };
+    },
+  };
+}
+
 function ledgerRpc(buyer, seller, sequence) {
   return async (url, init) => {
     assert.equal(new URL(url).hostname, "testnet.xrpl-labs.com");
@@ -253,6 +261,7 @@ describe("controlled purchase", () => {
       await assert.rejects(
         () => runControlledPurchase(Object.assign(baseEnv(home, ledger, seller.url, payee), arm(home, payer, payee)), {
           now: NOW,
+          socketClient: socketClient(),
           fetch: async () => { throw Object.assign(new Error("timeout"), { code: "ABORT" }); },
         }),
         (error) => error.code === "ABORT"
@@ -283,6 +292,7 @@ describe("controlled purchase", () => {
         }), {
           now: NOW,
           ledgerFetch: ledgerRpc(payer.address, payee, 10),
+        socketClient: socketClient(),
         }),
         (error) => error.code === "ACCOUNT"
       );
@@ -300,6 +310,7 @@ describe("controlled purchase", () => {
         () => runControlledPurchase(Object.assign(baseEnv(second.home, second.ledger, seller2.url, payee), arm(second.home, payer, payee)), {
           now: NOW,
           ledgerFetch: ledgerRpc(payer.address, payee, 10),
+        socketClient: socketClient(),
           beforeSign: async () => { throw Object.assign(new Error("crash"), { code: "CRASH" }); },
         }),
         (error) => error.code === "CRASH"
@@ -339,6 +350,7 @@ describe("controlled purchase", () => {
       const unproven = await runControlledPurchase(Object.assign(baseEnv(home, ledger, seller.url, payee), arm(home, payer, payee)), {
         now: NOW,
         ledgerFetch: ledgerRpc(payer.address, payee, 10),
+        socketClient: socketClient(),
         proofFetch: proof(payee, false),
       });
       assert.equal(unproven.settled, false);
@@ -366,6 +378,7 @@ describe("controlled purchase", () => {
       }), arm(fresh.home, payer, payee)), {
         now: NOW,
         ledgerFetch: ledgerRpc(payer.address, payee, 11),
+        socketClient: socketClient(),
         proofFetch: proof(payee, true),
       });
       assert.equal(result.settled, true);
@@ -377,6 +390,9 @@ describe("controlled purchase", () => {
       assert.equal(proved.settles, 1);
       const state = view(fresh.ledger, NOW);
       assert.equal(state.missions[result.mission_id].hold, "spent");
+      assert.equal(state.missions[result.mission_id].complete, true);
+      assert.equal(state.missions[result.mission_id].status, "complete");
+      assert.equal(state.missions[result.mission_id].settlement, "xrpl_validated");
       assert.equal(state.missions[PERMANENT_HOLD].hold, "uncertain");
       assert.equal(state.days["2026-11-06"].uncertain, "1747");
       assert.equal(state.days["2026-11-06"].spent, "20");
@@ -405,6 +421,7 @@ describe("controlled purchase", () => {
       const failed = await runControlledPurchase(Object.assign(baseEnv(home, ledger, seller.url, payee), arm(home, payer, payee)), {
         now: NOW,
         ledgerFetch: ledgerRpc(payer.address, payee, 10),
+        socketClient: socketClient(),
       });
       assert.equal(failed.settled, false);
       assert.equal(failed.reason, "invalid_exact_xrpl_payload_sequence_not_current");
@@ -475,6 +492,7 @@ describe("controlled purchase", () => {
       const failed = await runControlledPurchase(Object.assign(baseEnv(home, ledger, seller.url, payee), arm(home, payer, payee)), {
         now: NOW,
         ledgerFetch: ledgerRpc(payer.address, payee, 10),
+        socketClient: socketClient(),
       });
       const legacy = JSON.stringify(view(ledger, NOW).missions[PERMANENT_HOLD]);
       assert.equal(failed.seller_error_reason, "invalid_exact_xrpl_payload_sequence_not_current");
@@ -501,7 +519,7 @@ describe("controlled purchase", () => {
       assert.equal(view(ledger, NOW).missions[failed.mission_id].hold, "released");
       const granted = reauthorizeAttempt(base, { now: NOW });
       assert.equal(granted.granted, true);
-      assert.equal(granted.generation, 2);
+      assert.equal(granted.generation, 1);
       assert.equal(granted.attempt_reset, false);
       assert.equal(granted.legacy_drops, "1747");
       assert.equal(fs.existsSync(path.join(home, "diagnostic-attempt.lock")), true);
@@ -511,11 +529,15 @@ describe("controlled purchase", () => {
       assert.equal(JSON.stringify(view(ledger, NOW).missions[PERMANENT_HOLD]), legacy);
       await assert.rejects(async () => reauthorizeAttempt(base, { now: NOW }), (error) => error.code === "NO_RETRY");
       const used = consumeAttempt(home, NOW);
-      assert.equal(used.generation, 2);
+      assert.equal(used.generation, 1);
       assert.equal(used.type, "attempt.used");
+      const second = reauthorizeAttempt(base, { now: NOW });
+      assert.equal(second.generation, 2);
+      const usedAgain = consumeAttempt(home, NOW);
+      assert.equal(usedAgain.generation, 2);
       const kept = fs.readFileSync(path.join(home, "diagnostic-attempt.jsonl"), "utf8").trim().split("\n");
       assert.equal(kept[0], firstLine);
-      assert.equal(kept.length, 3);
+      assert.equal(kept.length, 5);
       await assert.rejects(async () => consumeAttempt(home, NOW), (error) => error.code === "NO_RETRY");
       assert.equal(fs.readFileSync(path.join(home, "diagnostic-attempt.jsonl"), "utf8").trim().split("\n")[0], firstLine);
       fs.appendFileSync(path.join(ledger, "events.jsonl"), `${JSON.stringify({
@@ -528,7 +550,7 @@ describe("controlled purchase", () => {
         live: true,
       })}\n`);
       await assert.rejects(async () => reauthorizeAttempt(base, { now: NOV9 }), (error) => error.code === "CAP");
-      assert.equal(fs.readFileSync(path.join(home, "diagnostic-attempt.jsonl"), "utf8").trim().split("\n").length, 3);
+      assert.equal(fs.readFileSync(path.join(home, "diagnostic-attempt.jsonl"), "utf8").trim().split("\n").length, 5);
     } finally {
       await seller.close();
     }
@@ -554,7 +576,7 @@ describe("controlled purchase", () => {
           FOUNDRY_DIAGNOSTIC_XRPL_WSS: "wss://testnet.honeycluster.io",
         }), arm(home, payer, payee)), {
           now: NOW,
-          ledgerFetch: async () => new Response(JSON.stringify({ result: { info: { network_id: 0, validated_ledger: { seq: 1 } } } }), { status: 200 }),
+          socketClient: socketClient(0, 1),
         }),
         (error) => error.code === "MAINNET"
       );

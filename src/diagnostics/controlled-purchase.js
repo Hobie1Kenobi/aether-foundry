@@ -310,14 +310,32 @@ function ledgerEndpoint(env) {
   return canonicalReconcileRpc(undefined);
 }
 
-async function preflightSocket(env, fetchImpl) {
+async function preflightSocket(env, client) {
   const ws = diagnosticWs(env && env.FOUNDRY_DIAGNOSTIC_XRPL_WSS);
   const endpoint = canonicalReconcileRpc(ws);
-  const info = await rpc(endpoint, "server_info", {}, fetchImpl);
-  const validated = info && info.info && info.info.validated_ledger && info.info.validated_ledger.seq;
-  if (!info || !info.info || info.info.network_id !== 1) throw coded("refusing a ledger that is not xrpl:1", "MAINNET");
-  if (!Number.isInteger(validated) || validated <= 0) throw coded("validated ledger is missing", "LEDGER");
-  return { websocket: ws, endpoint, validated };
+  const opened = client || new xrpl.Client(ws, { timeout: 8000, connectionTimeout: 5000 });
+  let connected = false;
+  try {
+    if (!client) {
+      await opened.connect();
+      connected = true;
+    }
+    const response = await opened.request({ command: "server_info" });
+    const body = response && (response.result || response);
+    const info = body && (body.info || body);
+    const validated = info && info.validated_ledger && info.validated_ledger.seq;
+    if (!info || info.network_id !== 1) throw coded("refusing a ledger that is not xrpl:1", "MAINNET");
+    if (!Number.isInteger(validated) || validated <= 0) throw coded("validated ledger is missing", "LEDGER");
+    return { websocket: ws, endpoint, validated };
+  } finally {
+    if (connected) {
+      try {
+        await opened.disconnect();
+      } catch {
+        // The socket check already failed or finished. Closing is not a second submit.
+      }
+    }
+  }
 }
 
 async function rpc(endpoint, method, params, fetchImpl) {
@@ -430,6 +448,20 @@ function rememberSeller(dir, missionId, note) {
   });
 }
 
+function markDiagnosticPaid(dir, missionId, now) {
+  exclusive(dir, (api) => {
+    const mission = fold(api.read()).missions[missionId];
+    if (!mission || mission.id === PERMANENT_HOLD) return;
+    const key = typeof mission.idempotency_key === "string" ? mission.idempotency_key : "";
+    if (!key.startsWith("diag-") || mission.hold !== "spent" || mission.settlement !== "xrpl_validated") return;
+    mission.complete = true;
+    mission.status = "complete";
+    mission.rationale = "Validated xrpl:1 payment. This diagnostic mission has no separate artifact to qualify.";
+    mission.updated_at = now;
+    api.append({ type: "mission.upsert", at: now, mission });
+  });
+}
+
 function park(ledger, missionId, now) {
   const mission = view(ledger, now).missions[missionId];
   if (!mission || mission.hold !== "unsubmitted") return;
@@ -465,7 +497,7 @@ async function runControlledPurchase(env, opts) {
   assertAccounts(wallet.address, plan.payee, plan.state);
   const fetchImpl = options.fetch || globalThis.fetch;
   const ledgerFetch = options.ledgerFetch || fetchImpl;
-  const socket = await preflightSocket(env, ledgerFetch);
+  const socket = await preflightSocket(env, options.socketClient);
   const endpoint = socket.endpoint;
   await readChallenge(`${plan.seller}?shape=vendor`, plan.payment, plan.payee, "vendor", fetchImpl);
   const accept = await readChallenge(`${plan.seller}?shape=official`, plan.payment, plan.payee, "official", fetchImpl);
@@ -580,11 +612,13 @@ async function runControlledPurchase(env, opts) {
       delivery: { mode: "shop-settle", http_status: 200, hash, result: { source: "ledger_tx" } },
       result: { hash, engine_result: "tesSUCCESS", network_id: 1, submitted: true },
     });
+    markDiagnosticPaid(plan.ledger, missionId, now);
     return assertPublic({
       live: true,
       signed: true,
       submitted: true,
       settled: true,
+      complete: true,
       network_boundary: "testnet",
       attempt_consumed: true,
       vendor_signed: false,
@@ -666,7 +700,7 @@ function reauthorizeAttempt(env, opts) {
       throw coded("diagnostic attempt lock is missing", "NO_RETRY");
     }
     if (openGrant(records)) throw coded("a diagnostic attempt is already granted", "NO_RETRY");
-    const generation = records.filter((row) => row && (row.type === "attempt.used" || row.type === "attempt.granted")).length + 1;
+    const generation = records.filter((row) => row && row.type === "attempt.granted").length + 1;
     return {
       type: "attempt.granted",
       generation,
