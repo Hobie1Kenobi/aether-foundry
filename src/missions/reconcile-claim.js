@@ -12,6 +12,7 @@ const { coded } = require("./ledger");
 const guard = require("./runtime-guard");
 const { releasePassedWindow } = require("./submit");
 const { proveSignedAbsence } = require("./absence-proof");
+const { canonicalReconcileRpc, boundReconcileFetch } = require("./reconcile-endpoint");
 
 const PHRASE = "AUDIT-RELEASE-PASSED-WINDOW";
 const OLD_CLAIM = "msn5b5c3223e5e88526";
@@ -51,12 +52,13 @@ async function reconcileClaim(dir, missionId, opts) {
   }
   const fetchImpl = options.fetch;
   if (typeof fetchImpl !== "function") throw coded("validated ledger RPC is not configured", "LEDGER");
-  const shown = proveSignedAbsence(fetchImpl, {
+  const rpcEndpoint = canonicalReconcileRpc(env.FOUNDRY_MISSION_RECONCILE_RPC);
+  const shown = proveSignedAbsence(boundReconcileFetch(fetchImpl), {
     account,
     hash: mission.presigned_hash,
     lastLedgerSequence: mission.last_ledger_sequence,
     sequence: mission.sequence,
-  });
+  }, rpcEndpoint);
   const absence = await shown;
   const releaseAllowed = signedClaimMayRelease({
     lastLedgerSequence: mission.last_ledger_sequence,
@@ -75,6 +77,7 @@ async function reconcileClaim(dir, missionId, opts) {
     creation_ledger: absence.creation_ledger,
     complete_ledgers: absence.complete_ledgers,
     history_covers: absence.history_covers === true,
+    rpc_endpoint: rpcEndpoint,
     network_id: 1,
   });
   if (!releaseAllowed || options.audit !== true) return base;
@@ -116,6 +119,7 @@ if (require.main === module) {
         creation_ledger: result.creation_ledger == null ? null : result.creation_ledger,
         complete_ledgers: result.complete_ledgers == null ? null : result.complete_ledgers,
         history_covers: result.history_covers === true,
+        rpc_endpoint: result.rpc_endpoint || null,
       })}\n`);
     })
     .catch((error) => {
