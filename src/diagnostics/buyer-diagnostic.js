@@ -118,24 +118,6 @@ function echoAccepted(accept, txBlob) {
   };
 }
 
-function localScheme(validated, sequence) {
-  return new ExactXrplScheme({
-    getCurrentLedgerIndex: async () => validated,
-    getAccountSequence: async () => sequence,
-    getAccountAuthorization: async () => ({ isMasterKeyDisabled: false }),
-    simulateSignedTransaction: async () => ({ engineResult: "tesSUCCESS" }),
-  });
-}
-
-function settlementOnce(store, invoiceId, verifierResult) {
-  if (!verifierResult || verifierResult.isValid !== true) {
-    return { settled: false, replay: false, reason: (verifierResult && verifierResult.invalidReason) || "not_valid" };
-  }
-  if (store.has(invoiceId)) return { settled: false, replay: true, reason: "replay" };
-  store.add(invoiceId);
-  return { settled: true, replay: false, reason: null };
-}
-
 function assertPublicReport(report) {
   const text = JSON.stringify(report);
   if (/sEd[1-9A-HJ-NP-Za-km-z]{15,}/.test(text) || text.includes("signedTxBlob") || text.includes("PAYMENT-SIGNATURE") || text.includes("tx_blob")) {
@@ -144,67 +126,72 @@ function assertPublicReport(report) {
   return report;
 }
 
-async function verifySigned(scheme, accept, wallet, tx, store) {
+function structuralResult(scheme, accept, wallet, tx, validated) {
   const signed = wallet.sign(tx);
   const echoed = echoAccepted(accept, signed.tx_blob);
-  const verified = await scheme.verify(echoed.payload, accept);
+  const decoded = xrpl.decode(signed.tx_blob);
+  const envelope = scheme.verifyEnvelope(echoed.payload, accept) || null;
+  const structure = envelope ? null : (scheme.verifyPaymentTransactionStructure(decoded, accept) || null);
+  const expiry = envelope || structure ? null : (scheme.verifyLedgerExpiry(decoded, accept, validated) || null);
+  const sequenceFields = envelope || structure ? null : (scheme.verifySequencingFields(decoded, "sequence") || null);
   return {
     echo_exact: echoed.echo_exact,
     are_fees_sponsored_injected: echoed.are_fees_sponsored_injected,
     tx: publicTxFields(tx, accept),
-    local_verifier: {
+    structural: {
       tool: "@x402/xrpl",
       version: X402_VERSION,
-      is_valid: verified.isValid === true,
-      invalid_reason: verified.isValid === true ? null : (verified.invalidReason || "unknown"),
+      socket: false,
+      envelope_reason: envelope,
+      structure_reason: structure,
+      expiry_reason: expiry,
+      sequence_fields_reason: sequenceFields,
     },
-    settlement: settlementOnce(store, accept.extra.invoiceId, verified),
+    official_verify: "not_run",
+    official_settle: "not_run",
+    settled: false,
   };
 }
 
-async function diagnoseOffline(options) {
+function diagnoseOffline(options) {
   const opts = options || {};
   const wallet = opts.wallet || xrpl.Wallet.generate();
   const payTo = opts.payTo || xrpl.Wallet.generate().address;
   const invoiceId = opts.invoiceId || "diag-offline-1";
   const validated = opts.validatedLedger == null ? 10000 : opts.validatedLedger;
   const sequence = opts.sequence == null ? 10 : opts.sequence;
-  const store = opts.store || new Set();
-  const scheme = opts.scheme || localScheme(validated, sequence);
+  const scheme = new ExactXrplScheme({});
   const vendorAccept = challengeAccept("vendor", payTo, invoiceId);
   const officialAccept = challengeAccept("official", payTo, `${invoiceId}-official`);
   const vendorTx = buildFoundryBuyerTx({ accept: vendorAccept, account: wallet.address, validatedLedger: validated, sequence });
   const officialTx = buildFoundryBuyerTx({ accept: officialAccept, account: wallet.address, validatedLedger: validated, sequence });
-  const vendor = Object.assign({ shape: "vendor_missing_areFeesSponsored", payer_address: wallet.address }, await verifySigned(scheme, vendorAccept, wallet, vendorTx, store));
+  const vendor = Object.assign({ shape: "vendor_missing_areFeesSponsored", payer_address: wallet.address, builder: true }, structuralResult(scheme, vendorAccept, wallet, vendorTx, validated));
   const otherPayee = xrpl.Wallet.generate().address;
   const faults = [];
-  const fault = async (name, mutate) => {
+  const fault = (name, mutate) => {
     const tx = Object.assign({}, officialTx);
     mutate(tx);
-    const row = await verifySigned(scheme, officialAccept, wallet, tx, store);
-    faults.push(Object.assign({ shape: name, payer_address: wallet.address, builder: false }, row));
+    faults.push(Object.assign({ shape: name, payer_address: wallet.address, builder: false }, structuralResult(scheme, officialAccept, wallet, tx, validated)));
   };
-  await fault("amount_mismatch", (tx) => { tx.Amount = "11"; });
-  await fault("destination_mismatch", (tx) => { tx.Destination = otherPayee; });
-  await fault("fee_too_high", (tx) => { tx.Fee = "10001"; });
-  await fault("last_ledger_too_large", (tx) => { tx.LastLedgerSequence = validated + 200; });
-  await fault("memo_rejected", (tx) => { tx.Memos = [{ Memo: { MemoData: "00" } }]; });
-  await fault("network_id_present", (tx) => { tx.NetworkID = 1; });
-  const official = Object.assign({ shape: "official_areFeesSponsored_false", payer_address: wallet.address, builder: true }, await verifySigned(scheme, officialAccept, wallet, officialTx, store));
-  const replay = Object.assign({ shape: "official_replay", payer_address: wallet.address, builder: true }, await verifySigned(scheme, officialAccept, wallet, officialTx, store));
+  fault("amount_mismatch", (tx) => { tx.Amount = "11"; });
+  fault("destination_mismatch", (tx) => { tx.Destination = otherPayee; });
+  fault("fee_too_high", (tx) => { tx.Fee = "10001"; });
+  fault("last_ledger_too_large", (tx) => { tx.LastLedgerSequence = validated + 200; });
+  fault("memo_rejected", (tx) => { tx.Memos = [{ Memo: { MemoData: "00" } }]; });
+  fault("network_id_present", (tx) => { tx.NetworkID = 1; });
+  const official = Object.assign({ shape: "official_areFeesSponsored_false", payer_address: wallet.address, builder: true }, structuralResult(scheme, officialAccept, wallet, officialTx, validated));
   return assertPublicReport({
     schema: "aether.diagnostics.buyer",
-    mode: "offline",
+    mode: "offline_structural",
     versions: { "@x402/xrpl": X402_VERSION, xrpl: XRPL_VERSION },
     hosted_verify_called: false,
     seller_called: false,
-    cases: [Object.assign({ builder: true }, vendor), official, replay],
+    cases: [vendor, official],
     faults,
     limitations: [
-      "Offline only. No seller request and no hosted /verify or /settle.",
+      "These rows call ExactXrplScheme field checks only. verify() and settle() are not called, because those open a testnet socket.",
+      "A structural pass is not settlement and is not proof the original seller accepts the payload.",
       "@x402/xrpl 2.30.0 rejects a missing areFeesSponsored flag. The echoed challenge is not changed.",
-      "A passing local verifier is not proof the original seller accepts the payload.",
-      "The in-memory settlement record is a local replay guard, not a ledger submission.",
     ],
   });
 }
@@ -223,13 +210,33 @@ function classifySupported(body) {
   };
 }
 
+function assertSupportedUrl(raw) {
+  let url;
+  try {
+    url = new URL(String(raw));
+  } catch {
+    throw coded("supported URL is not allowed", "HOST");
+  }
+  if (url.protocol !== "https:" || url.hostname !== "xrpl-facilitator-testnet.t54.ai") {
+    throw coded("supported host is not allowed", "HOST");
+  }
+  if (url.port || url.username || url.password || url.search || url.hash || url.pathname !== "/supported") {
+    throw coded("supported URL is not allowed", "HOST");
+  }
+  return url.toString();
+}
+
 async function readHostedSupported(fetchImpl) {
   if (typeof fetchImpl !== "function") throw coded("supported read has no fetch", "LEDGER");
-  const response = await fetchImpl(HOSTED_SUPPORTED, {
+  const url = assertSupportedUrl(HOSTED_SUPPORTED);
+  const response = await fetchImpl(url, {
     method: "GET",
+    redirect: "error",
+    signal: AbortSignal.timeout(10000),
     headers: { accept: "application/json", "user-agent": "aether-foundry-missions" },
   });
-  if (!response || response.ok === false) throw coded("supported read failed", "LEDGER");
+  if (!response || response.ok !== true || response.redirected === true) throw coded("supported read failed", "LEDGER");
+  if (response.url) assertSupportedUrl(response.url);
   const body = typeof response.json === "function" ? await response.json() : null;
   return classifySupported(body);
 }
@@ -263,6 +270,7 @@ module.exports = {
   buildFoundryBuyerTx,
   diagnoseOffline,
   classifySupported,
+  assertSupportedUrl,
   readHostedSupported,
-  settlementOnce,
+  structuralResult,
 };

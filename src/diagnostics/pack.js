@@ -6,7 +6,11 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const ENTRY = "src/diagnostics/buyer-diagnostic.js";
+const ENTRIES = [
+  "src/diagnostics/buyer-diagnostic.js",
+  "src/diagnostics/controlled-seller.js",
+  "src/diagnostics/controlled-purchase.js",
+];
 
 function walk(root, rel, seen) {
   if (seen.has(rel)) return;
@@ -29,8 +33,10 @@ function walk(root, rel, seen) {
 function packDiagnostic(options) {
   const root = options.root;
   const seen = new Set();
-  walk(root, ENTRY, seen);
+  for (const entry of ENTRIES) walk(root, entry, seen);
   seen.add("machines/diagnostics/BUYER.md");
+  seen.add("package.json");
+  seen.add("package-lock.json");
   const stage = fs.mkdtempSync(path.join(os.tmpdir(), "buyer-diagnostic-"));
   const files = [];
   for (const rel of seen) {

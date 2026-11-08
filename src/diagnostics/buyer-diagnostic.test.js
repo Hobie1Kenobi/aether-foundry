@@ -79,7 +79,6 @@ describe("buyer diagnostic", () => {
     assert.equal(text.includes("PAYMENT-SIGNATURE"), false);
     const vendor = byShape(report, "vendor_missing_areFeesSponsored");
     const official = byShape(report, "official_areFeesSponsored_false");
-    const replay = byShape(report, "official_replay");
     assert.equal(vendor.echo_exact, true);
     assert.equal(vendor.are_fees_sponsored_injected, false);
     assert.equal(vendor.tx.network_id_omitted, true);
@@ -89,27 +88,27 @@ describe("buyer diagnostic", () => {
     assert.equal(vendor.tx.destination_matches, true);
     assert.equal(vendor.tx.fee, "10");
     assert.equal(vendor.tx.last_ledger_sequence, 10020);
-    assert.equal(vendor.local_verifier.is_valid, false);
-    assert.equal(vendor.local_verifier.invalid_reason, "invalid_exact_xrpl_fees_sponsored_unsupported");
-    assert.equal(vendor.settlement.settled, false);
+    assert.equal(vendor.structural.socket, false);
+    assert.equal(vendor.structural.envelope_reason, "invalid_exact_xrpl_fees_sponsored_unsupported");
+    assert.equal(vendor.official_verify, "not_run");
+    assert.equal(vendor.official_settle, "not_run");
+    assert.equal(vendor.settled, false);
     assert.equal(official.echo_exact, true);
     assert.equal(official.are_fees_sponsored_injected, false);
-    assert.equal(official.local_verifier.is_valid, true);
-    assert.equal(official.local_verifier.invalid_reason, null);
-    assert.equal(official.settlement.settled, true);
-    assert.equal(official.settlement.replay, false);
-    assert.equal(replay.local_verifier.is_valid, true);
-    assert.equal(replay.settlement.settled, false);
-    assert.equal(replay.settlement.replay, true);
-    assert.equal(replay.settlement.reason, "replay");
-    assert.equal(byFault(report, "amount_mismatch").local_verifier.invalid_reason, "invalid_exact_xrpl_payload_amount_mismatch");
-    assert.equal(byFault(report, "destination_mismatch").local_verifier.invalid_reason, "invalid_exact_xrpl_payload_destination_mismatch");
-    assert.equal(byFault(report, "fee_too_high").local_verifier.invalid_reason, "invalid_exact_xrpl_payload_fee_too_high");
-    assert.equal(byFault(report, "last_ledger_too_large").local_verifier.invalid_reason, "invalid_exact_xrpl_payload_lastledgersequence_too_large");
-    assert.equal(byFault(report, "memo_rejected").local_verifier.invalid_reason, "invalid_exact_xrpl_payload_memos_not_allowed");
-    assert.equal(byFault(report, "network_id_present").local_verifier.invalid_reason, "invalid_exact_xrpl_payload_network_id_for_standard_network");
+    assert.equal(official.structural.envelope_reason, null);
+    assert.equal(official.structural.structure_reason, null);
+    assert.equal(official.structural.expiry_reason, null);
+    assert.equal(official.official_verify, "not_run");
+    assert.equal(official.settled, false);
+    assert.equal(byFault(report, "amount_mismatch").structural.structure_reason, "invalid_exact_xrpl_payload_amount_mismatch");
+    assert.equal(byFault(report, "destination_mismatch").structural.structure_reason, "invalid_exact_xrpl_payload_destination_mismatch");
+    assert.equal(byFault(report, "fee_too_high").structural.structure_reason, "invalid_exact_xrpl_payload_fee_too_high");
+    assert.equal(byFault(report, "last_ledger_too_large").structural.expiry_reason, "invalid_exact_xrpl_payload_lastledgersequence_too_large");
+    assert.equal(byFault(report, "memo_rejected").structural.structure_reason, "invalid_exact_xrpl_payload_memos_not_allowed");
+    assert.equal(byFault(report, "network_id_present").structural.structure_reason, "invalid_exact_xrpl_payload_network_id_for_standard_network");
     for (const row of report.faults) {
-      assert.equal(row.settlement.settled, false);
+      assert.equal(row.settled, false);
+      assert.equal(row.official_settle, "not_run");
       assert.equal(row.builder, false);
     }
     assert.throws(
@@ -137,12 +136,22 @@ describe("buyer diagnostic", () => {
     const report = await readHostedSupported(async (url, init) => {
       assert.equal(url, HOSTED_SUPPORTED);
       assert.equal(init.method, "GET");
+      assert.equal(init.redirect, "error");
+      assert.equal(init.signal.aborted, false);
       if (init.method !== "GET") posted += 1;
-      return { ok: true, json: async () => fixture };
+      return { ok: true, url: HOSTED_SUPPORTED, json: async () => fixture };
     });
     assert.equal(posted, 0);
     assert.equal(report.exact_xrpl1, true);
     assert.equal(report.seller_called, false);
+    await assert.rejects(
+      () => readHostedSupported(async () => ({ ok: true, redirected: true, url: HOSTED_SUPPORTED, json: async () => fixture })),
+      (error) => error.code === "LEDGER"
+    );
+    await assert.rejects(
+      () => readHostedSupported(async () => ({ ok: true, url: "https://example.com/supported", json: async () => fixture })),
+      (error) => error.code === "HOST"
+    );
   });
 
   it("packs the diagnostic sources without secrets", () => {
@@ -153,6 +162,8 @@ describe("buyer diagnostic", () => {
       assert.equal(/\.env|events\.jsonl|\/lab\/|seed/i.test(name), false, name);
     }
     assert.equal(names.some((name) => name.endsWith("src/diagnostics/buyer-diagnostic.js")), true);
+    assert.equal(names.some((name) => name.endsWith("package.json")), true);
+    assert.equal(names.some((name) => name.endsWith("package-lock.json")), true);
     assert.equal(names.some((name) => name.endsWith("SHA256SUMS")), true);
     const extract = fs.mkdtempSync(path.join(os.tmpdir(), "buyer-unpack-"));
     assert.equal(spawnSync("tar", ["-xf", result.tarPath, "-C", extract]).status, 0);
