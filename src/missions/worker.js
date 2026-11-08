@@ -709,7 +709,7 @@ async function tick(options) {
           fetchImpl: probe,
           resource: built.resource,
           required: built.required,
-          accept: built.accept,
+          accept: live.accept,
           txBlob: signed.tx_blob,
           hash: signed.hash,
           sleep: async () => {},
@@ -766,6 +766,7 @@ async function tick(options) {
             http_status: delivered.http_status,
             code: verdict.code,
             error_code: serviceResult.boundedErrorCode(delivered.parsed, delivered.http_status),
+            parsed: delivered.parsed,
           });
         } catch {
           /* The presigned claim stays as it is. */

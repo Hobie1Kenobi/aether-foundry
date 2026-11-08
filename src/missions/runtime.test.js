@@ -673,15 +673,27 @@ describe("x402 qualification and network fee", () => {
     let phase = "challenge";
     let submits = 0;
     const proofHashes = [];
+    const challengeAccept = {
+      scheme: "exact",
+      network: "xrpl:1",
+      asset: "XRP",
+      amount: "100000",
+      payTo: FOREIGN,
+      maxTimeoutSeconds: 300,
+      extra: { invoiceId: "inv-1", sourceTag: 26100014 },
+    };
     const resourceFetch = async (url, init) => {
       assert.equal(url, "https://api.stablecoingateways.com/v1/sanctions/address?address=0x098B716B8Aaf21512996dC57EB0615e2383E2f96");
       const header = init && init.headers && (init.headers["PAYMENT-SIGNATURE"] || init.headers["payment-signature"]);
       if (!header) {
-        return { status: 402, json: async () => x402Item("deliver-item-1").x402 };
+        return { status: 402, json: async () => ({ x402Version: 2, accepts: [challengeAccept] }) };
       }
       const payload = JSON.parse(Buffer.from(header, "base64").toString("utf8"));
       proofHashes.push(payload);
       assert.equal(payload.x402Version, 2);
+      assert.deepEqual(payload.accepted, challengeAccept);
+      assert.equal(payload.accepted === challengeAccept, false);
+      assert.equal(Object.prototype.hasOwnProperty.call(challengeAccept.extra, "areFeesSponsored"), false);
       assert.equal(payload.accepted.payTo, FOREIGN);
       assert.equal(payload.accepted.amount, "100000");
       assert.equal(payload.accepted.fee_drops, undefined);

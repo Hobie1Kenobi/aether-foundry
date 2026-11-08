@@ -7,6 +7,7 @@ const { chicagoDay } = require("./clock");
 const { exclusive, readEvents, coded } = require("./ledger");
 const policy = require("./policy");
 const { assertPublic } = require("./redact");
+const serviceResult = require("./service-result");
 const axelarStatus = require("../bridge/axelar/status");
 
 const OPEN_HOLDS = new Set(["awaiting_human_approval", "spending_disabled"]);
@@ -1035,6 +1036,9 @@ function publicFeed(dir, now) {
     delivery_error_code: typeof mission.delivery_error_code === "string" && /^[a-z0-9_]{1,40}$/.test(mission.delivery_error_code)
       ? mission.delivery_error_code
       : null,
+    delivery_reason: serviceResult.diagnosticToken(mission.delivery_reason),
+    delivery_invalid_reason: serviceResult.diagnosticToken(mission.delivery_invalid_reason),
+    delivery_error_reason: serviceResult.diagnosticToken(mission.delivery_error_reason),
     explorer: mission.explorer,
     prior_claim_id: typeof mission.prior_claim_id === "string" && /^msn[a-f0-9]{16}$/.test(mission.prior_claim_id)
       ? mission.prior_claim_id

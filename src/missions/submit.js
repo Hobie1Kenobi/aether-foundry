@@ -5,6 +5,7 @@ const { exclusive, coded } = require("./ledger");
 const { fold, signedClaimMayRelease } = require("./engine");
 const { assertSequenceAvailable } = require("./sequence-hold");
 const missionPolicy = require("./policy");
+const serviceResult = require("./service-result");
 const anchors = require("../director/anchors");
 
 function reservedDrops(events, missionId) {
@@ -59,6 +60,7 @@ function beginSubmit(dir, input) {
       throw coded("standard xrpl:1 payments must omit NetworkID", "MAINNET");
     }
     if (Number(tx.NetworkID) === 1) delete tx.NetworkID;
+    delete tx.Memos;
     if (missionPolicy.isHouse(tx.Destination) || missionPolicy.isHouse(tx.Account) || tx.Destination !== mission.seller) {
       throw coded("claim destination is not the qualified seller", "CLAIM");
     }
@@ -99,17 +101,34 @@ function beginSubmit(dir, input) {
 
 function signedFields(tx) {
   if (!tx || typeof tx !== "object") return null;
-  return {
+  // Record only fields present on this payment. A standard xrpl:1 payment
+  // omits NetworkID. Older ledger lines that stored NetworkID 1 are left
+  // as they were written.
+  const fields = {
     TransactionType: "Payment",
     Account: tx.Account,
     Destination: tx.Destination,
     Amount: String(tx.Amount),
     Fee: String(tx.Fee),
-    NetworkID: 1,
     Sequence: Number.isSafeInteger(tx.Sequence) ? tx.Sequence : null,
     LastLedgerSequence: Number.isSafeInteger(tx.LastLedgerSequence) ? tx.LastLedgerSequence : null,
     SourceTag: Number.isInteger(tx.SourceTag) ? tx.SourceTag : null,
   };
+  if (tx.NetworkID != null) fields.NetworkID = tx.NetworkID;
+  if (typeof tx.InvoiceID === "string") fields.InvoiceID = tx.InvoiceID;
+  if (tx.Memos != null) fields.memos_present = true;
+  return fields;
+}
+
+function withoutEchoFields(tx, binding) {
+  const next = Object.assign({}, tx);
+  if (binding) {
+    next.SourceTag = binding.sourceTag;
+    next.InvoiceID = binding.invoiceIdField;
+  }
+  delete next.Memos;
+  delete next.NetworkID;
+  return next;
 }
 
 function notePresign(dir, missionId, hash, fields) {
@@ -154,11 +173,10 @@ function applyChallenge(dir, input) {
       throw coded("no unsubmitted payment to bind", "TX");
     }
     if (mission.presigned_hash || mission.submit_state) throw coded("refusing to bind a claim that may have been signed", "NO_RETRY");
-    const tx = Object.assign({}, mission.unsigned_tx, {
-      SourceTag: input.sourceTag,
-      InvoiceID: input.invoiceIdField,
+    const tx = withoutEchoFields(mission.unsigned_tx, {
+      sourceTag: input.sourceTag,
+      invoiceIdField: input.invoiceIdField,
     });
-    delete tx.Memos;
     mission.unsigned_tx = tx;
     mission.invoice_id = input.invoiceId;
     mission.source_tag = input.sourceTag;
@@ -178,11 +196,9 @@ function stampPrepared(dir, input) {
     if (mission.presigned_hash || mission.submit_state || Number.isInteger(mission.last_ledger_sequence)) {
       throw coded("refusing to refresh LastLedgerSequence after it was stored", "NO_RETRY");
     }
-    const tx = Object.assign({}, mission.unsigned_tx, {
-      Sequence: input.sequence,
-      LastLedgerSequence: input.lastLedgerSequence,
-    });
-    delete tx.NetworkID;
+    const tx = withoutEchoFields(mission.unsigned_tx);
+    tx.Sequence = input.sequence;
+    tx.LastLedgerSequence = input.lastLedgerSequence;
     mission.unsigned_tx = tx;
     mission.signed_fields = signedFields(tx);
     mission.sequence = tx.Sequence;
@@ -291,10 +307,14 @@ function noteDeliveryFailure(dir, input) {
     mission.complete = false;
     mission.submitted = false;
     mission.live = false;
+    const diagnostic = serviceResult.sanitizeDiagnostic(input.parsed);
     mission.delivery_http_status = Number.isInteger(status) ? status : null;
     mission.delivery_error_code = typeof input.error_code === "string" && /^[a-z0-9_]{1,40}$/.test(input.error_code)
       ? input.error_code
       : "unparsed";
+    mission.delivery_reason = diagnostic.reason;
+    mission.delivery_invalid_reason = diagnostic.invalid_reason;
+    mission.delivery_error_reason = diagnostic.error_reason;
     mission.rationale = "The seller response did not match a supported purchase result. The presigned claim stays uncertain and is not released or retried.";
     mission.updated_at = now;
     api.append({ type: "mission.upsert", at: now, mission });

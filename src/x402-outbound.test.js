@@ -527,6 +527,25 @@ describe("PAYMENT-SIGNATURE invoiceId", () => {
     assert.equal(payload.payload.signedTxBlob, "BLOB");
     assert.equal(payload.payload.transaction, "AB".repeat(32));
     assert.equal(payload.payload.invoiceId, "02DEA90ED40A4CFFB8A774C6F74B0109");
+    assert.deepEqual(payload.accepted, accept);
+    assert.equal(Object.prototype.hasOwnProperty.call(payload.accepted.extra, "areFeesSponsored"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(accept.extra, "areFeesSponsored"), false);
+  });
+
+  it("preserves areFeesSponsored when the challenge already has it and does not mutate the input", () => {
+    const sponsored = {
+      scheme: "exact",
+      network: "xrpl:1",
+      amount: "1000",
+      asset: "XRP",
+      payTo: pub.FOREIGN_ADDRESS,
+      extra: Object.freeze({ sourceTag: 20260908, invoiceId: "02DEA90ED40A4CFFB8A774C6F74B0109", areFeesSponsored: false }),
+    };
+    Object.freeze(sponsored);
+    const payload = guard.buildSignaturePayload({ required: {}, accept: sponsored, txBlob: "BLOB" });
+    assert.deepEqual(payload.accepted, sponsored);
+    assert.equal(payload.accepted.extra.areFeesSponsored, false);
+    assert.equal(payload.accepted === sponsored, false);
   });
 
   it("omits invoiceId and transaction when the challenge has neither", () => {

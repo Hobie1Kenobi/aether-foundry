@@ -40,6 +40,10 @@ The parent approved a new isolated Testnet account. The code path is separate fr
 
 `bin/publish` writes a health snapshot with `worker_asleep: true` and `execute: false` while purchase execution is off. The asleep worker also refreshes that snapshot when `FOUNDRY_MISSION_PUBLISH=yes`, at most every four minutes, so an idle feed does not sit on an old observation time. Neither path signs. The Vercel ingest secret is still not approved for production. Until the same secret is on the desk and in mode-0600 `tokens.env`, publish writes the local snapshot and returns `no_ingest_secret`. No token is read from the desk.
 
+## Challenge echo
+
+The payment header echoes the selected live xrpl:1 accept. It does not add `areFeesSponsored` when the challenge omits it, and it keeps the boolean when the challenge includes it. Invoice binding remains SHA-256 of the invoice string, with no `Memos` and no `NetworkID` on the signed payment. `signed_fields` records that omission for new lines. Older ledger lines that stored `NetworkID: 1` are not rewritten. A 402 diagnostic stores only short `reason`, `invalidReason`, and `errorReason` tokens. `@x402/xrpl` 2.30.0 still rejects a challenge whose extra lacks `areFeesSponsored`. The public seller 402 does not show whether its facilitator adds that field. Exact echo is not proof the next attempt will verify. The facilitator host named in discussion is `https://xrpl-facilitator-testnet.t54.ai`. No successful envelope was available, and this tree does not call it.
+
 ## Exact next ops
 
 These are parent actions. This cloud run does not perform them, does not sign, and does not change either account file.

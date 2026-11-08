@@ -95,11 +95,23 @@ function invoiceIdField(invoiceId) {
   return crypto.createHash("sha256").update(String(invoiceId), "utf8").digest("hex").toUpperCase();
 }
 
+const ACCEPT_KEYS = new Set(["scheme", "network", "asset", "amount", "payTo", "maxTimeoutSeconds", "extra"]);
+const EXTRA_KEYS = new Set(["invoiceId", "sourceTag", "areFeesSponsored"]);
+
 function bindChallenge(accept) {
   if (!accept || accept.scheme !== "exact" || accept.network !== "xrpl:1" || accept.asset !== "XRP") {
     throw coded("live challenge is not an exact xrpl:1 XRP accept", "MAINNET");
   }
-  const extra = accept.extra && typeof accept.extra === "object" ? accept.extra : {};
+  if (Object.keys(accept).some((key) => !ACCEPT_KEYS.has(key))) {
+    throw coded("live challenge has a field outside the xrpl:1 payment requirement", "TX");
+  }
+  const extra = accept.extra && typeof accept.extra === "object" && !Array.isArray(accept.extra) ? accept.extra : {};
+  if (Object.keys(extra).some((key) => !EXTRA_KEYS.has(key))) {
+    throw coded("live challenge extra has a field outside invoiceId, sourceTag, and areFeesSponsored", "TX");
+  }
+  if (Object.prototype.hasOwnProperty.call(extra, "areFeesSponsored") && typeof extra.areFeesSponsored !== "boolean") {
+    throw coded("live challenge areFeesSponsored is not a boolean", "TX");
+  }
   const tag = Number(extra.sourceTag);
   if (!Number.isInteger(tag) || tag < 0 || tag > 4294967295) {
     throw coded("live challenge sourceTag is missing or malformed", "TX");

@@ -64,9 +64,46 @@ function boundedErrorCode(parsed, httpStatus) {
   return "refused";
 }
 
+const DIAGNOSTIC_TOKEN = /^[a-z0-9_.:-]{1,80}$/;
+const DIAGNOSTIC_FIELDS = {
+  reason: "reason",
+  invalidReason: "invalid_reason",
+  errorReason: "error_reason",
+};
+
+function diagnosticToken(value) {
+  if (typeof value !== "string" || !DIAGNOSTIC_TOKEN.test(value)) return null;
+  if (/^[0-9a-f]{16,}$/.test(value)) return null;
+  return value;
+}
+
+function sanitizeDiagnostic(parsed) {
+  const found = { reason: null, invalid_reason: null, error_reason: null };
+  const budget = { n: 0 };
+  function walk(node, depth) {
+    if (budget.n > 40 || depth > 4 || !node || typeof node !== "object") return;
+    budget.n += 1;
+    const entries = Array.isArray(node) ? node.slice(0, 8).map((item) => [null, item]) : Object.entries(node);
+    const nested = [];
+    for (const [key, value] of entries) {
+      const slot = DIAGNOSTIC_FIELDS[key];
+      if (slot && !found[slot]) {
+        const token = diagnosticToken(value);
+        if (token) found[slot] = token;
+      }
+      if (value && typeof value === "object") nested.push(value);
+    }
+    for (const child of nested) walk(child, depth + 1);
+  }
+  walk(parsed, 0);
+  return found;
+}
+
 module.exports = {
   HOST,
   supportsResource,
   validatePurchasedService,
   boundedErrorCode,
+  diagnosticToken,
+  sanitizeDiagnostic,
 };
