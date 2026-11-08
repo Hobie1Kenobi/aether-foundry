@@ -115,15 +115,16 @@ function txLedgerOf(entry) {
   return integerField(Number.isSafeInteger(ledger) ? ledger : Number(ledger));
 }
 
-async function proveSignedAbsence(fetchImpl, claim) {
+async function proveSignedAbsence(fetchImpl, claim, endpoint) {
   const account = claim && claim.account;
   const claimHash = typeof claim.hash === "string" ? claim.hash.toUpperCase() : "";
   const last = claim && claim.lastLedgerSequence;
   const sequence = claim && claim.sequence;
+  const call = (method, params) => rpc(fetchImpl, method, params, endpoint);
   if (!account || !HASH_RE.test(claimHash) || !integerField(last) || !integerField(sequence)) {
     return proof({ reason: "creation_unproven" });
   }
-  const info = await rpc(fetchImpl, "server_info", {});
+  const info = await call("server_info", {});
   const node = info && info.result && info.result.info;
   if (!node || Number(node.network_id) !== 1) {
     const error = new Error("fee RPC did not prove network id 1");
@@ -140,7 +141,7 @@ async function proveSignedAbsence(fetchImpl, claim) {
   if (!validated) return proof(Object.assign({ reason: "ledger_mismatch" }, base));
   if (validated <= last) return proof(Object.assign({ reason: "window_open" }, base));
 
-  const looked = await rpc(fetchImpl, "tx", { transaction: claimHash, binary: false });
+  const looked = await call("tx", { transaction: claimHash, binary: false });
   const lookedResult = (looked && looked.result) || {};
   if (lookedResult.validated === false) return proof(Object.assign({ reason: "lookup_unknown" }, base));
   if (typeof lookedResult.hash === "string") {
@@ -150,7 +151,7 @@ async function proveSignedAbsence(fetchImpl, claim) {
     return proof(Object.assign({ reason: "lookup_unknown", hash_found: null }, base));
   }
 
-  const current = await rpc(fetchImpl, "account_info", { account, ledger_index: validated });
+  const current = await call("account_info", { account, ledger_index: validated });
   const currentResult = (current && current.result) || {};
   if (currentResult.validated !== true || !sameLedger(currentResult.ledger_index, validated)) {
     return proof(Object.assign({ reason: "ledger_mismatch", hash_found: false }, base));
@@ -177,7 +178,7 @@ async function proveSignedAbsence(fetchImpl, claim) {
   }, base);
   if (!covered) return proof(Object.assign({ reason: "history_incomplete" }, located));
 
-  const created = await rpc(fetchImpl, "tx", { transaction: previousHash, binary: false });
+  const created = await call("tx", { transaction: previousHash, binary: false });
   const createdResult = (created && created.result) || {};
   if (createdResult.validated !== true
     || !sameLedger(createdResult.ledger_index, creationLedger)
@@ -188,7 +189,7 @@ async function proveSignedAbsence(fetchImpl, claim) {
     return proof(Object.assign({ reason: "creation_unproven" }, located));
   }
 
-  const prior = await rpc(fetchImpl, "account_info", { account, ledger_index: creationLedger - 1 });
+  const prior = await call("account_info", { account, ledger_index: creationLedger - 1 });
   const priorResult = (prior && prior.result) || {};
   if (priorResult.validated === false || (priorResult.ledger_index != null && !sameLedger(priorResult.ledger_index, creationLedger - 1))) {
     return proof(Object.assign({ reason: "ledger_mismatch" }, located));
@@ -198,7 +199,7 @@ async function proveSignedAbsence(fetchImpl, claim) {
   }
 
   const historyStart = coveredBlockStart(ranges, creationLedger, last);
-  const listed = await rpc(fetchImpl, "account_tx", {
+  const listed = await call("account_tx", {
     account,
     ledger_index_min: historyStart,
     ledger_index_max: last,
@@ -224,7 +225,7 @@ async function proveSignedAbsence(fetchImpl, claim) {
     return proof(Object.assign({ reason: "account_recreated" }, located));
   }
 
-  const header = await rpc(fetchImpl, "ledger", { ledger_index: last, transactions: false, expand: false });
+  const header = await call("ledger", { ledger_index: last, transactions: false, expand: false });
   const headerResult = (header && header.result) || {};
   const ledger = headerResult.ledger || {};
   const ledgerIndex = headerResult.ledger_index != null ? headerResult.ledger_index : ledger.ledger_index;

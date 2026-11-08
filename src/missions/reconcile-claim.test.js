@@ -10,6 +10,8 @@ const config = require("./config");
 const { control, view, startMission, act } = require("./engine");
 const { beginSubmit, notePresign, stampPrepared } = require("./submit");
 const { reconcileClaim, OLD_CLAIM } = require("./reconcile-claim");
+const { canonicalReconcileRpc, boundReconcileFetch, LABS, HONEYCLUSTER } = require("./reconcile-endpoint");
+const hosts = require("../xrpl-hosts");
 const { rangesCover, parseCompleteLedgers } = require("./absence-proof");
 
 const REVIEWED = "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs";
@@ -241,5 +243,117 @@ describe("new claim reconciliation", () => {
     assert.equal(after, before);
     assert.equal(view(ledger, NOW).missions[id].hold, "uncertain");
     assert.equal(view(ledger, NOW).missions[id].earliest_ledger, undefined);
+  });
+});
+
+describe("reconcile archival endpoint", () => {
+  function watch(inner) {
+    const urls = [];
+    const wrapped = async (url, init) => {
+      urls.push(String(url));
+      return inner(url, init);
+    };
+    wrapped.urls = urls;
+    return wrapped;
+  }
+
+  it("keeps Labs by default and accepts only the documented Honeycluster testnet pair", () => {
+    assert.equal(canonicalReconcileRpc(undefined), LABS);
+    assert.equal(canonicalReconcileRpc("  https://testnet.honeycluster.io/  "), HONEYCLUSTER);
+    assert.equal(canonicalReconcileRpc("wss://testnet.honeycluster.io/"), HONEYCLUSTER);
+    for (const raw of [
+      "https://honeycluster.io/",
+      "wss://honeycluster.io/",
+      "https://devnet.honeycluster.io/",
+      "http://testnet.honeycluster.io/",
+      "https://user:pass@testnet.honeycluster.io/",
+      "https://testnet.honeycluster.io/extra",
+      "https://evil.example/",
+      "wss://s1.ripple.com/",
+    ]) {
+      assert.throws(() => canonicalReconcileRpc(raw), (error) => error.code === "HOST");
+    }
+    assert.equal(hosts.isApprovedXrplTestnetHost("testnet.honeycluster.io"), false);
+    const signer = fs.readFileSync(path.join(__dirname, "signer.js"), "utf8");
+    const worker = fs.readFileSync(path.join(__dirname, "worker.js"), "utf8");
+    assert.equal(signer.includes("honeycluster"), false);
+    assert.equal(worker.includes("FOUNDRY_MISSION_RECONCILE_RPC"), false);
+  });
+
+  it("reports through the selected archive and still refuses pruned history, mainnet, and a claim with no window", async () => {
+    const ledger = path.join(tmp(), "ledger");
+    fs.mkdirSync(ledger);
+    control(ledger, { action: "activate", confirm: config.ACTIVATE_PHRASE, token: TOKEN, now: NOW }, { token: TOKEN });
+    const address = xrpl.Wallet.generate().address;
+    const id = claim(ledger, address, true, "archive-claim-1763");
+    const old = claim(ledger, xrpl.Wallet.generate().address, false, "archive-nolls-01");
+    let calls = 0;
+    const untouched = async () => {
+      calls += 1;
+      throw new Error("rpc");
+    };
+    const noWindow = await reconcileClaim(ledger, old, {
+      now: NOW,
+      env: { FOUNDRY_MISSION_RECONCILE_RPC: "https://testnet.honeycluster.io" },
+      fetch: untouched,
+    });
+    assert.equal(noWindow.reason, "no_last_ledger_sequence");
+    assert.equal(noWindow.released, false);
+    assert.equal(calls, 0);
+    await assert.rejects(
+      () => reconcileClaim(ledger, id, {
+        now: NOW,
+        env: { FOUNDRY_MISSION_RECONCILE_RPC: "https://honeycluster.io/" },
+        fetch: untouched,
+      }),
+      (error) => error.code === "HOST"
+    );
+    assert.equal(calls, 0);
+    assert.equal(view(ledger, NOW).missions[id].hold, "uncertain");
+    const seen = watch(labs(22171073, false, { complete: "22169505-22171073" }));
+    const pruned = await reconcileClaim(ledger, id, {
+      now: NOW,
+      env: { FOUNDRY_MISSION_RECONCILE_RPC: "wss://testnet.honeycluster.io/" },
+      fetch: seen,
+    });
+    assert.equal(pruned.release_allowed, false);
+    assert.equal(pruned.released, false);
+    assert.equal(pruned.reason, "history_incomplete");
+    assert.equal(pruned.rpc_endpoint, HONEYCLUSTER);
+    assert.equal(seen.urls.every((url) => url === HONEYCLUSTER), true);
+    assert.equal(view(ledger, NOW).missions[id].hold, "uncertain");
+    await assert.rejects(
+      () => reconcileClaim(ledger, id, {
+        now: NOW,
+        env: { FOUNDRY_MISSION_RECONCILE_RPC: HONEYCLUSTER },
+        fetch: async (_url, init) => {
+          const body = JSON.parse(init.body);
+          if (body.method === "server_info") {
+            return new Response(JSON.stringify({ result: { info: { network_id: 0, complete_ledgers: "32570-9", validated_ledger: { seq: 9 } } } }), { status: 200 });
+          }
+          return new Response("{}", { status: 500 });
+        },
+      }),
+      (error) => error.code === "MAINNET"
+    );
+    const covered = watch(labs(22121555, false));
+    const ready = await reconcileClaim(ledger, id, {
+      now: NOW,
+      env: { FOUNDRY_MISSION_RECONCILE_RPC: "https://testnet.honeycluster.io/" },
+      fetch: covered,
+    });
+    assert.equal(ready.release_allowed, true);
+    assert.equal(ready.released, false);
+    assert.equal(ready.rpc_endpoint, HONEYCLUSTER);
+    assert.equal(covered.urls[0], HONEYCLUSTER);
+    const def = watch(labs(22121555, false));
+    const labsReport = await reconcileClaim(ledger, id, { now: NOW, fetch: def });
+    assert.equal(labsReport.rpc_endpoint, LABS);
+    assert.equal(def.urls[0], LABS);
+    const budget = boundReconcileFetch(async () => new Response("{}", { status: 200 }));
+    await assert.rejects(
+      () => budget(HONEYCLUSTER, { method: "POST", body: JSON.stringify({ method: "submit" }) }),
+      (error) => error.code === "HOST"
+    );
   });
 });

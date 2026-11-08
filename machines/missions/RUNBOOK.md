@@ -100,7 +100,14 @@ That command writes one audit line and does not sign. It does not clear any othe
 
 `txnNotFound` on a pruned server is not a release. `./bin/reconcile` with no `FOUNDRY_MISSION_RECONCILE_MISSION` exits `PLAN` and releases nothing. That variable is the claim selector.
 
-Report only, no audit phrase and no release:
+Report only, no audit phrase and no release. The default read stays on XRPL Labs. `FOUNDRY_MISSION_RECONCILE_RPC` is optional and is not read by the signer or the worker. The only non-default value is the Honeycluster testnet JSON-RPC URL from the XRPL public-server list, `https://testnet.honeycluster.io`. The documented socket `wss://testnet.honeycluster.io/` selects that same JSON-RPC URL. Any other host, including mainnet `honeycluster.io` and devnet, is refused before a request.
+
+```bash
+FOUNDRY_MISSION_RECONCILE_MISSION=<mission id> \
+FOUNDRY_MISSION_RECONCILE_RPC=https://testnet.honeycluster.io \
+FOUNDRY_MISSION_HOME=/workspace/foundry-ops/missions-runtime \
+./bin/reconcile
+```
 
 ```bash
 FOUNDRY_MISSION_RECONCILE_MISSION=<mission id> \

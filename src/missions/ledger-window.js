@@ -1,6 +1,7 @@
 "use strict";
 
 const { coded } = require("./ledger");
+const { canonicalReconcileRpc } = require("./reconcile-endpoint");
 
 const MAX_LEDGER_WINDOW = 20;
 const LABS_HTTP = "https://testnet.xrpl-labs.com";
@@ -58,11 +59,12 @@ function bindWindow(validated, sequence) {
   };
 }
 
-async function rpc(fetchImpl, method, params) {
+async function rpc(fetchImpl, method, params, endpoint) {
+  const target = canonicalReconcileRpc(endpoint || LABS_HTTP);
   if (typeof fetchImpl !== "function") throw coded("validated ledger RPC is not configured", "LEDGER");
   let response;
   try {
-    response = await fetchImpl(LABS_HTTP, {
+    response = await fetchImpl(target, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -73,9 +75,9 @@ async function rpc(fetchImpl, method, params) {
     });
   } catch (error) {
     if (error && error.code) throw error;
-    throw coded("XRPL Labs ledger RPC failed", "LEDGER");
+    throw coded("XRPL ledger RPC failed", "LEDGER");
   }
-  if (!response || response.ok === false) throw coded("XRPL Labs ledger RPC failed", "LEDGER");
+  if (!response || response.ok === false) throw coded("XRPL ledger RPC failed", "LEDGER");
   return response.json();
 }
 
