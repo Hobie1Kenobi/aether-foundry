@@ -14,7 +14,7 @@ const path = require("path");
 const xrpl = require("xrpl");
 const { ExactXrplScheme } = require("@x402/xrpl/exact/facilitator");
 const config = require("../missions/config");
-const { coded } = require("../missions/ledger");
+const { coded, readEvents } = require("../missions/ledger");
 const { view, startMission, act, observe } = require("../missions/engine");
 const { applyChallenge, stampPrepared, beginSubmit, notePresign, finishSubmit } = require("../missions/submit");
 const { invoiceIdField } = require("../missions/x402-deliver");
@@ -122,10 +122,16 @@ function workerAsleep(home) {
   return Boolean(body && body.asleep === true);
 }
 
-function legacyUncertain(state) {
-  let uncertain = 0n;
-  for (const bucket of Object.values(state.days || {})) uncertain += BigInt((bucket && bucket.uncertain) || "0");
-  return uncertain;
+function retainedLegacyDrops(dir) {
+  let net = 0n;
+  for (const event of readEvents(dir)) {
+    if (!event || event.mission_id !== PERMANENT_HOLD || event.counted === false) continue;
+    const drops = BigInt(event.drops || "0");
+    if (event.type === "budget.uncertain") net += drops;
+    if (event.type === "budget.settled" && (event.from == null || event.from === "uncertain")) net -= drops;
+    if (event.type === "budget.unsigned_released" || event.type === "budget.ledger_expired") net -= drops;
+  }
+  return net;
 }
 
 function missionAccounts(state) {
@@ -191,8 +197,10 @@ function preflight(env, now) {
   const state = view(ledger, now);
   if (!state.spending_enabled) throw coded("spending is not activated", "SPENDING_DISABLED");
   const legacy = state.missions[PERMANENT_HOLD];
-  if (!legacy || legacy.hold === "released" || legacy.hold === "spent") throw coded("legacy hold is not counting", "CAP");
-  if (legacyUncertain(state) < LEGACY_DROPS) throw coded("legacy 1747 drops are not in the day accounting", "CAP");
+  const retained = retainedLegacyDrops(ledger);
+  if (!legacy || legacy.hold === "released" || legacy.hold === "spent" || retained < LEGACY_DROPS) {
+    throw coded("legacy hold msn5b5c3223e5e88526 is not counting 1747 drops", "CAP");
+  }
   const blocking = Object.values(state.missions).find(unreconciled);
   if (blocking) throw coded("a signed claim is still unreconciled", "NO_RETRY");
   if (fs.existsSync(path.join(home, LOCK_DIR)) || attemptUsed(home)) throw coded("the diagnostic attempt was already used", "NO_RETRY");
@@ -219,8 +227,8 @@ function preflight(env, now) {
     used: used.toString(),
     day: chicagoDay(now),
     legacy,
+    retained: retained.toString(),
     live: env.FOUNDRY_DIAGNOSTIC_LIVE === "yes",
-    simulated: env.FOUNDRY_DIAGNOSTIC_SIMULATE === "yes",
   };
 }
 
@@ -229,20 +237,7 @@ function officialScheme() {
 }
 
 function ledgerEndpoint(env) {
-  if (env && env.FOUNDRY_DIAGNOSTIC_SIMULATE === "yes") {
-    let url;
-    try {
-      url = new URL(String(env.FOUNDRY_DIAGNOSTIC_SIM_RPC || ""));
-    } catch {
-      throw coded("simulated RPC must be loopback", "HOST");
-    }
-    const host = url.hostname.toLowerCase();
-    if (url.protocol !== "http:" || (host !== "127.0.0.1" && host !== "::1" && host !== "[::1]") || !url.port) {
-      throw coded("simulated RPC must be loopback", "HOST");
-    }
-    return { endpoint: url.origin, boundary: "simulated" };
-  }
-  return { endpoint: canonicalReconcileRpc(env && env.FOUNDRY_MISSION_RECONCILE_RPC), boundary: "testnet" };
+  return canonicalReconcileRpc(env && env.FOUNDRY_MISSION_RECONCILE_RPC);
 }
 
 async function rpc(endpoint, method, params, fetchImpl) {
@@ -334,6 +329,7 @@ async function runControlledPurchase(env, opts) {
       day: plan.day,
       budget_drops: plan.budget,
       legacy_hold: PERMANENT_HOLD,
+      legacy_drops: plan.retained,
     });
   }
   const wallet = options.wallet || inspectAccount(env.FOUNDRY_DIAGNOSTIC_ACCOUNT_FILE).wallet;
@@ -343,10 +339,10 @@ async function runControlledPurchase(env, opts) {
   }
   assertAccounts(wallet.address, plan.payee, plan.state);
   const fetchImpl = options.fetch || globalThis.fetch;
-  const endpoint = options.endpoint || ledgerEndpoint(env);
+  const endpoint = ledgerEndpoint(env);
   await readChallenge(`${plan.seller}?shape=vendor`, plan.payment, plan.payee, "vendor", fetchImpl);
   const accept = await readChallenge(`${plan.seller}?shape=official`, plan.payment, plan.payee, "official", fetchImpl);
-  const facts = options.ledgerFacts || await readFacts(endpoint.endpoint, wallet.address, plan.payee, plan.payment, plan.fee, options.ledgerFetch || fetchImpl);
+  const facts = await readFacts(endpoint, wallet.address, plan.payee, plan.payment, plan.fee, options.ledgerFetch || fetchImpl);
   const consumed = consumeAttempt(plan.home, now);
   let missionId = null;
   try {
@@ -395,7 +391,7 @@ async function runControlledPurchase(env, opts) {
     const receiptHash = String(receipt && receipt.transaction || "").toUpperCase();
     const sellerPaid = posted && posted.status === 200 && receipt && receipt.paid === true && receiptHash === hash;
     const proof = sellerPaid
-      ? await proveSettlement(hash, { destination: plan.payee, amount: plan.payment }, options.proofFetch || options.ledgerFetch || fetchImpl, options.proofEndpoint || endpoint.endpoint)
+      ? await proveSettlement(hash, { destination: plan.payee, amount: plan.payment }, options.proofFetch || fetchImpl, endpoint)
       : { validated: false, reason: "seller_not_paid" };
     if (!proof.validated) {
       return assertPublic({
@@ -403,13 +399,13 @@ async function runControlledPurchase(env, opts) {
         signed: true,
         submitted: false,
         settled: false,
-        simulated: plan.simulated,
         attempt_consumed: true,
         vendor_signed: false,
         official_settle: "not_proven",
         reason: proof.reason,
         mission_id: missionId,
         legacy_hold: PERMANENT_HOLD,
+        legacy_drops: plan.retained,
       });
     }
     finishSubmit(plan.ledger, {
@@ -423,8 +419,7 @@ async function runControlledPurchase(env, opts) {
       signed: true,
       submitted: true,
       settled: true,
-      simulated: endpoint.boundary === "simulated" || plan.simulated,
-      network_boundary: endpoint.boundary,
+      network_boundary: "testnet",
       attempt_consumed: true,
       vendor_signed: false,
       official_settle: receipt.official_settle || "exact_xrpl_scheme",
@@ -455,5 +450,7 @@ module.exports = {
   consumeAttempt,
   assertAccounts,
   proveSettlement,
+  retainedLegacyDrops,
+  ledgerEndpoint,
   runControlledPurchase,
 };

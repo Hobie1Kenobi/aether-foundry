@@ -79,6 +79,23 @@ function arm(home, payer, payee) {
   };
 }
 
+function ledgerRpc(buyer, seller, sequence) {
+  return async (url, init) => {
+    assert.equal(new URL(url).hostname, "testnet.xrpl-labs.com");
+    const body = JSON.parse(init.body);
+    if (body.method === "server_info") {
+      return new Response(JSON.stringify({ result: { info: { network_id: 1, validated_ledger: { seq: 10000 } } } }), { status: 200 });
+    }
+    if (body.method === "account_info") {
+      const account = body.params[0].account;
+      return new Response(JSON.stringify({
+        result: { validated: true, account_data: { Account: account, Sequence: account === buyer ? sequence : 1, Balance: "20000000" } },
+      }), { status: 200 });
+    }
+    return new Response("{}", { status: 500 });
+  };
+}
+
 function proof(payTo, found) {
   return async (url, init) => {
     assert.equal(url, "https://testnet.xrpl-labs.com");
@@ -153,6 +170,7 @@ describe("controlled purchase", () => {
         assert.equal(report.live, false);
         assert.equal(report.attempt_consumed, false);
         assert.equal(report.daily_used, "1747");
+        assert.equal(report.legacy_drops, "1747");
         assert.equal(report.settled, false);
       }
       assert.equal(fs.readFileSync(path.join(ledger, "events.jsonl")).equals(before), true);
@@ -169,6 +187,14 @@ describe("controlled purchase", () => {
     const payee = xrpl.Wallet.generate().address;
     const seller = "http://127.0.0.1:8795/paid";
     await assert.rejects(() => runControlledPurchase(baseEnv(home, ledger, seller, payee), { now: NOW }), (error) => error.code === "CAP");
+    const substitute = tmpHome();
+    control(substitute.ledger, { action: "activate", confirm: config.ACTIVATE_PHRASE, token: TOKEN, now: NOW }, { token: TOKEN });
+    fs.appendFileSync(path.join(substitute.ledger, "events.jsonl"), `${[
+      JSON.stringify({ type: "mission.upsert", at: NOW, mission: { id: PERMANENT_HOLD, hold: "uncertain", signed: true, seller: SANCTIONS_PAYEE, updated_at: NOW } }),
+      JSON.stringify({ type: "budget.uncertain", at: NOW, mission_id: "msnunrelated0000001", day: "2026-11-06", drops: "1747", settlement: "submit_unknown", live: true }),
+    ].join("\n")}\n`);
+    await assert.rejects(() => runControlledPurchase(baseEnv(substitute.home, substitute.ledger, seller, payee), { now: NOV8 }), (error) => error.code === "CAP");
+    await assert.rejects(() => runControlledPurchase(baseEnv(substitute.home, substitute.ledger, seller, payee), { now: NOV9 }), (error) => error.code === "CAP");
     seedLegacy(ledger);
     fs.writeFileSync(path.join(home, "worker.json"), JSON.stringify({ asleep: false }));
     await assert.rejects(() => runControlledPurchase(baseEnv(home, ledger, seller, payee), { now: NOW }), (error) => error.code === "ASLEEP");
@@ -228,7 +254,7 @@ describe("controlled purchase", () => {
           FOUNDRY_DIAGNOSTIC_LIVE: "yes",
           FOUNDRY_DIAGNOSTIC_ACCOUNT_FILE: loose,
           FOUNDRY_DIAGNOSTIC_HANDOVER: path.join(home, "handover.json"),
-        }), { now: NOW, ledgerFacts: { validated: 10000, sequence: 10 } }),
+        }), { now: NOW }),
         (error) => error.code === "AUTH"
       );
       assert.equal(fs.existsSync(path.join(home, "diagnostic-attempt.lock")), false);
@@ -238,9 +264,13 @@ describe("controlled purchase", () => {
         mission: { id: "msncurrent000000001", hold: "unsubmitted", signed: false, unsigned_tx: { Account: payer.address } },
       })}\n`);
       await assert.rejects(
-        () => runControlledPurchase(Object.assign(baseEnv(home, ledger, seller.url, payee), arm(home, payer, payee)), {
+        () => runControlledPurchase(baseEnv(home, ledger, seller.url, payee, {
+          FOUNDRY_DIAGNOSTIC_LIVE: "yes",
+          FOUNDRY_DIAGNOSTIC_ACCOUNT_FILE: path.join(home, "buyer.json"),
+          FOUNDRY_DIAGNOSTIC_HANDOVER: path.join(home, "handover.json"),
+        }), {
           now: NOW,
-          ledgerFacts: { validated: 10000, sequence: 10 },
+          ledgerFetch: ledgerRpc(payer.address, payee, 10),
         }),
         (error) => error.code === "ACCOUNT"
       );
@@ -257,7 +287,7 @@ describe("controlled purchase", () => {
       await assert.rejects(
         () => runControlledPurchase(Object.assign(baseEnv(second.home, second.ledger, seller2.url, payee), arm(second.home, payer, payee)), {
           now: NOW,
-          ledgerFacts: { validated: 10000, sequence: 10 },
+          ledgerFetch: ledgerRpc(payer.address, payee, 10),
           beforeSign: async () => { throw Object.assign(new Error("crash"), { code: "CRASH" }); },
         }),
         (error) => error.code === "CRASH"
@@ -265,7 +295,11 @@ describe("controlled purchase", () => {
       assert.equal(fs.existsSync(path.join(second.home, "diagnostic-attempt.lock")), true);
       assert.equal(JSON.stringify(view(second.ledger, NOW).missions[PERMANENT_HOLD]), legacy);
       await assert.rejects(
-        () => runControlledPurchase(Object.assign(baseEnv(second.home, second.ledger, seller2.url, payee), arm(second.home, payer, payee)), { now: NOW }),
+        () => runControlledPurchase(baseEnv(second.home, second.ledger, seller2.url, payee, {
+          FOUNDRY_DIAGNOSTIC_LIVE: "yes",
+          FOUNDRY_DIAGNOSTIC_ACCOUNT_FILE: path.join(second.home, "buyer.json"),
+          FOUNDRY_DIAGNOSTIC_HANDOVER: path.join(second.home, "handover.json"),
+        }), { now: NOW }),
         (error) => error.code === "NO_RETRY"
       );
     } finally {
@@ -288,7 +322,7 @@ describe("controlled purchase", () => {
     try {
       const unproven = await runControlledPurchase(Object.assign(baseEnv(home, ledger, seller.url, payee), arm(home, payer, payee)), {
         now: NOW,
-        ledgerFacts: { validated: 10000, sequence: 10 },
+        ledgerFetch: ledgerRpc(payer.address, payee, 10),
         proofFetch: proof(payee, false),
       });
       assert.equal(unproven.settled, false);
@@ -310,14 +344,19 @@ describe("controlled purchase", () => {
     const proved = { payer: payer.address, settles: 0 };
     const seller2 = await startSeller({ payTo: payee, scheme: schemeFor(proved), boundary: "supplied_scheme" });
     try {
-      const result = await runControlledPurchase(Object.assign(baseEnv(fresh.home, fresh.ledger, seller2.url, payee), arm(fresh.home, payer, payee)), {
+      const result = await runControlledPurchase(Object.assign(baseEnv(fresh.home, fresh.ledger, seller2.url, payee, {
+        FOUNDRY_DIAGNOSTIC_SIMULATE: "yes",
+        FOUNDRY_DIAGNOSTIC_SIM_RPC: "http://127.0.0.1:9",
+      }), arm(fresh.home, payer, payee)), {
         now: NOW,
-        ledgerFacts: { validated: 10000, sequence: 11 },
+        ledgerFetch: ledgerRpc(payer.address, payee, 11),
         proofFetch: proof(payee, true),
       });
       assert.equal(result.settled, true);
       assert.equal(result.ledger_proof, "validated");
+      assert.equal(result.network_boundary, "testnet");
       assert.equal(result.official_settle, "supplied_scheme");
+      assert.equal(fs.readFileSync(path.join(__dirname, "controlled-purchase.js"), "utf8").includes("FOUNDRY_DIAGNOSTIC_SIMULATE"), false);
       assert.equal(result.vendor_signed, false);
       assert.equal(proved.settles, 1);
       const state = view(fresh.ledger, NOW);

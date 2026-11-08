@@ -76,8 +76,8 @@ FOUNDRY_DIAGNOSTIC_ACCOUNT_FILE=/secure/diag-buyer.json \
 FOUNDRY_DIAGNOSTIC_HANDOVER=/secure/diag-handover.json
 ```
 
-Do not set `FOUNDRY_MISSION_EXECUTE`. Do not set `FOUNDRY_DIAGNOSTIC_SIMULATE`. That variable is the test stand-in for the ledger socket.
+Do not set `FOUNDRY_MISSION_EXECUTE`. The command has no simulate switch. Ledger and settlement reads always use the approved Testnet RPC.
 
-The command reads the validated ledger, both account sequences, and both challenges before it takes the attempt lock. The authorized seller address has to equal the challenge `payTo`. One lock is kept after a crash or an ambiguous attempt file, and a second process cannot sign. The seller performs verify and settle. This command marks the budget spent only after a validated `tx` lookup matches the hash, `tesSUCCESS`, the payee, and the amount. A timeout or a failed proof leaves the new claim uncertain. The 1747-drop hold is not released.
+The command reads the validated ledger, both account sequences, and both challenges before it takes the attempt lock. The 1747 drops have to be the retained balance of `msn5b5c3223e5e88526`, not some other uncertain mission. The authorized seller address has to equal the challenge `payTo`. One lock is kept after a crash or an ambiguous attempt file, and a second process cannot sign. The seller performs verify and settle. This command marks the budget spent only after a validated `tx` lookup matches the hash, `tesSUCCESS`, the payee, and the amount. A timeout or a failed proof leaves the new claim uncertain. The 1747-drop hold is not released.
 
 Install the packed sources with `npm ci --ignore-scripts` from the pack root. The pack contains `package.json` and `package-lock.json`.

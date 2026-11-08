@@ -21,23 +21,72 @@ function assertOutside(file) {
   return resolved;
 }
 
-function modeOf(file) {
-  return fs.statSync(file).mode & 0o777;
+function assertAbsent(resolved) {
+  try {
+    fs.lstatSync(resolved);
+  } catch (error) {
+    if (error && error.code === "ENOENT") return;
+    throw coded("account file cannot be created", "AUTH");
+  }
+  throw coded("account file already exists", "AUTH");
+}
+
+function createExclusive(resolved, mode) {
+  assertAbsent(resolved);
+  fs.mkdirSync(path.dirname(resolved), { recursive: true });
+  const flags = fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW | fs.constants.O_WRONLY;
+  let fd;
+  try {
+    fd = fs.openSync(resolved, flags, mode);
+  } catch {
+    throw coded("account file cannot be created", "AUTH");
+  }
+  return fd;
+}
+
+function writeExclusive(file, text, mode) {
+  const resolved = assertOutside(file);
+  const fd = createExclusive(resolved, mode);
+  try {
+    fs.writeFileSync(fd, text);
+    fs.fchmodSync(fd, mode);
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile() || stat.nlink !== 1 || (stat.mode & 0o777) !== mode) {
+      throw coded("account file permissions are not private", "AUTH");
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+  return resolved;
+}
+
+function readNoFollow(file) {
+  const resolved = assertOutside(file);
+  let fd;
+  try {
+    fd = fs.openSync(resolved, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  } catch (error) {
+    if (error && error.code === "ENOENT") throw coded("diagnostic account file is missing", "AUTH");
+    throw coded("diagnostic account file cannot be read", "AUTH");
+  }
+  try {
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile() || stat.nlink !== 1) throw coded("diagnostic account file cannot be read", "AUTH");
+    return { resolved, stat, text: fs.readFileSync(fd, "utf8") };
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
 function writePrivateAccount(file, wallet) {
-  const resolved = assertOutside(file);
-  fs.mkdirSync(path.dirname(resolved), { recursive: true });
-  fs.writeFileSync(resolved, JSON.stringify({ address: wallet.address, seed: wallet.seed }), { mode: 0o600 });
-  if (modeOf(resolved) !== 0o600) throw coded("diagnostic account file must be mode 0600", "AUTH");
+  writeExclusive(file, JSON.stringify({ address: wallet.address, seed: wallet.seed }), 0o600);
   return { address: wallet.address };
 }
 
 function inspectAccount(file) {
-  const resolved = assertOutside(file);
-  if (!fs.existsSync(resolved)) throw coded("diagnostic account file is missing", "AUTH");
-  if (modeOf(resolved) !== 0o600) throw coded("diagnostic account file must be mode 0600", "AUTH");
-  const body = JSON.parse(fs.readFileSync(resolved, "utf8"));
+  const opened = readNoFollow(file);
+  if ((opened.stat.mode & 0o777) !== 0o600) throw coded("diagnostic account file must be mode 0600", "AUTH");
+  const body = JSON.parse(opened.text);
   let wallet;
   try {
     wallet = xrpl.Wallet.fromSeed(body.seed);
@@ -53,14 +102,12 @@ function writeHandover(file, handover) {
   const body = { network: "xrpl:1", buyer: handover.buyer, seller: handover.seller };
   const text = JSON.stringify(body);
   if (/seed|secret|sEd/i.test(text)) throw coded("handover is not public", "AUTH");
-  fs.mkdirSync(path.dirname(resolved), { recursive: true });
-  fs.writeFileSync(resolved, `${text}\n`, { mode: 0o644 });
+  writeExclusive(resolved, `${text}\n`, 0o644);
   return body;
 }
 
 function readHandover(file) {
-  const resolved = assertOutside(file);
-  const text = fs.readFileSync(resolved, "utf8");
+  const text = readNoFollow(file).text;
   if (/seed|secret|sEd/i.test(text)) throw coded("handover is not public", "AUTH");
   const body = JSON.parse(text);
   if (!body || body.network !== "xrpl:1" || typeof body.buyer !== "string" || typeof body.seller !== "string") {
