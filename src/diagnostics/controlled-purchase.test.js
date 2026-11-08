@@ -21,6 +21,7 @@ const {
   officialScheme,
   consumeAttempt,
   inspectUncertain,
+  ledgerEndpoint,
   reauthorizeAttempt,
   runControlledPurchase,
 } = require("./controlled-purchase");
@@ -74,6 +75,7 @@ function baseEnv(home, ledger, seller, payee, extra) {
     FOUNDRY_DIAGNOSTIC_PAYEE: payee,
     FOUNDRY_DIAGNOSTIC_PAYMENT_DROPS: "10",
     FOUNDRY_DIAGNOSTIC_FEE_DROPS: "10",
+    FOUNDRY_DIAGNOSTIC_XRPL_WSS: "wss://testnet.xrpl-labs.com",
   }, extra || {});
 }
 
@@ -318,8 +320,10 @@ describe("controlled purchase", () => {
   });
 
   it("settles only after the seller receipt and an independent validated proof", async () => {
-    const empty = officialScheme();
-    assert.throws(() => empty.options.clientFactory("wss://s1.ripple.com:51233"), (error) => error.code === "HOST");
+    const empty = officialScheme({ FOUNDRY_DIAGNOSTIC_XRPL_WSS: TESTNET_WS });
+    assert.equal(empty.options.wsUrlByNetwork["xrpl:1"], TESTNET_WS);
+    assert.throws(() => empty.options.clientFactory("wss://s.altnet.rippletest.net:51233"), (error) => error.code === "HOST");
+    assert.throws(() => empty.options.clientFactory("wss://s1.ripple.com:443"), (error) => error.code === "HOST");
     const client = empty.options.clientFactory(TESTNET_WS);
     assert.equal(client.connection.config.timeout, 8000);
     assert.equal(client.connection.config.connectionTimeout, 5000);
@@ -525,6 +529,37 @@ describe("controlled purchase", () => {
       })}\n`);
       await assert.rejects(async () => reauthorizeAttempt(base, { now: NOV9 }), (error) => error.code === "CAP");
       assert.equal(fs.readFileSync(path.join(home, "diagnostic-attempt.jsonl"), "utf8").trim().split("\n").length, 3);
+    } finally {
+      await seller.close();
+    }
+  });
+
+  it("checks the port-443 socket before signing and refuses mainnet or port 51233", async () => {
+    assert.throws(() => officialScheme({ FOUNDRY_DIAGNOSTIC_XRPL_WSS: "wss://s.altnet.rippletest.net:51233" }), (error) => error.code === "HOST");
+    assert.throws(() => officialScheme({ FOUNDRY_DIAGNOSTIC_XRPL_WSS: "wss://s1.ripple.com" }), (error) => error.code === "MAINNET");
+    assert.equal(ledgerEndpoint({ FOUNDRY_DIAGNOSTIC_XRPL_WSS: "wss://testnet.honeycluster.io" }), "https://testnet.honeycluster.io");
+    assert.equal(ledgerEndpoint({
+      FOUNDRY_DIAGNOSTIC_XRPL_WSS: "wss://testnet.xrpl-labs.com",
+      FOUNDRY_MISSION_RECONCILE_RPC: "https://testnet.honeycluster.io",
+    }), "https://testnet.honeycluster.io");
+    const { home, ledger } = tmpHome();
+    control(ledger, { action: "activate", confirm: config.ACTIVATE_PHRASE, token: TOKEN, now: NOW }, { token: TOKEN });
+    seedLegacy(ledger);
+    const payer = xrpl.Wallet.generate();
+    const payee = xrpl.Wallet.generate().address;
+    const seller = await startSeller({ payTo: payee, scheme: schemeFor({}) });
+    try {
+      await assert.rejects(
+        () => runControlledPurchase(Object.assign(baseEnv(home, ledger, seller.url, payee, {
+          FOUNDRY_DIAGNOSTIC_XRPL_WSS: "wss://testnet.honeycluster.io",
+        }), arm(home, payer, payee)), {
+          now: NOW,
+          ledgerFetch: async () => new Response(JSON.stringify({ result: { info: { network_id: 0, validated_ledger: { seq: 1 } } } }), { status: 200 }),
+        }),
+        (error) => error.code === "MAINNET"
+      );
+      assert.equal(fs.existsSync(path.join(home, "diagnostic-attempt.lock")), false);
+      assert.equal(fs.existsSync(path.join(home, "diagnostic-attempt.jsonl")), false);
     } finally {
       await seller.close();
     }

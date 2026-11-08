@@ -23,7 +23,7 @@ const { chicagoDay } = require("../missions/clock");
 const guard = require("../missions/runtime-guard");
 const { canonicalReconcileRpc, boundReconcileFetch } = require("../missions/reconcile-endpoint");
 const { buildSignaturePayload } = require("../x402-outbound-guard");
-const { SANCTIONS_PAYEE, BLOCKED_PORTS, officialScheme } = require("./controlled-seller");
+const { SANCTIONS_PAYEE, BLOCKED_PORTS, diagnosticWs, officialScheme } = require("./controlled-seller");
 const { inspectAccount, readHandover } = require("./account-file");
 
 const PHRASE = "DIAGNOSTIC-ONE-XRPL1-PAYMENT";
@@ -305,7 +305,19 @@ const SELLER_STAGES = new Set([
 const SETTLE_LABELS = new Set(["not_run", "not_proven", "exact_xrpl_scheme", "supplied_scheme"]);
 
 function ledgerEndpoint(env) {
-  return canonicalReconcileRpc(env && env.FOUNDRY_MISSION_RECONCILE_RPC);
+  if (env && env.FOUNDRY_MISSION_RECONCILE_RPC) return canonicalReconcileRpc(env.FOUNDRY_MISSION_RECONCILE_RPC);
+  if (env && env.FOUNDRY_DIAGNOSTIC_XRPL_WSS) return canonicalReconcileRpc(diagnosticWs(env.FOUNDRY_DIAGNOSTIC_XRPL_WSS));
+  return canonicalReconcileRpc(undefined);
+}
+
+async function preflightSocket(env, fetchImpl) {
+  const ws = diagnosticWs(env && env.FOUNDRY_DIAGNOSTIC_XRPL_WSS);
+  const endpoint = canonicalReconcileRpc(ws);
+  const info = await rpc(endpoint, "server_info", {}, fetchImpl);
+  const validated = info && info.info && info.info.validated_ledger && info.info.validated_ledger.seq;
+  if (!info || !info.info || info.info.network_id !== 1) throw coded("refusing a ledger that is not xrpl:1", "MAINNET");
+  if (!Number.isInteger(validated) || validated <= 0) throw coded("validated ledger is missing", "LEDGER");
+  return { websocket: ws, endpoint, validated };
 }
 
 async function rpc(endpoint, method, params, fetchImpl) {
@@ -452,10 +464,12 @@ async function runControlledPurchase(env, opts) {
   }
   assertAccounts(wallet.address, plan.payee, plan.state);
   const fetchImpl = options.fetch || globalThis.fetch;
-  const endpoint = ledgerEndpoint(env);
+  const ledgerFetch = options.ledgerFetch || fetchImpl;
+  const socket = await preflightSocket(env, ledgerFetch);
+  const endpoint = socket.endpoint;
   await readChallenge(`${plan.seller}?shape=vendor`, plan.payment, plan.payee, "vendor", fetchImpl);
   const accept = await readChallenge(`${plan.seller}?shape=official`, plan.payment, plan.payee, "official", fetchImpl);
-  const facts = await readFacts(endpoint, wallet.address, plan.payee, plan.payment, plan.fee, options.ledgerFetch || fetchImpl);
+  const facts = await readFacts(endpoint, wallet.address, plan.payee, plan.payment, plan.fee, ledgerFetch);
   const consumed = consumeAttempt(plan.home, now);
   let missionId = null;
   try {

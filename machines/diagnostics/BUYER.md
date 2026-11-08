@@ -45,6 +45,7 @@ Both accounts must already exist on Testnet. A 10-drop payment cannot create the
 The mission worker owns `127.0.0.1:8794`. This seller uses `8795` and refuses `8787`, `8788`, `8792`, `8793`, and `8794`. It does not stop or replace the worker.
 
 ```sh
+FOUNDRY_DIAGNOSTIC_XRPL_WSS=wss://testnet.xrpl-labs.com \
 FOUNDRY_DIAGNOSTIC_PAYEE=rSeller... node src/diagnostics/controlled-seller.js
 ```
 
@@ -72,11 +73,18 @@ Same command, with the private files and:
 
 ```sh
 FOUNDRY_DIAGNOSTIC_LIVE=yes \
+FOUNDRY_DIAGNOSTIC_XRPL_WSS=wss://testnet.xrpl-labs.com \
 FOUNDRY_DIAGNOSTIC_ACCOUNT_FILE=/secure/diag-buyer.json \
 FOUNDRY_DIAGNOSTIC_HANDOVER=/secure/diag-handover.json
 ```
 
-Do not set `FOUNDRY_MISSION_EXECUTE`. The command has no simulate switch. Ledger and settlement reads always use the approved Testnet RPC.
+Do not set `FOUNDRY_MISSION_EXECUTE`. The command has no simulate switch. Set the verifier socket to a documented port-443 Testnet server before the live purchase. `wss://s.altnet.rippletest.net:51233` is refused.
+
+```sh
+FOUNDRY_DIAGNOSTIC_XRPL_WSS=wss://testnet.xrpl-labs.com
+```
+
+`wss://testnet.honeycluster.io` is the other allowed socket. The command reads `server_info` for that host and requires network id 1 and a validated ledger before it signs. The same host, or `FOUNDRY_MISSION_RECONCILE_RPC=https://testnet.honeycluster.io`, is what lookup and settlement proof use for the 20-drop claim.
 
 The command reads the validated ledger, both account sequences, and both challenges before it takes the attempt lock. The 1747 drops have to be the retained balance of `msn5b5c3223e5e88526`, not some other uncertain mission. The authorized seller address has to equal the challenge `payTo`. One lock is kept after a crash or an ambiguous attempt file, and a second process cannot sign. The seller performs verify and settle. This command marks the budget spent only after a validated `tx` lookup matches the hash, `tesSUCCESS`, the payee, and the amount. A timeout or a failed proof leaves the new claim uncertain and records only an allowlisted reason code. The 1747-drop hold is not released.
 

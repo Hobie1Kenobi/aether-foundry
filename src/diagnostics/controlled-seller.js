@@ -15,7 +15,13 @@ const { assertLoopback } = require("../missions/runtime-guard");
 const { boundedSellerReason, publicFacilitatorDetail } = require("../missions/service-result");
 const { challengeAccept } = require("./buyer-diagnostic");
 
-const TESTNET_WS = "wss://s.altnet.rippletest.net:51233";
+const TESTNET_WS = "wss://testnet.xrpl-labs.com";
+const HONEYCLUSTER_WS = "wss://testnet.honeycluster.io";
+const SOCKETS = new Map([
+  ["testnet.xrpl-labs.com", TESTNET_WS],
+  ["testnet.honeycluster.io", HONEYCLUSTER_WS],
+]);
+const MAINNET_HOSTS = new Set(["s1.ripple.com", "s2.ripple.com", "xrplcluster.com"]);
 const SELLER_TIMEOUT_MS = 15000;
 
 const SANCTIONS_PAYEE = "rDbkEYdqLHcnWAHAVFwhH6KM6puCPbXNgs";
@@ -36,10 +42,31 @@ function assertDiagnosticPort(raw) {
   return port;
 }
 
-function officialScheme() {
+function diagnosticWs(raw) {
+  let url;
+  try {
+    url = new URL(String(raw || "").trim());
+  } catch {
+    throw coded("diagnostic XRPL websocket is not allowed", "HOST");
+  }
+  if (url.protocol !== "wss:" || url.username || url.password || url.search || url.hash) {
+    throw coded("diagnostic XRPL websocket is not allowed", "HOST");
+  }
+  if (url.pathname !== "/" && url.pathname !== "") throw coded("diagnostic XRPL websocket is not allowed", "HOST");
+  if (url.port && url.port !== "443") throw coded("diagnostic XRPL websocket must use port 443", "HOST");
+  const host = url.hostname.toLowerCase();
+  if (MAINNET_HOSTS.has(host)) throw coded("refusing mainnet", "MAINNET");
+  const selected = SOCKETS.get(host);
+  if (!selected) throw coded("diagnostic XRPL websocket is not an official port-443 testnet server", "HOST");
+  return selected;
+}
+
+function officialScheme(env) {
+  const ws = diagnosticWs(env && env.FOUNDRY_DIAGNOSTIC_XRPL_WSS);
   return new ExactXrplScheme({
+    wsUrlByNetwork: { "xrpl:1": ws },
     clientFactory(url) {
-      if (url !== TESTNET_WS) {
+      if (url !== ws) {
         const error = new Error("refusing an unapproved XRPL socket");
         error.code = "HOST";
         throw error;
@@ -156,7 +183,7 @@ function startSeller(options) {
   const amount = opts.amount || "10";
   if (!/^[1-9][0-9]*$/.test(amount) || BigInt(amount) > 1000000n) throw coded("controlled price is outside the mission cap", "CAP");
   const challenges = challengesFor(payTo, amount, opts.invoiceId || "diag-controlled-1");
-  const scheme = opts.scheme || officialScheme();
+  const scheme = opts.scheme || officialScheme(opts.env || {});
   const boundary = opts.boundary || (opts.scheme ? "supplied_scheme" : "testnet");
   const server = http.createServer((req, res) => {
     const url = new URL(req.url || "/", "http://127.0.0.1");
@@ -232,7 +259,7 @@ function startSeller(options) {
 if (require.main === module) {
   try {
     const sellerPort = assertDiagnosticPort(process.env.FOUNDRY_DIAGNOSTIC_PORT || DIAGNOSTIC_PORT);
-    startSeller({ payTo: process.env.FOUNDRY_DIAGNOSTIC_PAYEE, port: sellerPort }).then((seller) => {
+    startSeller({ payTo: process.env.FOUNDRY_DIAGNOSTIC_PAYEE, port: sellerPort, env: process.env }).then((seller) => {
       process.stdout.write(`${JSON.stringify({ url: seller.url, pay_to: seller.payTo, port: seller.port })}\n`);
     }).catch((error) => {
       process.stderr.write(`${error.code || "DIAGNOSTIC"}\n`);
@@ -249,6 +276,8 @@ module.exports = {
   DIAGNOSTIC_PORT,
   BLOCKED_PORTS,
   TESTNET_WS,
+  HONEYCLUSTER_WS,
+  diagnosticWs,
   assertDiagnosticPort,
   officialScheme,
   startSeller,
