@@ -14,21 +14,16 @@ function uncertain(message) {
   throw coded(message, "UNCERTAIN");
 }
 
-function scaled(value, places) {
-  const width = places === 15 ? 15 : 6;
-  const pattern = width === 15
-    ? /^(?:0|[1-9]\d*)(?:\.\d{1,15})?$/
-    : /^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/;
-  if (typeof value !== "string" || !pattern.test(value)) return null;
+function scaled(value) {
+  if (typeof value !== "string" || !/^(?:0|[1-9]\d*)(?:\.\d{1,15})?$/.test(value)) return null;
   const [whole, frac = ""] = value.split(".");
-  const unit = 10n ** BigInt(width);
-  return BigInt(whole) * unit + BigInt((frac + "0".repeat(width)).slice(0, width));
+  return BigInt(whole) * (10n ** 15n) + BigInt((frac + "0".repeat(15)).slice(0, 15));
 }
 
-function signedScaled(value, places) {
+function signedScaled(value) {
   if (typeof value !== "string") return null;
   const negative = value.startsWith("-");
-  const absolute = scaled(negative ? value.slice(1) : value, places);
+  const absolute = scaled(negative ? value.slice(1) : value);
   if (absolute == null) return null;
   return negative ? -absolute : absolute;
 }
@@ -106,9 +101,8 @@ function lineDelta(meta, currency, holder, issuer) {
     const code = fields.HighLimit.currency || fields.LowLimit.currency;
     if (code !== currency || !((high === issuer && low === holder) || (high === holder && low === issuer))) continue;
     const sign = holder === low && issuer === high ? 1n : -1n;
-    const places = currency === bounds.AETH ? 6 : 15;
-    const after = deleted ? 0n : signedScaled(finalFields.Balance, places);
-    const before = created ? 0n : signedScaled(previousFields.Balance, places);
+    const after = deleted ? 0n : signedScaled(finalFields.Balance);
+    const before = created ? 0n : signedScaled(previousFields.Balance);
     if (after == null || before == null) uncertain("token balance delta is malformed");
     delta += sign * (after - before);
     seen = true;
@@ -152,7 +146,7 @@ function depositOutcome(response, mission) {
   const fee = BigInt(tx.Fee);
   if (xrpDelta(proof.meta) !== -(xrpIn + fee)) uncertain("deposit XRP delta does not match the amount and fee");
   const aeth = lineDelta(proof.meta, bounds.AETH, bounds.ACCOUNT, bounds.ISSUER);
-  const expectedAeth = tx.Amount2 ? signedScaled(tx.Amount2.value, 6) : null;
+  const expectedAeth = tx.Amount2 ? signedScaled(tx.Amount2.value) : null;
   if (expectedAeth == null || aeth !== -expectedAeth) uncertain("deposit AETH delta does not match Amount2");
   const lp = lineDelta(proof.meta, mission.lp_currency, bounds.ACCOUNT, anchors.AMM);
   if (lp <= 0n) uncertain("deposit did not receive LP tokens");

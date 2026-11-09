@@ -54,6 +54,8 @@ function drops(value) {
 }
 
 function iou(value) {
+  // Offers this process signs stay at 6 fractional digits. Live AMM, book, and
+  // balance amounts are read at XRPL precision in market.js and the proof readers.
   if (!value || typeof value !== "object") return null;
   if (value.currency !== bounds.AETH || value.issuer !== bounds.ISSUER) return null;
   if (typeof value.value !== "string" || !/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,6})?$/.test(value.value)) return null;

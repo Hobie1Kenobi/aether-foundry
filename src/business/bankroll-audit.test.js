@@ -171,7 +171,7 @@ describe("bankroll audit", () => {
     const amm = {
       account: anchors.AMM,
       amount: "1000",
-      amount2: { currency: anchors.AETH_HEX, issuer: W0, value: "1.0000001" },
+      amount2: { currency: anchors.AETH_HEX, issuer: W0, value: "1.0000000000000001" },
       lp_token: { currency: LP, issuer: anchors.AMM, value: "1" },
       trading_fee: 500,
     };
@@ -354,6 +354,21 @@ describe("bankroll audit", () => {
     bankroll.recover(ledger, 1000000n, 0n, NOW);
     const after = view(ledger, NOW).missions["bankroll-lp-high-water"].lp_high_water_drops;
     assert.equal(BigInt(after), BigInt(marked) - 1000000n);
+    const live = market.parsePool({
+      result: {
+        validated: true,
+        ledger_index: 10,
+        amm: {
+          account: anchors.AMM,
+          amount: "51783000",
+          amount2: { currency: anchors.AETH_HEX, issuer: W0, value: "4923.542951524584" },
+          lp_token: { currency: LP, issuer: anchors.AMM, value: "504886.59" },
+          trading_fee: 500,
+        },
+      },
+    }, { result: { validated: true, account: W1, marker: null, lines: [{ account: anchors.AMM, currency: LP, balance: "504886.59" }] } });
+    assert.equal(live.aeth.value, "4923.542951524584");
+    assert.equal(live.sole, true);
     const tx = {
       TransactionType: "AMMWithdraw",
       Account: W1,
@@ -371,5 +386,43 @@ describe("bankroll audit", () => {
     await signer.sign(tx, expected, async () => ({ tx_blob: xrpl.encode(Object.assign({}, tx, { SigningPubKey: `ED${"AA".repeat(32)}`, TxnSignature: "00".repeat(64) })) }));
     assert.equal(health({}).max_locked_enforced, false);
     assert.equal(health({}).bankroll_drops, "100000000");
+  });
+
+  it("reads the live 12-decimal AETH pool and does not fail valuation", async () => {
+    const ledger = home();
+    const journal = fs.mkdtempSync(path.join(os.tmpdir(), "audit-live-"));
+    const state = fresh({
+      balance: "49022152",
+      ownerCount: 8,
+      reserveBase: 1,
+      reserveInc: 0.2,
+      offers: [
+        { seq: 4, taker_gets: "500000", taker_pays: AETH },
+        { seq: 5, taker_gets: "500000", taker_pays: AETH },
+        { seq: 6, taker_gets: "500000", taker_pays: AETH },
+        { seq: 7, taker_gets: "775000", taker_pays: AETH },
+      ],
+      lines: [{ account: anchors.AMM, currency: LP, balance: "504886.59" }],
+      book: [],
+      amm: {
+        account: anchors.AMM,
+        amount: "51783000",
+        amount2: { currency: anchors.AETH_HEX, issuer: W0, value: "4923.542951524584" },
+        lp_token: { currency: LP, issuer: anchors.AMM, value: "504886.59" },
+        trading_fee: 500,
+      },
+    });
+    const row = await decide(env(), { now: NOW, ledger, journal }, clients(state));
+    assert.notEqual(row.error_code, "VALUATION");
+    assert.equal(row.decision, "research");
+    assert.equal(row.sole_lp, true);
+    assert.equal(row.lp_xrp_drops, "51783000");
+    assert.equal(row.offer_lock_drops, "2275000");
+    assert.equal(row.base_reserve_drops, "1000000");
+    assert.equal(row.reserve_drops, "1600000");
+    assert.equal(row.bankroll_used_drops, "56658000");
+    assert.equal(row.bankroll_remaining_drops, "0");
+    assert.equal(row.traded, false);
+    assert.equal(state.signs, 0);
   });
 });

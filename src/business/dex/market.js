@@ -26,7 +26,6 @@ function xrpDrops(value) {
 
 function isAeth(value) {
   if (!value || value.currency !== bounds.AETH || value.issuer !== bounds.ISSUER) return false;
-  if (typeof value.value !== "string" || !/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,6})?$/.test(value.value)) return false;
   return scaled(value.value) != null;
 }
 
