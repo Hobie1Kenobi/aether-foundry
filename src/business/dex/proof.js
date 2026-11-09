@@ -298,9 +298,71 @@ async function proveAbsence(clients, offer) {
   }, LABS);
 }
 
+function rowValidated(entry) {
+  const tx = entry && entry.tx && typeof entry.tx === "object" ? entry.tx : entry;
+  return validatedTx({
+    result: {
+      validated: entry && entry.validated === true,
+      hash: (entry && entry.hash) || (tx && tx.hash),
+      ledger_index: (entry && entry.ledger_index) || (tx && tx.ledger_index),
+      meta: entry && (entry.meta || entry.metaData),
+      tx_json: tx,
+    },
+  });
+}
+
+function consumeOutcome(entry, offer) {
+  const parsed = rowValidated(entry);
+  if (parsed.hash === offer.signed_hash || parsed.hash === offer.cancel_hash) return null;
+  if (parsed.tx && parsed.tx.Account === bounds.ACCOUNT && parsed.tx.TransactionType === "OfferCreate") return null;
+  const hits = [];
+  for (const node of parsed.meta.AffectedNodes) {
+    const deleted = node.DeletedNode;
+    const modified = node.ModifiedNode;
+    const body = deleted || modified;
+    if (!body || body.LedgerEntryType !== "Offer") continue;
+    const finalFields = body.FinalFields || {};
+    const previous = body.PreviousFields || {};
+    const account = finalFields.Account || previous.Account;
+    const sequence = finalFields.Sequence || previous.Sequence;
+    if (account !== bounds.ACCOUNT || sequence !== offer.sequence) continue;
+    hits.push({ deleted: Boolean(deleted), finalFields, previous });
+  }
+  if (hits.length === 0) return null;
+  if (hits.length !== 1) uncertain("more than one metadata node touches this offer");
+  const hit = hits[0];
+  const beforeXrp = dropsOf(hit.previous.TakerGets != null ? hit.previous.TakerGets : hit.finalFields.TakerGets);
+  const beforeAeth = aethAmount(hit.previous.TakerPays != null ? hit.previous.TakerPays : hit.finalFields.TakerPays);
+  if (beforeXrp == null || beforeAeth == null) uncertain("consumed offer is not XRP for AETH issued by W0");
+  let filledXrp = beforeXrp;
+  let filledAeth = beforeAeth;
+  let remainingXrp = 0n;
+  let open = false;
+  if (!hit.deleted) {
+    const afterXrp = dropsOf(hit.finalFields.TakerGets);
+    const afterAeth = aethAmount(hit.finalFields.TakerPays);
+    if (afterXrp == null || afterAeth == null || afterXrp > beforeXrp || afterAeth > beforeAeth) {
+      uncertain("consumed remainder is not XRP for AETH issued by W0");
+    }
+    filledXrp = beforeXrp - afterXrp;
+    filledAeth = beforeAeth - afterAeth;
+    remainingXrp = afterXrp;
+    open = true;
+  }
+  const limit = storedSides(offer);
+  const root = xrpSpent(parsed.meta);
+  if (root.spent !== filledXrp) uncertain("consuming trade XRP delta does not match the offer");
+  if (aethDelta(parsed.meta) !== filledAeth) uncertain("consuming trade AETH delta does not match the offer");
+  if (!open && root.ownersAfter !== root.ownersBefore - 1) uncertain("owner count did not release the consumed offer");
+  if (open && root.ownersAfter !== root.ownersBefore) uncertain("owner count changed during a partial consume");
+  withinLimit(filledXrp, filledAeth, limit.xrp, limit.aeth);
+  return { hash: parsed.hash, open, filled: filledXrp, remaining: remainingXrp };
+}
+
 module.exports = {
   createOutcome,
   cancelOutcome,
+  consumeOutcome,
   listedOffers,
   containsOffer,
   proveAbsence,

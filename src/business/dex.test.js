@@ -12,6 +12,7 @@ const { control, view } = require("../missions/engine");
 const policy = require("../missions/policy");
 const runtimePolicy = require("../runtime/policy");
 const bounds = require("./dex/bounds");
+const { health, preflight, readPrivateW1, WS } = require("./dex/live");
 const { createOutcome } = require("./dex/proof");
 const { LABS } = require("../missions/reconcile-endpoint");
 const { tick } = require("./worker");
@@ -113,6 +114,10 @@ function clients(state) {
         }
         if (req.command === "fee") return { result: { drops: { open_ledger_fee: state.fee } } };
         if (req.command === "tx") return state.lookup ? state.lookup(req) : { result: { error: "txnNotFound" } };
+        if (req.command === "account_tx") {
+          if (!state.accountTx) throw new Error("account_tx");
+          return state.accountTx(req);
+        }
         if (req.command === "account_offers") {
           return { result: {
             validated: true,
@@ -565,5 +570,139 @@ describe("dex adapter", () => {
     assert.equal(opened.execution_ready, false);
     assert.equal(endpoints.every((endpoint) => endpoint === LABS), true);
     assert.equal(state.submits, 1);
+  });
+
+  it("keeps the real W1 adapter dormant and closes a mocked socket", async () => {
+    const ledger = home();
+    const file = path.join(os.tmpdir(), `w1-dex-${process.pid}.json`);
+    const link = `${file}.link`;
+    fs.writeFileSync(file, JSON.stringify({ address: anchors.WALLETS.W1.address, seed: "fixture-not-a-seed" }), { mode: 0o600 });
+    try {
+      assert.equal(readPrivateW1(file).address, anchors.WALLETS.W1.address);
+      fs.chmodSync(file, 0o644);
+      assert.throws(() => readPrivateW1(file), (error) => error.code === "AUTH");
+      fs.chmodSync(file, 0o600);
+      fs.symlinkSync(file, link);
+      assert.throws(() => readPrivateW1(link), (error) => error.code === "AUTH");
+      assert.throws(() => readPrivateW1(path.join(process.cwd(), "w1.json")), (error) => error.code === "ISOLATED");
+      const dormant = health({ FOUNDRY_W1_DEX_ACCOUNT_FILE: file });
+      assert.equal(dormant.dormant, true);
+      assert.equal(dormant.live_proof, false);
+      assert.equal(dormant.account, anchors.WALLETS.W1.address);
+      assert.equal(JSON.stringify(dormant).includes("fixture-not-a-seed"), false);
+      let reads = 0;
+      const idle = await tick({}, {
+        now: NOW,
+        ledger,
+        idempotency_key: "w1-offer-live",
+        taker_gets: "1000",
+        taker_pays: AETH,
+        deps: { readAccount: () => { reads += 1; } },
+      }, clients(world()));
+      assert.equal(idle.activated, false);
+      assert.equal(reads, 0);
+      const state = world();
+      const calls = { urls: [], closed: 0, signatures: 0, opens: 0 };
+      const deps = {
+        readAccount: async () => ({ address: anchors.WALLETS.W1.address, seed: "fixture-not-a-seed" }),
+        openWallet: (seed) => {
+          calls.opens += 1;
+          const wallet = {
+            address: anchors.WALLETS.W1.address,
+            sign(tx) {
+              calls.signatures += 1;
+              const blob = xrpl.encode(Object.assign({}, tx, { SigningPubKey: `ED${"AA".repeat(32)}`, TxnSignature: "00".repeat(64) }));
+              return { tx_blob: blob, hash: xrpl.hashes.hashSignedTx(blob) };
+            },
+          };
+          assert.equal(seed, "fixture-not-a-seed");
+          return wallet;
+        },
+        connect: async (url) => {
+          calls.urls.push(url);
+          const injected = clients(state);
+          return {
+            request: (body) => injected.ledger.request(body),
+            submit: (blob) => injected.submit(blob),
+            disconnect: async () => { calls.closed += 1; },
+          };
+        },
+      };
+      const liveEnv = roleEnv({
+        FOUNDRY_W1_DEX_LIVE: "yes",
+        FOUNDRY_W1_DEX_WS: WS,
+        FOUNDRY_W1_DEX_ACCOUNT_FILE: file,
+      });
+      const checked = await preflight(liveEnv, deps);
+      assert.equal(checked.address_match, true);
+      assert.equal(checked.connected, false);
+      assert.equal(JSON.stringify(checked).includes("fixture-not-a-seed"), false);
+      const opened = await tick(liveEnv, {
+        now: NOW,
+        ledger,
+        idempotency_key: "w1-offer-live",
+        taker_gets: "1000",
+        taker_pays: AETH,
+        deps,
+      });
+      assert.equal(opened.signed, true);
+      assert.equal(opened.live_proof, false);
+      assert.deepEqual(calls.urls, [WS]);
+      assert.equal(calls.closed, 1);
+      assert.equal(calls.signatures, 1);
+      const again = await tick(liveEnv, {
+        now: NOW,
+        ledger,
+        idempotency_key: "w1-offer-live",
+        taker_gets: "1000",
+        taker_pays: AETH,
+        deps,
+      });
+      assert.equal(again.replay, true);
+      assert.equal(calls.signatures, 1);
+      assert.equal(calls.closed, 2);
+      state.networkId = 0;
+      await assert.rejects(() => tick(liveEnv, {
+        now: NOW,
+        ledger,
+        idempotency_key: "w1-offer-live-mainnet",
+        taker_gets: "1000",
+        taker_pays: AETH,
+        deps,
+      }), (error) => error.code === "MAINNET");
+      assert.equal(calls.signatures, 1);
+    } finally {
+      fs.rmSync(link, { force: true });
+      fs.rmSync(file, { force: true });
+    }
+  });
+
+  it("reconciles one later consuming trade from validated history", async () => {
+    const ledger = home();
+    const state = world();
+    const opened = await tick(roleEnv(), { now: NOW, ledger, idempotency_key: "w1-offer-take", taker_gets: "1000", taker_pays: AETH }, clients(state));
+    state.lookup = () => createResult(opened.tx, opened.signed_hash, "1000", AETH);
+    state.offers = [{ seq: 10, taker_gets: "1000", taker_pays: AETH }];
+    const resting = await tick(roleEnv(), { now: NOW, ledger, action: "reconcile", mission_id: opened.id }, clients(state));
+    assert.equal(resting.status, "dex_open");
+    state.seq = 10010;
+    state.accountTx = () => ({ result: { validated: true, marker: "next", transactions: [] } });
+    await assert.rejects(() => tick(roleEnv(), { now: NOW, ledger, action: "consume", mission_id: opened.id }, clients(state)), (error) => error.code === "UNCERTAIN");
+    assert.equal(view(ledger, NOW).missions[opened.id].outstanding_drops, "201000");
+    const taker = xrpl.Wallet.generate().address;
+    state.accountTx = () => ({ result: { validated: true, transactions: [{
+      validated: true,
+      hash: "EE".repeat(32),
+      ledger_index: 10005,
+      tx: { Account: taker, TransactionType: "OfferCreate", hash: "EE".repeat(32) },
+      meta: { TransactionResult: "tesSUCCESS", AffectedNodes: [
+        { DeletedNode: { LedgerEntryType: "Offer", FinalFields: { Account: anchors.WALLETS.W1.address, Sequence: 10, TakerGets: "1000", TakerPays: AETH }, PreviousFields: { Account: anchors.WALLETS.W1.address, Sequence: 10, TakerGets: "1000", TakerPays: AETH } } },
+        { ModifiedNode: { LedgerEntryType: "AccountRoot", FinalFields: { Account: anchors.WALLETS.W1.address, Balance: "19998990", OwnerCount: 0 }, PreviousFields: { Account: anchors.WALLETS.W1.address, Balance: "19999990", OwnerCount: 1 } } },
+        { ModifiedNode: { LedgerEntryType: "RippleState", FinalFields: ripple("1"), PreviousFields: ripple("0") } },
+      ] },
+    }] } });
+    const taken = await tick(roleEnv(), { now: NOW, ledger, action: "consume", mission_id: opened.id }, clients(state));
+    assert.equal(taken.status, "dex_filled");
+    assert.equal(taken.outstanding_drops, "0");
   });
 });

@@ -61,9 +61,10 @@ function iou(value) {
 }
 
 function assertClients(clients) {
-  if (!clients || clients.mode !== "injected" || clients.url || clients.ws || clients.socket) {
-    throw coded("refusing a live socket", "LIVE");
-  }
+  if (!clients || clients.seed || clients.secret || clients.privateKey) throw coded("refusing caller key material", "SECRET");
+  const live = clients.mode === "live" && clients.bound === "w1-dex";
+  const injected = clients.mode === "injected" && !clients.url && !clients.ws && !clients.socket;
+  if (!live && !injected) throw coded("refusing an unbound socket", "LIVE");
   if (!clients.ledger || typeof clients.ledger.request !== "function") throw coded("ledger client is not configured", "NO_CLIENT");
   if (typeof clients.sign !== "function" || typeof clients.submit !== "function") throw coded("sign or submit client is not configured", "NO_CLIENT");
 }
@@ -332,6 +333,7 @@ function applyCreate(mission, outcome, now) {
     outstanding_drops: outstandingDrops.toString(),
     proof_hash: outcome.hash,
     create_seen: true,
+    create_ledger: outcome.ledgerIndex,
     hold: outstandingDrops === 0n ? "released" : "uncertain",
     complete: false,
     updated_at: now,
@@ -576,9 +578,74 @@ function publish(mission, extra) {
   }, extra || {});
 }
 
+async function consume(dir, request, clients) {
+  assertClients(clients);
+  const body = request || {};
+  for (const key of ["filled", "cancelled", "expired", "validated_hash", "open_offers"]) {
+    if (body[key] != null) throw coded("reconciliation does not accept a caller observation", "CALLER");
+  }
+  const now = body.now || new Date().toISOString();
+  const mission = view(dir, now).missions[body.mission_id];
+  if (!mission || mission.kind !== bounds.KIND) throw coded("offer mission not found", "OFFER");
+  if (mission.status !== "dex_open" && mission.status !== "dex_partial") throw coded("offer is not reconciled open", "OFFER");
+  if (!Number.isInteger(mission.create_ledger) || mission.create_ledger <= 0) throw coded("create ledger is missing", "PROOF");
+  const server = await clients.ledger.request({ command: "server_info" });
+  const info = server && server.result && server.result.info;
+  const validated = info && info.validated_ledger && info.validated_ledger.seq;
+  if (!info || Number(info.network_id) !== 1 || !Number.isInteger(validated) || validated < mission.create_ledger) {
+    throw coded("validated testnet ledger is missing", "LEDGER");
+  }
+  const page = await clients.ledger.request({
+    command: "account_tx",
+    account: bounds.ACCOUNT,
+    ledger_index_min: mission.create_ledger,
+    ledger_index_max: validated,
+    binary: false,
+    forward: true,
+  });
+  const result = page && page.result;
+  if (!result || result.validated !== true || result.marker != null || !Array.isArray(result.transactions)) {
+    throw coded("account history page is incomplete", "UNCERTAIN");
+  }
+  const hits = [];
+  for (const entry of result.transactions) {
+    let outcome;
+    try {
+      outcome = proof.consumeOutcome(entry, mission);
+    } catch (error) {
+      const next = Object.assign({}, mission, { status: "dex_unresolved", proof_reason: error.code || "UNCERTAIN", updated_at: now });
+      save(dir, next);
+      return publish(next, { replay: false });
+    }
+    if (outcome) hits.push(outcome);
+  }
+  if (hits.length === 0) return publish(mission, { replay: true });
+  if (hits.length !== 1) throw coded("more than one consuming trade is unresolved", "UNCERTAIN");
+  const outcome = hits[0];
+  const filled = outcome.filled;
+  const reserve = BigInt(mission.reserve_drops);
+  const nextOutstanding = outcome.open ? outcome.remaining + reserve : 0n;
+  const previous = outstanding(mission);
+  const release = previous - filled - nextOutstanding;
+  if (release < 0n) throw coded("consuming trade does not fit the reserved remainder", "UNCERTAIN");
+  const next = Object.assign({}, mission, {
+    status: outcome.open ? "dex_partial" : "dex_filled",
+    filled_drops: (BigInt(mission.filled_drops || "0") + filled).toString(),
+    remaining_drops: outcome.remaining.toString(),
+    outstanding_drops: nextOutstanding.toString(),
+    proof_hash: outcome.hash,
+    hold: nextOutstanding === 0n ? "released" : "uncertain",
+    foreign_revenue_drops: "0",
+    updated_at: now,
+  });
+  move(dir, next, filled, release);
+  return publish(next, { replay: false });
+}
+
 module.exports = {
   place,
   reconcile,
   cancel,
+  consume,
   publish,
 };
