@@ -87,6 +87,7 @@ function packDex(options) {
     "--owner=0",
     "--group=0",
     "--numeric-owner",
+    "--pax-option=delete=atime,delete=ctime",
     "-cf",
     tarPath,
     "-C",
