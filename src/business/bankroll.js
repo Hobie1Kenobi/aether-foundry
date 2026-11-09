@@ -63,10 +63,11 @@ function aethBid(observed) {
   if (pool.balance > 0n && pool.aethScaled <= 0n) return { proved: false, xrp: 0n };
   const inPool = pool.balance === 0n ? 0n : (pool.aethScaled * pool.balance) / pool.supply;
   const wallet = typeof observed.walletAeth === "bigint" ? observed.walletAeth : 0n;
-  if (inPool < 0n || wallet < 0n || observed.aethFrozen === true || observed.aethDebt === true) {
+  const offered = (observed.offers || []).reduce((sum, offer) => sum + (typeof offer.aeth === "bigint" ? offer.aeth : 0n), 0n);
+  if (inPool < 0n || wallet < 0n || offered < 0n || observed.aethFrozen === true || observed.aethDebt === true) {
     return { proved: false, xrp: 0n };
   }
-  const inventory = inPool + wallet;
+  const inventory = inPool + wallet + offered;
   if (inventory === 0n) return { proved: true, xrp: 0n };
   if (pool.aethScaled <= 0n) return { proved: false, xrp: 0n };
   const floor = (pool.xrp * inventory) / pool.aethScaled;

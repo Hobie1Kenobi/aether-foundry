@@ -233,7 +233,9 @@ async function fetchSnapshot(ledger) {
 
 function offerLockedDrops(row) {
   const gets = row && (row.taker_gets != null ? row.taker_gets : row.TakerGets);
-  return typeof gets === "string" && /^[0-9]+$/.test(gets) ? BigInt(gets) : 0n;
+  if (typeof gets === "string" && /^[0-9]+$/.test(gets)) return BigInt(gets);
+  if (gets && gets.currency === bounds.AETH && gets.issuer === bounds.ISSUER) return 0n;
+  throw coded("offer lock is not XRP or AETH issued by W0", "OFFER");
 }
 
 async function ownBook(ledger) {

@@ -94,9 +94,13 @@ function parseOffers(response) {
   }
   return result.offers.map((row) => {
     const gets = row && (row.taker_gets != null ? row.taker_gets : row.TakerGets);
+    const pays = row && (row.taker_pays != null ? row.taker_pays : row.TakerPays);
+    const seq = row && (row.seq != null ? row.seq : row.Sequence);
     const locked = xrpDrops(gets);
-    if (locked == null) throw coded("offer lock is not XRP", "OFFER");
-    return { seq: row.seq != null ? row.seq : row.Sequence, locked };
+    if (locked != null) return { seq, locked, aeth: 0n };
+    const aeth = isAeth(gets) ? scaled(gets.value) : null;
+    if (aeth != null && aeth > 0n && xrpDrops(pays) != null) return { seq, locked: 0n, aeth };
+    throw coded("offer lock is not XRP or AETH issued by W0", "OFFER");
   });
 }
 
