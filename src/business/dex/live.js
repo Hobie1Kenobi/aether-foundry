@@ -225,6 +225,9 @@ function liveExpected(tx) {
     amount: tx.Amount,
     amount2: tx.Amount2,
     lp: tx.LPTokenIn,
+    send_max: tx.SendMax,
+    deliver: tx.Amount && typeof tx.Amount === "object" ? tx.Amount.value : undefined,
+    limit: tx.LimitAmount && tx.LimitAmount.value,
   };
 }
 

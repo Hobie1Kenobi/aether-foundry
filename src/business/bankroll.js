@@ -50,6 +50,7 @@ function blank(code) {
     reserve: 0n,
     pending: 0n,
     sole: false,
+    rlusd_headroom: 0n,
   };
 }
 
@@ -149,6 +150,7 @@ function room(state, observed) {
     used: priced.proved ? used : provedXrp,
     proved_xrp: provedXrp,
     remaining: risk ? BANKROLL_DROPS - used : 0n,
+    rlusd_headroom: provedXrp >= BANKROLL_DROPS ? 0n : BANKROLL_DROPS - provedXrp,
     loss,
     offer_lock: offerLock,
     lp_xrp: lpXrp,

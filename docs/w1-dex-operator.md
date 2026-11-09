@@ -63,6 +63,7 @@ All of these must be set together. A restart with the same environment and the s
 - `FOUNDRY_DEX_ACCOUNT=rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS`
 - `FOUNDRY_DEX_ACTIVATE=ACTIVATE-W1-DEX-ROLE`
 - `FOUNDRY_DEX_BANKROLL_DROPS=100000000`
+- `FOUNDRY_DEX_RLUSD=yes` enables W1 RLUSD trading. Leave it unset and the supervisor does not place RLUSD. `bin/start` for the payment worker is unchanged and stays asleep. The DEX supervisor is a separate process. Do not put a seed in its environment. The first tick opens one W1 RLUSD trust line with NoRipple and a limit of 10, if that line is missing and the headroom after the AETH high-water covers the 0.2 XRP reserve. The next tick places one passive RLUSD bid of 1 XRP that does not cross the outside ask. A self-payment is used only when that book has no outside ask, with `SendMax`, `DeliverMin`, and a 1 percent haircut. Open RLUSD exposure, including a resting offer and any unreconciled transaction, stays at or below 2 XRP. Keys are stable for the trust line, the resting offer, the Chicago day, and a cancel. A resting offer stays open until a validated account offer list shows it gone after a proved cancel. One RLUSD transaction is signed per tick, and at most two economic RLUSD orders are signed per Chicago day. It does not exit the AETH pool unless the saved policy already says `rebalance: "exit-sole-lp"`. If the headroom is below 1 XRP, the journal proposes that exit and does not send it.
 - `FOUNDRY_DEX_MAX_AETH=10`
 - `FOUNDRY_DEX_AXELAR_DROPS=0`
 - `FOUNDRY_W1_DEX_LIVE=yes`

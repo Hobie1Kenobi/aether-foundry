@@ -62,7 +62,7 @@ function packDex(options) {
     legacy_drops: "1747",
     w1: "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
     axelar_drops: "0",
-    review_command: "node --test src/business/business.test.js src/business/dex.test.js src/business/dex/director.test.js src/business/bankroll.test.js src/business/bankroll-audit.test.js src/business/dex/w1-live-replay.test.js",
+    review_command: "node --test src/business/business.test.js src/business/dex.test.js src/business/dex/director.test.js src/business/bankroll.test.js src/business/bankroll-audit.test.js src/business/dex/w1-live-replay.test.js src/business/dex/rlusd.test.js",
   };
   fs.writeFileSync(path.join(stage, "ATTESTATION.json"), `${JSON.stringify(attestation, null, 2)}\n`);
   const manifest = {
@@ -80,7 +80,20 @@ function packDex(options) {
   const outDir = options.outDir;
   fs.mkdirSync(outDir, { recursive: true });
   const tarPath = path.join(outDir, `foundry-w1-dex-${gitSha}.tar`);
-  const packed = spawnSync("tar", ["-cf", tarPath, "-C", stage, "."], { encoding: "utf8" });
+  const packed = spawnSync("tar", [
+    "--format=posix",
+    "--mtime=2026-11-09 00:00:00",
+    "--sort=name",
+    "--owner=0",
+    "--group=0",
+    "--numeric-owner",
+    "--pax-option=delete=atime,delete=ctime",
+    "-cf",
+    tarPath,
+    "-C",
+    stage,
+    ".",
+  ], { encoding: "utf8" });
   if (packed.status !== 0) throw new Error(packed.stderr || "tar failed");
   const tarSha = crypto.createHash("sha256").update(fs.readFileSync(tarPath)).digest("hex");
   return { tarPath, tarSha, gitSha, manifest };

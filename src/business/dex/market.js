@@ -14,10 +14,34 @@ const bounds = require("./bounds");
 const SCALE = 10n ** 15n;
 const XRP = { currency: "XRP" };
 
+function exactIou(value) {
+  if (typeof value !== "string") return null;
+  const match = value.match(/^(0|[1-9][0-9]*)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?$/);
+  if (!match) return null;
+  const frac = match[2] || "";
+  const expPart = match[3] ? Number(match[3]) : 0;
+  if (!Number.isSafeInteger(expPart)) return null;
+  const raw = BigInt(`${match[1]}${frac}`);
+  if (raw === 0n) return { coeff: 0n, exp: 0 };
+  let coeff = raw;
+  let exp = expPart - frac.length;
+  while (coeff % 10n === 0n) {
+    coeff /= 10n;
+    exp += 1;
+  }
+  if (coeff.toString().length > 16) return null;
+  if (exp < -96 || exp > 80) return null;
+  return { coeff, exp };
+}
+
 function scaled(value) {
-  if (typeof value !== "string" || !/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,15})?$/.test(value)) return null;
-  const [whole, frac = ""] = value.split(".");
-  return BigInt(whole) * SCALE + BigInt((frac + "0".repeat(15)).slice(0, 15));
+  const exact = exactIou(value);
+  if (!exact) return null;
+  if (exact.coeff === 0n) return 0n;
+  const shift = exact.exp + 15;
+  if (shift >= 0) return exact.coeff * (10n ** BigInt(shift));
+  const div = 10n ** BigInt(-shift);
+  return exact.coeff / div;
 }
 
 function xrpDrops(value) {
@@ -244,6 +268,7 @@ function slippage(pool, dx) {
 module.exports = {
   SCALE,
   XRP,
+  exactIou,
   scaled,
   load,
   parsePool,
