@@ -34,7 +34,7 @@ function assertFields(tx, expected) {
   }
   if (expected.type === "TrustSet") {
     if (tx.Flags !== 0x00020000) throw coded("signer refuses a trust line without NoRipple", "TX");
-    if (!tx.LimitAmount || tx.LimitAmount.issuer !== "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" || tx.LimitAmount.value !== expected.limit) {
+    if (!tx.LimitAmount || tx.LimitAmount.currency !== "524C555344000000000000000000000000000000" || tx.LimitAmount.issuer !== "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" || tx.LimitAmount.value !== expected.limit) {
       throw coded("signer refuses a trust line that is not the RLUSD limit", "TX");
     }
   }
@@ -42,7 +42,20 @@ function assertFields(tx, expected) {
     if (tx.SendMax !== expected.send_max || !tx.Amount || tx.Amount.value !== expected.deliver) {
       throw coded("signer refuses a changed RLUSD swap", "TX");
     }
-    if (tx.Amount.issuer !== "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV") throw coded("signer refuses a lookalike RLUSD issuer", "TX");
+    if (tx.Amount.currency !== "524C555344000000000000000000000000000000" || tx.Amount.issuer !== "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV") {
+      throw coded("signer refuses a lookalike RLUSD currency", "TX");
+    }
+    if (!tx.DeliverMin || tx.DeliverMin.currency !== "524C555344000000000000000000000000000000" || tx.DeliverMin.issuer !== tx.Amount.issuer || tx.DeliverMin.value !== expected.deliver) {
+      throw coded("signer refuses a RLUSD swap without DeliverMin", "TX");
+    }
+  }
+  if (expected.type === "OfferCreate") {
+    for (const amount of [tx.TakerGets, tx.TakerPays]) {
+      if (!amount || typeof amount !== "object") continue;
+      if (amount.issuer === "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" && amount.currency !== "524C555344000000000000000000000000000000") {
+        throw coded("signer refuses a lookalike RLUSD currency", "TX");
+      }
+    }
   }
   if (expected.type === "AMMDeposit" || expected.type === "AMMWithdraw") {
     if (tx.Flags !== expected.flags || tx.Fee !== expected.fee) throw coded("signer refuses a changed AMM flag or fee", "TX");

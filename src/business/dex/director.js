@@ -234,6 +234,15 @@ async function decide(env, input, clients) {
         market: "sole_lp",
         rationale: "W1 holds LP against no independent AETH bid. New AETH risk is closed. RLUSD may use only the XRP left after this high-water.",
       });
+      if (live) {
+        try {
+          await live.openKey();
+        } catch (error) {
+          row.rlusd_error = error.code || "UNCERTAIN";
+          row.signed = false;
+          return remember(body.journal, row);
+        }
+      }
       let traded = null;
       try {
         traded = await rlusd.tick(source, body.ledger, now, actor || { ledger: ledgerClient, sign: async () => { throw Object.assign(new Error("no signer"), { code: "NO_CLIENT" }); }, submit: async () => { throw Object.assign(new Error("no submit"), { code: "NO_CLIENT" }); } }, position);

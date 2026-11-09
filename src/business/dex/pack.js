@@ -80,7 +80,19 @@ function packDex(options) {
   const outDir = options.outDir;
   fs.mkdirSync(outDir, { recursive: true });
   const tarPath = path.join(outDir, `foundry-w1-dex-${gitSha}.tar`);
-  const packed = spawnSync("tar", ["-cf", tarPath, "-C", stage, "."], { encoding: "utf8" });
+  const packed = spawnSync("tar", [
+    "--format=posix",
+    "--mtime=2026-11-09 00:00:00",
+    "--sort=name",
+    "--owner=0",
+    "--group=0",
+    "--numeric-owner",
+    "-cf",
+    tarPath,
+    "-C",
+    stage,
+    ".",
+  ], { encoding: "utf8" });
   if (packed.status !== 0) throw new Error(packed.stderr || "tar failed");
   const tarSha = crypto.createHash("sha256").update(fs.readFileSync(tarPath)).digest("hex");
   return { tarPath, tarSha, gitSha, manifest };
