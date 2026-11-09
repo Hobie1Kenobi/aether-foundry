@@ -75,10 +75,10 @@ function propose(input) {
     return refused(body, now, capability("xrpl.staking"), "EXCLUDED", "W0 is not an autonomous spender, and native XRP staking is not implemented.");
   }
   if (role === "trading") {
-    return refused(body, now, capability("xrpl.dex.offer"), "UNSUPPORTED", "Autonomous OfferCreate is not a mission type.");
+    return refused(body, now, capability("xrpl.dex.offer"), "DISABLED", "Unsigned OfferCreate is prepared only by the business worker when it is explicitly enabled. This call did not prepare or submit one.");
   }
   if (role === "liquidity") {
-    return refused(body, now, capability("xrpl.amm.create"), "UNSUPPORTED", "Autonomous AMM creation is not a mission type, and the reserve is not spendable.");
+    return refused(body, now, capability("xrpl.amm.lp"), "UNSUPPORTED", "The published AETH/XRP pool is an LP candidate only after pool state and the live owner reserve are verified. This call does not deposit.");
   }
   if (role === "bridge") {
     const row = capability("axelar.gmp.write");
