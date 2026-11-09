@@ -24,7 +24,9 @@ function xrpDrops(value) {
 }
 
 function isAeth(value) {
-  return Boolean(value && value.currency === bounds.AETH && value.issuer === bounds.ISSUER && scaled(value.value) != null);
+  if (!value || value.currency !== bounds.AETH || value.issuer !== bounds.ISSUER) return false;
+  if (typeof value.value !== "string" || !/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,6})?$/.test(value.value)) return false;
+  return scaled(value.value) != null;
 }
 
 function pair(amm) {
@@ -33,6 +35,19 @@ function pair(amm) {
   if (firstXrp != null && isAeth(amm.amount2)) return { xrp: firstXrp, aeth: amm.amount2 };
   if (secondXrp != null && isAeth(amm.amount)) return { xrp: secondXrp, aeth: amm.amount };
   return null;
+}
+
+function lineAeth(page, lpCurrency) {
+  const held = page.lines.filter((line) => line && line.currency === bounds.AETH && line.account === bounds.ISSUER);
+  if (held.length > 1) throw coded("AETH balance is ambiguous", "VALUATION");
+  if (held.length === 0) return { walletAeth: 0n, aethFrozen: false, aethDebt: false };
+  const line = held[0];
+  if (line.currency === lpCurrency) return { walletAeth: 0n, aethFrozen: false, aethDebt: false };
+  const balance = scaled(typeof line.balance === "string" && line.balance.startsWith("-") ? null : line.balance);
+  if (typeof line.balance === "string" && line.balance.startsWith("-")) return { walletAeth: 0n, aethFrozen: false, aethDebt: true };
+  if (balance == null) throw coded("AETH balance cannot be valued", "VALUATION");
+  const frozen = line.freeze === true || line.freeze_peer === true || line.authorized === false;
+  return { walletAeth: balance, aethFrozen: frozen, aethDebt: false };
 }
 
 function parsePool(response, lines) {
@@ -68,6 +83,7 @@ function parsePool(response, lines) {
     sole: balance > 0n && balance === supply,
     tradingFee: amm.trading_fee,
     ledgerIndex: result.ledger_index,
+    wallet: lineAeth(page, lp.currency),
   };
 }
 
@@ -93,20 +109,28 @@ function parseBook(response) {
   if (!result || result.validated !== true || result.marker != null || !Array.isArray(result.offers)) {
     throw coded("validated order book is missing", "UNCERTAIN");
   }
-  const foreign = [];
+  const quotes = [];
+  const bids = [];
+  let unbounded = 0;
   for (const row of result.offers) {
     if (!row || typeof row.Account !== "string") throw coded("book offer has no account", "UNCERTAIN");
     if (row.Account === bounds.ACCOUNT || row.Account === bounds.ISSUER || row.Account === anchors.AMM) continue;
-    const pays = sideDrops(row.TakerPays);
-    const gets = sideDrops(row.TakerGets);
-    foreign.push({
-      account: row.Account,
-      paysXrp: pays,
-      getsXrp: gets,
-      size: pays != null ? pays : gets,
-    });
+    const paysXrp = sideDrops(row.TakerPays);
+    const getsXrp = sideDrops(row.TakerGets);
+    const xrp = paysXrp != null ? paysXrp : getsXrp;
+    if (xrp == null || xrp <= 0n) continue;
+    if (xrp > require("../bankroll").BANKROLL_DROPS) {
+      unbounded += 1;
+      continue;
+    }
+    const aethSide = isAeth(row.TakerGets) ? row.TakerGets : (isAeth(row.TakerPays) ? row.TakerPays : null);
+    if (!aethSide) continue;
+    quotes.push({ account: row.Account, paysXrp, getsXrp, size: xrp });
+    if (getsXrp != null && isAeth(row.TakerPays)) {
+      bids.push({ account: row.Account, xrp: getsXrp, aeth: scaled(row.TakerPays.value) });
+    }
   }
-  return foreign.filter((row) => row.size != null && row.size > 0n);
+  return { quotes, bids, unbounded };
 }
 
 function parseAccount(response, server) {
@@ -145,11 +169,17 @@ async function load(ledger) {
     limit: 20,
   });
   const pool = parsePool(amm, lines);
+  const parsedBook = parseBook(book);
   return Object.assign({
     proved: true,
     pool,
     offers: parseOffers(offers),
-    foreign: parseBook(book),
+    foreign: parsedBook.quotes,
+    bids: parsedBook.bids,
+    unbounded: parsedBook.unbounded,
+    walletAeth: pool.wallet.walletAeth,
+    aethFrozen: pool.wallet.aethFrozen,
+    aethDebt: pool.wallet.aethDebt,
   }, info);
 }
 
@@ -175,5 +205,6 @@ module.exports = {
   scaled,
   load,
   parsePool,
+  parseBook,
   slippage,
 };

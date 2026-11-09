@@ -269,9 +269,13 @@ async function place(dir, request, clients) {
       throw error;
     }
   }
+  const position = bankroll.room(view(dir, now), observed);
+  if (!prior && position.risk_increasing !== true) {
+    throw coded("valuation is unproved or capital at risk is already over the shared bankroll", position.aeth_valuation === "unproved" ? "VALUATION" : "BANKROLL");
+  }
   const { shot } = await fetchSnapshot(clients.ledger);
   snapshot.assertSpendable(shot, order.locked);
-  const ceiling = bankroll.maxLock(observed, bankroll.room(view(dir, now), observed), shot.fee);
+  const ceiling = bankroll.maxLock(observed, position, shot.fee);
   if (order.locked > ceiling) throw coded("shared 100 XRP bankroll would be exceeded", "BANKROLL");
   const reserved = reserve(dir, order, shot, now, observed);
   let mission = reserved.mission;
@@ -434,7 +438,7 @@ async function cancel(dir, request, clients) {
     if (!current || current.cancel_blob || current.cancel_tx) return current;
     const position = bankroll.room(view(dir, now), observed);
     if (position.uncertain) throw coded("bankroll inventory is not proved", "UNCERTAIN");
-    if (fee > position.remaining) throw coded("shared 100 XRP bankroll would be exceeded", "BANKROLL");
+    if (bankroll.spendable(observed) < fee) throw coded("W1 cannot pay the cancel fee", "SPENDABLE");
     const cancelTx = {
       TransactionType: "OfferCancel",
       Account: bounds.ACCOUNT,

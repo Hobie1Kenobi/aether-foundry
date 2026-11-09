@@ -143,6 +143,9 @@ async function decide(env, input, clients) {
       bankroll_remaining_drops: position.remaining.toString(),
       bankroll_limit_drops: position.limit.toString(),
       cap_blocked: position.cap_blocked === true,
+      aeth_valuation: position.aeth_valuation,
+      risk_increasing: position.risk_increasing === true,
+      base_reserve_drops: position.base_reserve.toString(),
       sole_lp: observed.pool.sole === true,
       foreign_quotes: observed.foreign.length,
       slippage: slip,
@@ -206,7 +209,7 @@ async function decide(env, input, clients) {
         const row = Object.assign({}, base, inventory, {
           decision: "withdraw",
           market: "sole_lp",
-          rationale: "The saved policy exits the sole LP position. The pool XRP stays in the inventory until a later validated read shows it returned.",
+          rationale: "The saved policy asks to reduce the sole LP position. This is not an automatic liquidation. Recovered XRP is credited only after withdraw metadata and a smaller validated pool share.",
         });
         try {
           if (live) await live.openKey();
@@ -225,8 +228,7 @@ async function decide(env, input, clients) {
       const row = Object.assign({}, base, inventory, {
         decision: "research",
         market: "sole_lp",
-        recommendation: "exit",
-        rationale: "W1 holds the entire LP balance and the book has no foreign AETH/XRP quote. Adding liquidity would only concentrate W1. No deposit and no self-trade.",
+        rationale: "W1 holds LP against no independent AETH bid. New risk is closed. Nothing is signed, and the position is not liquidated.",
       });
       return remember(body.journal, row);
     }
@@ -242,11 +244,19 @@ async function decide(env, input, clients) {
     }
     const foreignSize = observed.foreign.reduce((sum, row) => (row.size > sum ? row.size : sum), 0n);
     if (foreignSize > 0n) {
+      if (position.risk_increasing !== true) {
+        return remember(body.journal, Object.assign({}, base, inventory, {
+          decision: "research",
+          market: "foreign",
+          rationale: "A foreign quote is visible, and AETH valuation is unproved or the bankroll is already full. Nothing is signed.",
+        }));
+      }
       const fee = 10n;
       const ceiling = bankroll.maxLock(observed, position, fee);
       const slice = position.remaining / 5n;
       const bound = saved.max_action_drops ? BigInt(saved.max_action_drops) : slice;
-      let size = foreignSize < ceiling ? foreignSize : ceiling;
+      let size = foreignSize / 2n;
+      if (size > ceiling) size = ceiling;
       if (bound > 0n && size > bound) size = bound;
       if (size <= 0n) {
         return remember(body.journal, Object.assign({}, base, inventory, {
@@ -285,7 +295,7 @@ async function decide(env, input, clients) {
       return remember(body.journal, row);
     }
     const standing = saved.standing_offer;
-    if (!standing || observed.pool.sole) {
+    if (!standing || observed.pool.sole || position.risk_increasing !== true) {
       const row = Object.assign({}, base, inventory, {
         decision: "research",
         market: "empty",

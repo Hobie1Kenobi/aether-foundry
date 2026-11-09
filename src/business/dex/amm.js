@@ -18,6 +18,7 @@ const bounds = require("./bounds");
 const market = require("./market");
 const signer = require("./signer");
 const snapshot = require("./snapshot");
+const proof = require("./amm-proof");
 
 const TF_TWO_ASSET = 0x00100000;
 const TF_LP_TOKEN = 0x00010000;
@@ -52,7 +53,11 @@ function reserve(dir, order, shot, now, observed) {
     if (position.uncertain) throw coded("bankroll inventory is not proved", position.code || "UNCERTAIN");
     const existing = findMission(state, order.key);
     if (existing) return { mission: existing, created: false };
-    if (order.exposure > position.remaining) throw coded("shared 100 XRP bankroll would be exceeded", "BANKROLL");
+    if (order.reduce_only) {
+      if (bankroll.spendable(observed) < order.exposure) throw coded("W1 cannot pay the reduce-only fee", "SPENDABLE");
+    } else if (position.risk_increasing !== true || order.exposure > position.remaining) {
+      throw coded(position.aeth_valuation === "unproved" ? "AETH inventory has no independent XRP bid" : "shared 100 XRP bankroll would be exceeded", position.risk_increasing ? "BANKROLL" : "VALUATION");
+    }
     const mission = {
       id: missionId(order.key),
       idempotency_key: order.key,
@@ -81,6 +86,8 @@ function reserve(dir, order, shot, now, observed) {
       locked_drops: order.locked.toString(),
       outstanding_drops: order.exposure.toString(),
       realized_loss_drops: "0",
+      lp_currency: order.lp_currency,
+      lp_xrp_basis: order.lp_xrp_basis,
       submit_attempted: false,
       updated_at: now,
       unsigned_tx: order.tx,
@@ -109,12 +116,13 @@ async function deposit(dir, request, clients) {
   assertClients(clients);
   const now = (request && request.now) || new Date().toISOString();
   const observed = await market.load(clients.ledger);
+  const position = bankroll.room(view(dir, now), observed);
+  if (position.risk_increasing !== true) throw coded("AETH inventory is unproved or the bankroll is already full. No deposit.", "VALUATION");
   if (observed.pool.sole || observed.foreign.length === 0) {
     throw coded("W1 already owns the pool or the book has no foreign quote. Another deposit is not external demand.", "SOLE_LP");
   }
   const shot = await shotOf(clients.ledger);
   const locked = BigInt(request.xrp_drops);
-  const position = bankroll.room(view(dir, now), observed);
   const ceiling = bankroll.maxLock(observed, position, shot.fee);
   if (locked <= 0n || locked > ceiling) throw coded("deposit does not fit the shared bankroll and the free balance", "BANKROLL");
   const key = String(request.idempotency_key || "");
@@ -135,6 +143,8 @@ async function deposit(dir, request, clients) {
     key,
     locked,
     exposure: locked + shot.fee + shot.reserveInc,
+    lp_currency: observed.pool.currency,
+    lp_xrp_basis: position.lp_xrp.toString(),
     tx,
   }, shot, now, observed);
   if (reserved.mission.submit_attempted) return publish(reserved.mission, { replay: true });
@@ -186,10 +196,14 @@ async function withdraw(dir, request, clients) {
     Sequence: shot.sequence,
     LastLedgerSequence: shot.validatedLedger + bounds.LEDGER_WINDOW,
   };
+  const basis = bankroll.room(view(dir, now), observed);
   const reserved = reserve(dir, {
     key,
     locked: 0n,
     exposure: shot.fee,
+    reduce_only: true,
+    lp_currency: observed.pool.currency,
+    lp_xrp_basis: basis.lp_xrp.toString(),
     tx,
   }, shot, now, observed);
   if (reserved.mission.submit_attempted) return publish(reserved.mission, { replay: true });
@@ -220,6 +234,59 @@ async function withdraw(dir, request, clients) {
   return publish(mission, { replay: false });
 }
 
+async function reconcile(dir, request, clients) {
+  assertClients(clients);
+  const now = (request && request.now) || new Date().toISOString();
+  const mission = view(dir, now).missions[request.mission_id];
+  if (!mission || mission.kind !== bankroll.LP_KIND || !mission.signed_hash) throw coded("LP mission is not ready to reconcile", "OFFER");
+  const lookup = await clients.ledger.request({ command: "tx", transaction: mission.signed_hash, binary: false });
+  const fresh = await market.load(clients.ledger);
+  const kind = mission.unsigned_tx && mission.unsigned_tx.TransactionType;
+  let outcome;
+  try {
+    outcome = kind === "AMMWithdraw" ? proof.withdrawOutcome(lookup, mission) : proof.depositOutcome(lookup, mission);
+  } catch (error) {
+    const kept = Object.assign({}, mission, { status: "amm_unknown", proof_reason: error.code || "UNCERTAIN", updated_at: now });
+    save(dir, kept);
+    return publish(kept, { replay: false });
+  }
+  if (kind === "AMMDeposit") {
+    const share = fresh.pool.balance === 0n ? 0n : (fresh.pool.xrp * fresh.pool.balance) / fresh.pool.supply;
+    if (share < BigInt(mission.lp_xrp_basis || "0") + outcome.xrpIn) {
+      const kept = Object.assign({}, mission, { status: "amm_unknown", proof_reason: "pool_not_updated", updated_at: now });
+      save(dir, kept);
+      return publish(kept, { replay: false });
+    }
+    const proved = Object.assign({}, mission, {
+      status: "amm_proved",
+      outstanding_drops: "0",
+      hold: "released",
+      realized_loss_drops: outcome.fee.toString(),
+      proof_hash: outcome.hash,
+      updated_at: now,
+    });
+    save(dir, proved);
+    return publish(proved, { replay: false, recovered_drops: "0" });
+  }
+  const share = fresh.pool.balance === 0n ? 0n : (fresh.pool.xrp * fresh.pool.balance) / fresh.pool.supply;
+  if (share >= BigInt(mission.lp_xrp_basis || "0")) {
+    const kept = Object.assign({}, mission, { status: "amm_unknown", proof_reason: "pool_not_reduced", updated_at: now });
+    save(dir, kept);
+    return publish(kept, { replay: false, recovered_drops: "0" });
+  }
+  const proved = Object.assign({}, mission, {
+    status: "amm_proved",
+    outstanding_drops: "0",
+    hold: "released",
+    realized_loss_drops: outcome.fee.toString(),
+    recovered_drops: outcome.xrpOut.toString(),
+    proof_hash: outcome.hash,
+    updated_at: now,
+  });
+  save(dir, proved);
+  return publish(proved, { replay: false, recovered_drops: outcome.xrpOut.toString() });
+}
+
 function publish(mission, extra) {
   return Object.assign({
     schema: "aether.business.amm",
@@ -241,4 +308,5 @@ module.exports = {
   quote,
   deposit,
   withdraw,
+  reconcile,
 };

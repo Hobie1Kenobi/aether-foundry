@@ -51,7 +51,7 @@ function operatorShape() {
       balance: 100n,
       supply: 100n,
       sole: true,
-      aethScaled: 1n,
+      aethScaled: 4923540000000000000n,
       tradingFee: 500,
     },
   };
@@ -116,11 +116,15 @@ describe("shared dex lp bankroll", () => {
   it("inventories the sole LP and the open quotes once", () => {
     const position = bankroll.room({ missions: {} }, operatorShape());
     assert.equal(position.uncertain, false);
+    assert.equal(position.aeth_valuation, "unproved");
+    assert.equal(position.risk_increasing, false);
     assert.equal(position.lp_xrp.toString(), "51783000");
+    assert.equal(position.aeth_xrp.toString(), "0");
+    assert.equal(position.base_reserve.toString(), "1000000");
     assert.equal(position.offer_lock.toString(), "2275000");
     assert.equal(position.reserve.toString(), "1600000");
-    assert.equal(position.used.toString(), "55658000");
-    assert.equal(position.remaining.toString(), "44342000");
+    assert.equal(position.proved_xrp.toString(), "56658000");
+    assert.equal(position.remaining.toString(), "0");
     assert.equal(position.limit.toString(), "100000000");
     assert.equal(bankroll.spendable(operatorShape()).toString(), "44147152");
     const doubled = bankroll.room({
@@ -156,7 +160,7 @@ describe("shared dex lp bankroll", () => {
       reserveBase: 1000000n,
       balance: 200000000n,
       offers: [],
-      pool: { xrp: 1000000n, balance: 0n, supply: 100n, sole: false },
+      pool: { xrp: 1000000n, aethScaled: 1n, balance: 0n, supply: 100n, sole: false },
     });
     const restarted = bankroll.room(view(ledger, NOW), {
       proved: true,
@@ -165,7 +169,7 @@ describe("shared dex lp bankroll", () => {
       reserveBase: 1000000n,
       balance: 200000000n,
       offers: [],
-      pool: { xrp: 1000000n, balance: 0n, supply: 100n, sole: false },
+      pool: { xrp: 1000000n, aethScaled: 1n, balance: 0n, supply: 100n, sole: false },
     });
     assert.equal(restarted.used.toString(), again.used.toString());
     assert.equal(restarted.pending > 0n, true);
@@ -187,7 +191,7 @@ describe("shared dex lp bankroll", () => {
     assert.equal(raced.filter((row) => row.status === "rejected").length, 1);
     state.lines = [{ account: anchors.AMM, currency: LP, balance: "100" }];
     state.amm.amount = "51783000";
-    await assert.rejects(() => deposit(home(), { now: NOW, idempotency_key: "w1-lp-deposit", xrp_drops: "1000000", aeth: { currency: anchors.AETH_HEX, issuer: anchors.WALLETS.W0.address, value: "10" } }, clients(state)), (error) => error.code === "SOLE_LP");
+    await assert.rejects(() => deposit(home(), { now: NOW, idempotency_key: "w1-lp-deposit", xrp_drops: "1000000", aeth: { currency: anchors.AETH_HEX, issuer: anchors.WALLETS.W0.address, value: "10" } }, clients(state)), (error) => error.code === "VALUATION");
     const exitLedger = home();
     const journal = fs.mkdtempSync(path.join(os.tmpdir(), "bank-journal-"));
     const env = {
@@ -221,7 +225,7 @@ describe("shared dex lp bankroll", () => {
       reserveBase: 1000000n,
       balance: 200000000n,
       offers: [],
-      pool: { xrp: 51783000n, balance: 100n, supply: 100n, sole: true },
+      pool: { xrp: 51783000n, aethScaled: 1n, balance: 100n, supply: 100n, sole: true },
     });
     assert.equal(inventoried.lp_xrp.toString(), "51783000");
     assert.equal(inventoried.used < 51783000n * 2n, true);
@@ -251,8 +255,8 @@ describe("shared dex lp bankroll", () => {
     assert.equal(placed.traded, false);
     assert.equal(placed.market, "foreign");
     const mission = Object.values(view(ledger, NOW).missions).find((row) => row.kind === "w1-dex-offer");
-    assert.equal(BigInt(mission.locked_drops) <= 5000000n, true);
-    assert.equal(BigInt(mission.locked_drops) < 100000000n, true);
+    assert.equal(mission.locked_drops, "2500000");
+    assert.equal(BigInt(mission.locked_drops) < 5000000n, true);
     assert.equal(mission.unsigned_tx.Flags, bounds.TF_PASSIVE);
     const again = await decide(env, { now: NOW, ledger, journal }, clients(state));
     assert.equal(again.decision, "reconcile");

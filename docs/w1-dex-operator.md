@@ -13,10 +13,10 @@ The adapter is installed and dormant. It does not read a key, open a socket, or 
 ## Limits and reserve
 
 - DEX and LP share one 100000000-drop bankroll. It is not 100 XRP for each agent and it does not refill each Chicago day. A restart reads the same ledger.
-- The bankroll counts, once each: the proved LP share of the AMM's XRP, open-offer locked XRP, `OwnerCount * reserve_inc`, in-flight holds that are not already on the book, and realized XRP losses. The account base reserve is not a trading position. The AETH leg is the same LP position and is not marked as a second XRP charge.
+- Proved XRP at risk is the LP share of pool XRP, open-offer locks, the account base reserve, `OwnerCount * reserve_inc`, in-flight holds, and realized losses. AETH counts only when an outside bid pays XRP for that AETH, and only for the amount the bid takes. The pool's own price is not a value. Uncovered or frozen AETH closes new risk and does not release XRP already in the pool. Minted AETH is not booked as a fresh XRP spend.
 - Payment missions stay at 1000000 drops each and 5000000 drops per Chicago day, including the 1747-drop legacy hold. New DEX rows do not write `budget.reserved`.
 - The open-ledger fee must be from 1 to 10000 drops. The caller does not set it.
-- A sole LP position with no foreign quote is research, not a deposit and not a self-trade. `rebalance: "exit-sole-lp"` in the policy file is the saved exit. The withdraw size is the validated LP balance. The pool XRP stays in the inventory until a later validated read shows it is gone.
+- A sole LP position with no independent AETH bid is research. Nothing is signed. `rebalance: "exit-sole-lp"` is an operator-saved reduce-only instruction, not an automatic liquidation. A withdraw releases XRP only when validated metadata shows the XRP, AETH, and LP deltas and a later pool read shows a smaller XRP share. Until then the hold stays uncertain. A deposit is signed only when valuation is proved, the pool is not solely owned, and a bounded foreign quote exists. Its XRP stays reserved until that same class of proof.
 - Creating an offer increases the owner count by one. That reserve stays locked until a validated cancel or a consuming trade deletes the offer. The network fee is spent. Neither number is an APR. The AMM trading fee is not a yield.
 
 ## What one activation does
