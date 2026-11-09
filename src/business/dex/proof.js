@@ -17,9 +17,9 @@ function uncertain(message) {
 }
 
 function scaled(value) {
-  if (typeof value !== "string" || !/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,6})?$/.test(value)) return null;
+  if (typeof value !== "string" || !/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,15})?$/.test(value)) return null;
   const [whole, frac = ""] = value.split(".");
-  return BigInt(whole) * 1000000n + BigInt((frac + "000000").slice(0, 6));
+  return BigInt(whole) * (10n ** 15n) + BigInt((frac + "0".repeat(15)).slice(0, 15));
 }
 
 function signedScaled(value) {
