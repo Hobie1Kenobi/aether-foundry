@@ -28,16 +28,21 @@ function readEvents(dir) {
   return events;
 }
 
-function appendEvent(dir, event) {
+function appendEvents(dir, events) {
   const file = ensure(dir);
-  const line = `${JSON.stringify(event)}\n`;
+  const payload = events.map((event) => `${JSON.stringify(event)}\n`).join("");
   const fd = fs.openSync(file, "a");
   try {
-    fs.writeSync(fd, line);
+    fs.writeSync(fd, payload);
     fs.fsyncSync(fd);
   } finally {
     fs.closeSync(fd);
   }
+  return events;
+}
+
+function appendEvent(dir, event) {
+  appendEvents(dir, [event]);
   return event;
 }
 
@@ -59,6 +64,7 @@ function exclusive(dir, fn) {
     return fn({
       read: () => readEvents(dir),
       append: (event) => appendEvent(dir, event),
+      appendAll: (events) => appendEvents(dir, events),
     });
   } finally {
     fs.rmSync(lock, { recursive: true, force: true });
@@ -68,5 +74,6 @@ function exclusive(dir, fn) {
 module.exports = {
   coded,
   readEvents,
+  appendEvents,
   exclusive,
 };
