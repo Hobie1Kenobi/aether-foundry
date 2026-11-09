@@ -294,10 +294,12 @@ async function place(dir, request, clients) {
   if (!prior) {
     const book = await ownBook(clients.ledger);
     if (book.count > 0) {
+      const used = policy.dayUsed(view(dir, now), policy.chicagoDay(now));
       const error = coded("W1 book has only its own quotes. No new order.", "OBSERVE");
       error.preexisting_locked_drops = book.locked.toString();
+      error.day_used_drops = used.toString();
       error.offer_count = book.count;
-      error.cap_blocked = book.locked > missionConfig.DAILY_DROPS;
+      error.cap_blocked = used + book.locked > missionConfig.DAILY_DROPS;
       throw error;
     }
   }

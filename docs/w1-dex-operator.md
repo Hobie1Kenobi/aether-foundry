@@ -20,7 +20,7 @@ The adapter is installed and dormant. It does not read a key, open a socket, or 
 
 ## What one activation does
 
-A live process invocation makes one decision. There is no durable scheduler and no loop. With the live gate on and no order amounts, the decision is `hold`: no socket and no key. If W1 already has its own quotes and no allowlisted external counterparty is configured, an explicit order is `observe`: the socket may open to read the book, the regular key is not opened, and nothing is signed. That is the no-trade result. Do not treat one call as an autonomous trading business.
+`src/business/dex/supervisor.js` is the durable entry. It stays off unless `FOUNDRY_W1_DEX_SUPERVISOR=yes`. Each tick reads `FOUNDRY_MISSION_LEDGER`, `FOUNDRY_W1_DEX_JOURNAL`, the optional `FOUNDRY_W1_DEX_POLICY` file, and the latest validated book, then chooses one of research, observe, hold, reconcile, cancel, consume, or place. The journal is evidence of prior decisions. It is not model training. With the live gate on and only W1's own quotes, the choice is `observe`: `spend_enabled` is true and `traded` is false. No standing order is invented to create activity. A standing order in the policy file is used at most once per Chicago day, and only when the book is empty and the exposure fits. `cancel_standing` withdraws an order this director reserved. It does not cancel preexisting quotes.
 
 ## Default-off install
 

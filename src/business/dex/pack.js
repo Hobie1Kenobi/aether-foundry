@@ -6,7 +6,7 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const ENTRIES = ["src/business/worker.js", "src/business/dex/live.js"];
+const ENTRIES = ["src/business/worker.js", "src/business/dex/live.js", "src/business/dex/supervisor.js"];
 
 function walk(root, rel, seen) {
   if (seen.has(rel)) return;
@@ -62,7 +62,7 @@ function packDex(options) {
     legacy_drops: "1747",
     w1: "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
     axelar_drops: "0",
-    review_command: "node --test src/business/business.test.js src/business/dex.test.js",
+    review_command: "node --test src/business/business.test.js src/business/dex.test.js src/business/dex/director.test.js",
   };
   fs.writeFileSync(path.join(stage, "ATTESTATION.json"), `${JSON.stringify(attestation, null, 2)}\n`);
   const manifest = {
