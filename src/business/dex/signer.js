@@ -16,7 +16,10 @@ function assertFields(tx, expected) {
   if (tx.Account === anchors.WALLETS.W0.address) throw coded("refusing to sign as W0", "W0");
   if (tx.Account !== bounds.ACCOUNT || expected.account !== bounds.ACCOUNT) throw coded("signer account is not W1", "WALLET");
   if (tx.TransactionType !== expected.type) throw coded("signer type is not the reserved offer action", "TX");
-  if (tx.Destination != null || tx.Memos != null || tx.NetworkID != null) throw coded("signer refuses destination, memos, and network id", "TX");
+  if (tx.Memos != null || tx.NetworkID != null) throw coded("signer refuses memos and network id", "TX");
+  if (tx.Destination != null && !(expected.type === "Payment" && tx.Destination === bounds.ACCOUNT && tx.Account === bounds.ACCOUNT)) {
+    throw coded("signer refuses destination, memos, and network id", "TX");
+  }
   if (tx.Sequence !== expected.sequence || tx.LastLedgerSequence !== expected.last || tx.Fee !== expected.fee) {
     throw coded("signer refuses a changed sequence, ledger window, or fee", "TX");
   }
@@ -28,6 +31,18 @@ function assertFields(tx, expected) {
   }
   if (expected.type === "OfferCancel" && tx.OfferSequence !== expected.offer_sequence) {
     throw coded("signer refuses a changed offer sequence", "TX");
+  }
+  if (expected.type === "TrustSet") {
+    if (tx.Flags !== 0x00020000) throw coded("signer refuses a trust line without NoRipple", "TX");
+    if (!tx.LimitAmount || tx.LimitAmount.issuer !== "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" || tx.LimitAmount.value !== expected.limit) {
+      throw coded("signer refuses a trust line that is not the RLUSD limit", "TX");
+    }
+  }
+  if (expected.type === "Payment") {
+    if (tx.SendMax !== expected.send_max || !tx.Amount || tx.Amount.value !== expected.deliver) {
+      throw coded("signer refuses a changed RLUSD swap", "TX");
+    }
+    if (tx.Amount.issuer !== "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV") throw coded("signer refuses a lookalike RLUSD issuer", "TX");
   }
   if (expected.type === "AMMDeposit" || expected.type === "AMMWithdraw") {
     if (tx.Flags !== expected.flags || tx.Fee !== expected.fee) throw coded("signer refuses a changed AMM flag or fee", "TX");

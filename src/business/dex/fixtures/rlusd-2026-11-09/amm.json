@@ -1,0 +1,47 @@
+{
+  "result": {
+    "amm": {
+      "account": "rPn7kHwycXzS5XNj167CnKwC2t82yAAdNW",
+      "amount": "1497001061175",
+      "amount2": {
+        "currency": "524C555344000000000000000000000000000000",
+        "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
+        "value": "115937.3248712523"
+      },
+      "asset2_frozen": false,
+      "auction_slot": {
+        "account": "rfjquSFSKXnDYdQyGWuXBSSSW87jfpX7Qm",
+        "discounted_fee": 50,
+        "expiration": "2026-06-30T11:47:32+0000",
+        "price": {
+          "currency": "03B245BE580EC4F4386A751C084489EC4B514A2F",
+          "issuer": "rPn7kHwycXzS5XNj167CnKwC2t82yAAdNW",
+          "value": "80120.7813935"
+        },
+        "time_interval": 20
+      },
+      "lp_token": {
+        "currency": "03B245BE580EC4F4386A751C084489EC4B514A2F",
+        "issuer": "rPn7kHwycXzS5XNj167CnKwC2t82yAAdNW",
+        "value": "400921597.7296644"
+      },
+      "trading_fee": 501,
+      "vote_slots": [
+        {
+          "account": "rMQpZ8VS2vWNqfLjLzMgJG6n4igMAYBJPQ",
+          "trading_fee": 500,
+          "vote_weight": 27
+        },
+        {
+          "account": "rfjquSFSKXnDYdQyGWuXBSSSW87jfpX7Qm",
+          "trading_fee": 600,
+          "vote_weight": 0
+        }
+      ]
+    },
+    "ledger_hash": "3229D6BC1713C5CA2990F23AEE6251B605BB7C7CA64294BFB3272212F3430FDB",
+    "ledger_index": 22182323,
+    "status": "success",
+    "validated": true
+  }
+}

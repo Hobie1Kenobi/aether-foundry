@@ -17,6 +17,7 @@ const engine = require("./engine");
 const market = require("./market");
 const bankroll = require("../bankroll");
 const amm = require("./amm");
+const rlusd = require("./rlusd");
 
 const CHOICES = ["research", "observe", "hold", "reconcile", "cancel", "place", "withdraw"];
 
@@ -143,6 +144,7 @@ async function decide(env, input, clients) {
       reserve_drops: position.reserve.toString(),
       bankroll_used_drops: position.uncertain ? null : position.used.toString(),
       bankroll_remaining_drops: position.remaining.toString(),
+      rlusd_headroom_drops: position.rlusd_headroom.toString(),
       bankroll_limit_drops: position.limit.toString(),
       cap_blocked: position.cap_blocked === true,
       aeth_valuation: position.aeth_valuation,
@@ -230,8 +232,16 @@ async function decide(env, input, clients) {
       const row = Object.assign({}, base, inventory, {
         decision: "research",
         market: "sole_lp",
-        rationale: "W1 holds LP against no independent AETH bid. New risk is closed. Nothing is signed, and the position is not liquidated.",
+        rationale: "W1 holds LP against no independent AETH bid. New AETH risk is closed. RLUSD may use only the XRP left after this high-water.",
       });
+      let traded = null;
+      try {
+        traded = await rlusd.tick(source, body.ledger, now, actor || { ledger: ledgerClient, sign: async () => { throw Object.assign(new Error("no signer"), { code: "NO_CLIENT" }); }, submit: async () => { throw Object.assign(new Error("no submit"), { code: "NO_CLIENT" }); } }, position);
+      } catch (error) {
+        row.rlusd_error = error.code || "UNCERTAIN";
+      }
+      if (traded) return remember(body.journal, Object.assign(row, traded, { learning: false }));
+      if (position.rlusd_headroom < 1000000n) row.aeth_exit_proposal = "w1-exit-sole-lp";
       return remember(body.journal, row);
     }
     if (bookCount > 0) {
