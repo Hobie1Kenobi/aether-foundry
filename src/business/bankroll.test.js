@@ -191,7 +191,7 @@ describe("shared dex lp bankroll", () => {
     assert.equal(raced.filter((row) => row.status === "rejected").length, 1);
     state.lines = [{ account: anchors.AMM, currency: LP, balance: "100" }];
     state.amm.amount = "51783000";
-    await assert.rejects(() => deposit(home(), { now: NOW, idempotency_key: "w1-lp-deposit", xrp_drops: "1000000", aeth: { currency: anchors.AETH_HEX, issuer: anchors.WALLETS.W0.address, value: "10" } }, clients(state)), (error) => error.code === "VALUATION");
+    await assert.rejects(() => deposit(home(), { now: NOW, idempotency_key: "w1-lp-deposit", xrp_drops: "1000000", aeth: { currency: anchors.AETH_HEX, issuer: anchors.WALLETS.W0.address, value: "10" } }, clients(state)), (error) => error.code === "UNSUPPORTED");
     const exitLedger = home();
     const journal = fs.mkdtempSync(path.join(os.tmpdir(), "bank-journal-"));
     const env = {
@@ -255,8 +255,8 @@ describe("shared dex lp bankroll", () => {
     assert.equal(placed.traded, false);
     assert.equal(placed.market, "foreign");
     const mission = Object.values(view(ledger, NOW).missions).find((row) => row.kind === "w1-dex-offer");
-    assert.equal(mission.locked_drops, "2500000");
-    assert.equal(BigInt(mission.locked_drops) < 5000000n, true);
+    assert.equal(mission.unsigned_tx.TakerPays.value === "1", false);
+    assert.equal(BigInt(mission.locked_drops) <= 10000n, true);
     assert.equal(mission.unsigned_tx.Flags, bounds.TF_PASSIVE);
     const again = await decide(env, { now: NOW, ledger, journal }, clients(state));
     assert.equal(again.decision, "reconcile");

@@ -8,6 +8,7 @@
 
 const { coded } = require("../../missions/ledger");
 const anchors = require("../../director/anchors");
+const policy = require("../../missions/policy");
 const bounds = require("./bounds");
 
 const SCALE = 10n ** 15n;
@@ -114,7 +115,7 @@ function parseBook(response) {
   let unbounded = 0;
   for (const row of result.offers) {
     if (!row || typeof row.Account !== "string") throw coded("book offer has no account", "UNCERTAIN");
-    if (row.Account === bounds.ACCOUNT || row.Account === bounds.ISSUER || row.Account === anchors.AMM) continue;
+    if (row.Account === anchors.AMM || policy.isHouse(row.Account)) continue;
     const paysXrp = sideDrops(row.TakerPays);
     const getsXrp = sideDrops(row.TakerGets);
     const xrp = paysXrp != null ? paysXrp : getsXrp;
@@ -125,9 +126,9 @@ function parseBook(response) {
     }
     const aethSide = isAeth(row.TakerGets) ? row.TakerGets : (isAeth(row.TakerPays) ? row.TakerPays : null);
     if (!aethSide) continue;
-    quotes.push({ account: row.Account, paysXrp, getsXrp, size: xrp });
+    quotes.push({ account: row.Account, paysXrp, getsXrp, size: xrp, aeth: scaled(aethSide.value) });
     if (getsXrp != null && isAeth(row.TakerPays)) {
-      bids.push({ account: row.Account, xrp: getsXrp, aeth: scaled(row.TakerPays.value) });
+      bids.push({ account: row.Account, xrp: getsXrp, aeth: scaled(row.TakerPays.value), house: false });
     }
   }
   return { quotes, bids, unbounded };
@@ -161,26 +162,64 @@ async function load(ledger) {
   });
   const lines = await ledger.request({ command: "account_lines", account: bounds.ACCOUNT, ledger_index: "validated" });
   const offers = await ledger.request({ command: "account_offers", account: bounds.ACCOUNT, ledger_index: "validated" });
-  const book = await ledger.request({
+  const bidsPage = await ledger.request({
     command: "book_offers",
     taker_gets: XRP,
     taker_pays: { currency: bounds.AETH, issuer: bounds.ISSUER },
     ledger_index: "validated",
-    limit: 20,
+    limit: 50,
+  });
+  const asksPage = await ledger.request({
+    command: "book_offers",
+    taker_gets: { currency: bounds.AETH, issuer: bounds.ISSUER },
+    taker_pays: XRP,
+    ledger_index: "validated",
+    limit: 50,
   });
   const pool = parsePool(amm, lines);
-  const parsedBook = parseBook(book);
+  const incomplete = !bidsPage.result || bidsPage.result.marker != null || !asksPage.result || asksPage.result.marker != null;
+  const parsedBids = incomplete ? { quotes: [], bids: [], unbounded: 0 } : parseBook(bidsPage);
+  const parsedAsks = incomplete ? { quotes: [], bids: [], unbounded: 0 } : parseBook(asksPage);
   return Object.assign({
     proved: true,
+    book_complete: !incomplete,
     pool,
     offers: parseOffers(offers),
-    foreign: parsedBook.quotes,
-    bids: parsedBook.bids,
-    unbounded: parsedBook.unbounded,
+    foreign: parsedBids.quotes.concat(parsedAsks.quotes),
+    bids: incomplete ? [] : parsedBids.bids,
+    asks: incomplete ? [] : parsedAsks.quotes,
+    unbounded: parsedBids.unbounded + parsedAsks.unbounded,
     walletAeth: pool.wallet.walletAeth,
     aethFrozen: pool.wallet.aethFrozen,
     aethDebt: pool.wallet.aethDebt,
   }, info);
+}
+
+function formatAeth(amount) {
+  const whole = amount / SCALE;
+  const frac = (amount % SCALE).toString().padStart(15, "0").slice(0, 6).replace(/0+$/, "");
+  return frac ? `${whole.toString()}.${frac}` : whole.toString();
+}
+
+function passiveBid(pool, asks, maxDrops) {
+  if (!pool || pool.xrp <= 0n || pool.aethScaled <= 0n || maxDrops < 1000n) return null;
+  const worse = (pool.xrp * 99n) / 100n;
+  if (worse <= 0n) return null;
+  const cap = maxDrops < pool.xrp / 100n ? maxDrops : pool.xrp / 100n;
+  if (cap < 1000n) return null;
+  const aethAmount = (cap * pool.aethScaled) / worse;
+  const value = formatAeth(aethAmount);
+  const parsed = scaled(value);
+  if (!/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,6})?$/.test(value) || parsed == null || parsed <= 0n) return null;
+  const rate = (cap * SCALE) / parsed;
+  for (const ask of asks || []) {
+    if (!ask || typeof ask.paysXrp !== "bigint" || typeof ask.aeth !== "bigint" || ask.aeth <= 0n) continue;
+    if (rate >= (ask.paysXrp * SCALE) / ask.aeth) return null;
+  }
+  return {
+    taker_gets: cap.toString(),
+    taker_pays: { currency: bounds.AETH, issuer: bounds.ISSUER, value },
+  };
 }
 
 function slippage(pool, dx) {
@@ -206,5 +245,6 @@ module.exports = {
   load,
   parsePool,
   parseBook,
+  passiveBid,
   slippage,
 };

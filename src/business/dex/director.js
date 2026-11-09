@@ -122,6 +122,8 @@ async function decide(env, input, clients) {
       });
       return remember(body.journal, row);
     }
+    const currentLp = observed.pool.balance === 0n ? 0n : (observed.pool.xrp * observed.pool.balance) / observed.pool.supply;
+    bankroll.commitMark(body.ledger, currentLp, now);
     const position = bankroll.room(view(body.ledger, now), observed);
     let slip = null;
     try {
@@ -244,32 +246,32 @@ async function decide(env, input, clients) {
     }
     const foreignSize = observed.foreign.reduce((sum, row) => (row.size > sum ? row.size : sum), 0n);
     if (foreignSize > 0n) {
-      if (position.risk_increasing !== true) {
+      if (position.risk_increasing !== true || observed.book_complete !== true) {
         return remember(body.journal, Object.assign({}, base, inventory, {
           decision: "research",
           market: "foreign",
-          rationale: "A foreign quote is visible, and AETH valuation is unproved or the bankroll is already full. Nothing is signed.",
+          rationale: "A foreign quote is visible. Valuation is unproved, the book is incomplete, or the bankroll is full. Nothing is signed.",
         }));
       }
       const fee = 10n;
       const ceiling = bankroll.maxLock(observed, position, fee);
       const slice = position.remaining / 5n;
       const bound = saved.max_action_drops ? BigInt(saved.max_action_drops) : slice;
-      let size = foreignSize / 2n;
-      if (size > ceiling) size = ceiling;
-      if (bound > 0n && size > bound) size = bound;
-      if (size <= 0n) {
+      let room = ceiling < bound || bound === 0n ? ceiling : bound;
+      if (foreignSize / 2n < room) room = foreignSize / 2n;
+      const bid = market.passiveBid(observed.pool, observed.asks, room);
+      if (!bid) {
         return remember(body.journal, Object.assign({}, base, inventory, {
           decision: "research",
           market: "foreign",
-          rationale: "A foreign quote is visible, and the shared bankroll has no room for another quote.",
+          rationale: "No passive price sits under the pool and the ask. Nothing is signed.",
         }));
       }
-      const key = standingKey({ foreign: foreignSize.toString(), size: size.toString() }, policy.chicagoDay(now));
+      const key = standingKey({ gets: bid.taker_gets, pays: bid.taker_pays.value }, policy.chicagoDay(now));
       const row = Object.assign({}, base, inventory, {
         decision: "place",
         market: "foreign",
-        rationale: "A foreign quote is visible. The passive size is the smaller of that quote, one fifth of the remaining bankroll, and the free balance.",
+        rationale: "The passive bid pays 1 percent less XRP per AETH than the pool and does not cross the ask.",
         idempotency_key: key,
       });
       if (actor) {
@@ -278,8 +280,8 @@ async function decide(env, input, clients) {
           const placed = await engine.place(body.ledger, {
             now,
             idempotency_key: key,
-            taker_gets: size.toString(),
-            taker_pays: { currency: require("../../director/anchors").AETH_HEX, issuer: require("../../director/anchors").WALLETS.W0.address, value: "1" },
+            taker_gets: bid.taker_gets,
+            taker_pays: bid.taker_pays,
           }, actor);
           row.signed = placed.signed === true;
           row.submitted = placed.submitted === true;

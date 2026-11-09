@@ -17,6 +17,8 @@ const { deposit, withdraw, reconcile } = require("./dex/amm");
 const { depositOutcome, withdrawOutcome } = require("./dex/amm-proof");
 const engine = require("./dex/engine");
 const { decide } = require("./dex/director");
+const { liveExpected, health } = require("./dex/live");
+const signer = require("./dex/signer");
 
 const TOKEN = "mission-internal-16";
 const NOW = "2026-11-08T18:00:00.000Z";
@@ -147,9 +149,14 @@ describe("bankroll audit", () => {
     const bid = bankroll.room(null, observed({
       bids: [{ account: "rForeignBid1111111111111111111111", xrp: 1000n, aeth: 4923540000000000000n }],
     }));
-    assert.equal(bid.aeth_valuation, "proved");
-    assert.equal(bid.aeth_xrp.toString(), "1000");
-    assert.notEqual(bid.aeth_xrp.toString(), bare.lp_xrp.toString());
+    assert.equal(bid.aeth_valuation, "unproved");
+    assert.equal(bid.aeth_xrp.toString(), "0");
+    assert.equal(bid.remaining.toString(), "0");
+    const dust = bankroll.room(null, observed({
+      bids: [{ account: "rForeignBid1111111111111111111111", xrp: 1n, aeth: 4923540000000000000n }],
+    }));
+    assert.equal(dust.aeth_valuation, "unproved");
+    assert.equal(dust.risk_increasing, false);
     const partial = bankroll.room(null, observed({
       bids: [{ account: "rForeignBid1111111111111111111111", xrp: 1000n, aeth: 1n }],
     }));
@@ -230,41 +237,18 @@ describe("bankroll audit", () => {
     const state = fresh({
       book: [{ Account: buyer, TakerGets: "1000000", TakerPays: { currency: anchors.AETH_HEX, issuer: W0, value: "100" } }],
     });
-    const opened = await deposit(ledger, { now: NOW, idempotency_key: "w1-audit-dep", xrp_drops: "1000000", aeth: { currency: anchors.AETH_HEX, issuer: W0, value: "1" } }, clients(state));
-    assert.equal(opened.signed, true);
-    assert.equal(opened.tx.TransactionType, "AMMDeposit");
-    assert.equal(state.signs, 1);
-    const mission = view(ledger, NOW).missions[opened.id];
-    assert.throws(() => depositOutcome({ result: { validated: true, hash: mission.signed_hash, ledger_index: 10, tx_json: mission.unsigned_tx, meta: { TransactionResult: "tesSUCCESS", AffectedNodes: [] } } }, mission), (error) => error.code === "PROOF" || error.code === "UNCERTAIN");
-    const bad = await reconcile(ledger, { now: NOW, mission_id: opened.id }, clients(state));
-    assert.equal(bad.status, "amm_unknown");
-    assert.equal(view(ledger, NOW).missions[opened.id].outstanding_drops, mission.outstanding_drops);
-    state.lookup = () => ({
-      result: {
-        validated: true,
-        hash: mission.signed_hash,
-        ledger_index: 10001,
-        tx_json: mission.unsigned_tx,
-        meta: {
-          TransactionResult: "tesSUCCESS",
-          AffectedNodes: [
-            { ModifiedNode: { LedgerEntryType: "AccountRoot", FinalFields: { Account: W1, Balance: "198999990" }, PreviousFields: { Balance: "200000000" } } },
-            { ModifiedNode: { LedgerEntryType: "RippleState", FinalFields: ripple("99", anchors.AETH_HEX, W1, W0), PreviousFields: ripple("100", anchors.AETH_HEX, W1, W0) } },
-            { CreatedNode: { LedgerEntryType: "RippleState", NewFields: ripple("1", LP, W1, anchors.AMM) } },
-            { ModifiedNode: { LedgerEntryType: "AMM", FinalFields: { Amount: "2000000" }, PreviousFields: { Amount: "1000000" } } },
-          ],
-        },
-      },
-    });
-    const early = await reconcile(ledger, { now: NOW, mission_id: opened.id }, clients(state));
-    assert.equal(early.status, "amm_unknown");
-    state.amm = Object.assign({}, state.amm, { amount: "2000000", lp_token: { currency: LP, issuer: anchors.AMM, value: "1" } });
-    state.lines = [{ account: anchors.AMM, currency: LP, balance: "1" }];
-    const proved = await reconcile(ledger, { now: NOW, mission_id: opened.id }, clients(state));
-    assert.equal(proved.status, "amm_proved");
-    assert.equal(proved.outstanding_drops, "0");
-    assert.equal(view(ledger, NOW).missions[opened.id].realized_loss_drops, "10");
-    assert.equal(policy.dayUsed(view(ledger, NOW), policy.chicagoDay(NOW)).toString(), "1767");
+    await assert.rejects(() => deposit(ledger, { now: NOW, idempotency_key: "w1-audit-dep", xrp_drops: "1000000", aeth: AETH }, clients(state)), (error) => error.code === "UNSUPPORTED");
+    assert.equal(state.signs, 0);
+    const crafted = {
+      signed_hash: "AB".repeat(32),
+      sequence: 20,
+      last_ledger_sequence: 10020,
+      fee_drops: "10",
+      locked_drops: "1000000",
+      lp_currency: LP,
+      unsigned_tx: { TransactionType: "AMMDeposit", Amount: "1000000", Amount2: { currency: anchors.AETH_HEX, issuer: W0, value: "1" }, Fee: "10", Flags: 0x00100000, Sequence: 20, LastLedgerSequence: 10020 },
+    };
+    assert.throws(() => depositOutcome({ result: { validated: true, hash: "CD".repeat(32), ledger_index: 10, tx_json: crafted.unsigned_tx, meta: { TransactionResult: "tesSUCCESS", AffectedNodes: [{ ModifiedNode: { LedgerEntryType: "AccountRoot", FinalFields: { Account: W1, Balance: "1" }, PreviousFields: { Balance: "2" } } }] } } }, crafted), (error) => error.code === "PROOF" || error.code === "UNCERTAIN");
     const exitState = fresh({
       lines: [{ account: anchors.AMM, currency: LP, balance: "100" }],
       amm: {
@@ -344,5 +328,48 @@ describe("bankroll audit", () => {
     assert.equal(quiet.risk_increasing, false);
     assert.equal(state.signs, 0);
     assert.equal(quiet.recommendation, undefined);
+  });
+
+  it("does not let a house bid or a pool decline create headroom", async () => {
+    const house = market.parseBook({ result: { validated: true, marker: null, offers: [
+      { Account: anchors.WALLETS.W2.address, TakerGets: "60000000", TakerPays: { currency: anchors.AETH_HEX, issuer: W0, value: "4923.54" } },
+    ] } });
+    assert.equal(house.bids.length, 0);
+    const ledger = home();
+    bankroll.commitMark(ledger, 51783000n, NOW);
+    const fallen = bankroll.room(view(ledger, NOW), {
+      proved: true,
+      reserveBase: 1000000n,
+      reserveInc: 200000n,
+      ownerCount: 0n,
+      balance: 100000000n,
+      offers: [],
+      bids: [],
+      walletAeth: 0n,
+      pool: { xrp: 10000000n, aethScaled: 1n, balance: 0n, supply: 100n, sole: false },
+    });
+    assert.equal(fallen.lp_xrp.toString(), "51783000");
+    assert.equal(fallen.remaining < 50000000n, true);
+    const marked = view(ledger, NOW).missions["bankroll-lp-high-water"].lp_high_water_drops;
+    bankroll.recover(ledger, 1000000n, 0n, NOW);
+    const after = view(ledger, NOW).missions["bankroll-lp-high-water"].lp_high_water_drops;
+    assert.equal(BigInt(after), BigInt(marked) - 1000000n);
+    const tx = {
+      TransactionType: "AMMWithdraw",
+      Account: W1,
+      Flags: 0x00010000,
+      Fee: "10",
+      Sequence: 3,
+      LastLedgerSequence: 40,
+      LPTokenIn: { currency: LP, issuer: anchors.AMM, value: "1.123456789012345" },
+      Asset: { currency: "XRP" },
+      Asset2: { currency: anchors.AETH_HEX, issuer: W0 },
+    };
+    const expected = liveExpected(tx);
+    assert.equal(expected.flags, 0x00010000);
+    assert.equal(expected.lp.value, "1.123456789012345");
+    await signer.sign(tx, expected, async () => ({ tx_blob: xrpl.encode(Object.assign({}, tx, { SigningPubKey: `ED${"AA".repeat(32)}`, TxnSignature: "00".repeat(64) })) }));
+    assert.equal(health({}).max_locked_enforced, false);
+    assert.equal(health({}).bankroll_drops, "100000000");
   });
 });

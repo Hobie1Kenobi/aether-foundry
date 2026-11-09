@@ -88,6 +88,7 @@ function reserve(dir, order, shot, now, observed) {
       realized_loss_drops: "0",
       lp_currency: order.lp_currency,
       lp_xrp_basis: order.lp_xrp_basis,
+      min_xrp_out: order.min_xrp_out || "0",
       submit_attempted: false,
       updated_at: now,
       unsigned_tx: order.tx,
@@ -101,7 +102,7 @@ function save(dir, mission) {
   exclusive(dir, (api) => api.append({ type: "mission.upsert", at: mission.updated_at, mission }));
 }
 
-async function quote(ledger) {
+async function quote(ledger, dir, now) {
   const observed = await market.load(ledger);
   let slip = null;
   try {
@@ -109,72 +110,12 @@ async function quote(ledger) {
   } catch (error) {
     slip = { error_code: error.code || "VALUATION" };
   }
-  return { observed, slip, position: bankroll.room(null, observed) };
+  const state = dir ? view(dir, now || new Date().toISOString()) : null;
+  return { observed, slip, position: bankroll.room(state, observed) };
 }
 
-async function deposit(dir, request, clients) {
-  assertClients(clients);
-  const now = (request && request.now) || new Date().toISOString();
-  const observed = await market.load(clients.ledger);
-  const position = bankroll.room(view(dir, now), observed);
-  if (position.risk_increasing !== true) throw coded("AETH inventory is unproved or the bankroll is already full. No deposit.", "VALUATION");
-  if (observed.pool.sole || observed.foreign.length === 0) {
-    throw coded("W1 already owns the pool or the book has no foreign quote. Another deposit is not external demand.", "SOLE_LP");
-  }
-  const shot = await shotOf(clients.ledger);
-  const locked = BigInt(request.xrp_drops);
-  const ceiling = bankroll.maxLock(observed, position, shot.fee);
-  if (locked <= 0n || locked > ceiling) throw coded("deposit does not fit the shared bankroll and the free balance", "BANKROLL");
-  const key = String(request.idempotency_key || "");
-  if (!/^[a-z0-9][a-z0-9-]{7,63}$/.test(key)) throw coded("idempotency_key is missing", "IDEMPOTENCY");
-  const tx = {
-    TransactionType: "AMMDeposit",
-    Account: bounds.ACCOUNT,
-    Asset: market.XRP,
-    Asset2: { currency: bounds.AETH, issuer: bounds.ISSUER },
-    Amount: locked.toString(),
-    Amount2: request.aeth,
-    Flags: TF_TWO_ASSET,
-    Fee: shot.fee.toString(),
-    Sequence: shot.sequence,
-    LastLedgerSequence: shot.validatedLedger + bounds.LEDGER_WINDOW,
-  };
-  const reserved = reserve(dir, {
-    key,
-    locked,
-    exposure: locked + shot.fee + shot.reserveInc,
-    lp_currency: observed.pool.currency,
-    lp_xrp_basis: position.lp_xrp.toString(),
-    tx,
-  }, shot, now, observed);
-  if (reserved.mission.submit_attempted) return publish(reserved.mission, { replay: true });
-  const signed = await signer.sign(tx, {
-    type: "AMMDeposit",
-    account: bounds.ACCOUNT,
-    sequence: shot.sequence,
-    last: tx.LastLedgerSequence,
-    fee: shot.fee.toString(),
-    flags: TF_TWO_ASSET,
-    amount: locked.toString(),
-    amount2: request.aeth,
-  }, clients.sign);
-  let mission = Object.assign({}, reserved.mission, {
-    signed: true,
-    signed_hash: signed.hash,
-    status: "amm_unknown",
-    submit_attempted: true,
-    updated_at: now,
-  });
-  try {
-    const preliminary = await clients.submit(signed.tx_blob);
-    const engineResult = preliminary && preliminary.result && preliminary.result.engine_result;
-    mission.submitted = engineResult === "tesSUCCESS";
-    mission.status = engineResult === "tesSUCCESS" ? "amm_unknown" : "amm_unknown";
-  } catch (error) {
-    mission.status = "amm_unknown";
-  }
-  save(dir, mission);
-  return publish(mission, { replay: false });
+async function deposit() {
+  throw coded("autonomous AMM deposit is not supported", "UNSUPPORTED");
 }
 
 async function withdraw(dir, request, clients) {
@@ -183,8 +124,7 @@ async function withdraw(dir, request, clients) {
   const observed = await market.load(clients.ledger);
   if (!observed.pool.sole) throw coded("exit is only the proved sole LP position", "POOL");
   const shot = await shotOf(clients.ledger);
-  const hash = crypto.createHash("sha256").update(`${observed.pool.ledgerIndex}:${observed.pool.balance.toString()}`).digest("hex").slice(0, 16);
-  const key = `w1-exit-${hash}`;
+  const key = "w1-exit-sole-lp";
   const tx = {
     TransactionType: "AMMWithdraw",
     Account: bounds.ACCOUNT,
@@ -204,6 +144,7 @@ async function withdraw(dir, request, clients) {
     reduce_only: true,
     lp_currency: observed.pool.currency,
     lp_xrp_basis: basis.lp_xrp.toString(),
+    min_xrp_out: basis.lp_xrp.toString(),
     tx,
   }, shot, now, observed);
   if (reserved.mission.submit_attempted) return publish(reserved.mission, { replay: true });
@@ -251,34 +192,23 @@ async function reconcile(dir, request, clients) {
     return publish(kept, { replay: false });
   }
   if (kind === "AMMDeposit") {
-    const share = fresh.pool.balance === 0n ? 0n : (fresh.pool.xrp * fresh.pool.balance) / fresh.pool.supply;
-    if (share < BigInt(mission.lp_xrp_basis || "0") + outcome.xrpIn) {
-      const kept = Object.assign({}, mission, { status: "amm_unknown", proof_reason: "pool_not_updated", updated_at: now });
-      save(dir, kept);
-      return publish(kept, { replay: false });
-    }
-    const proved = Object.assign({}, mission, {
-      status: "amm_proved",
-      outstanding_drops: "0",
-      hold: "released",
-      realized_loss_drops: outcome.fee.toString(),
-      proof_hash: outcome.hash,
-      updated_at: now,
-    });
-    save(dir, proved);
-    return publish(proved, { replay: false, recovered_drops: "0" });
+    const kept = Object.assign({}, mission, { status: "amm_unknown", proof_reason: "deposit_unsupported", updated_at: now });
+    save(dir, kept);
+    return publish(kept, { replay: false });
   }
   const share = fresh.pool.balance === 0n ? 0n : (fresh.pool.xrp * fresh.pool.balance) / fresh.pool.supply;
-  if (share >= BigInt(mission.lp_xrp_basis || "0")) {
+  const fall = BigInt(mission.lp_xrp_basis || "0") - share;
+  if (fall < outcome.xrpOut) {
     const kept = Object.assign({}, mission, { status: "amm_unknown", proof_reason: "pool_not_reduced", updated_at: now });
     save(dir, kept);
     return publish(kept, { replay: false, recovered_drops: "0" });
   }
+  bankroll.recover(dir, outcome.xrpOut, share, now);
   const proved = Object.assign({}, mission, {
     status: "amm_proved",
     outstanding_drops: "0",
     hold: "released",
-    realized_loss_drops: outcome.fee.toString(),
+    realized_loss_drops: (BigInt(mission.realized_loss_drops || "0") + outcome.fee + (fall - outcome.xrpOut)).toString(),
     recovered_drops: outcome.xrpOut.toString(),
     proof_hash: outcome.hash,
     updated_at: now,

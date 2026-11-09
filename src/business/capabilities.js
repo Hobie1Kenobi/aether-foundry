@@ -53,7 +53,7 @@ const CAPABILITIES = [
     pool: anchors.AMM,
     pool_state_verified: false,
     fees_are_apr: false,
-    note: "Deposit and withdraw code exists and stays disabled. Each activation must re-read amm_info. A sole LP position is inventory, not a reason to deposit more. Trading fees are not a guaranteed APR.",
+    note: "Autonomous AMM deposit is unsupported. A saved reduce-only withdraw can be reconciled from metadata. The pool must be re-read. Trading fees are not a guaranteed APR.",
   },
   {
     id: "xrpl.staking",

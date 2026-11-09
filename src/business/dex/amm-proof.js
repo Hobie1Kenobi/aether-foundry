@@ -14,18 +14,40 @@ function uncertain(message) {
   throw coded(message, "UNCERTAIN");
 }
 
-function scaled(value) {
-  if (typeof value !== "string" || !/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/.test(value)) return null;
+function scaled(value, places) {
+  const width = places === 15 ? 15 : 6;
+  const pattern = width === 15
+    ? /^(?:0|[1-9]\d*)(?:\.\d{1,15})?$/
+    : /^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/;
+  if (typeof value !== "string" || !pattern.test(value)) return null;
   const [whole, frac = ""] = value.split(".");
-  return BigInt(whole) * 1000000n + BigInt((frac + "000000").slice(0, 6));
+  const unit = 10n ** BigInt(width);
+  return BigInt(whole) * unit + BigInt((frac + "0".repeat(width)).slice(0, width));
 }
 
-function signedScaled(value) {
+function signedScaled(value, places) {
   if (typeof value !== "string") return null;
   const negative = value.startsWith("-");
-  const absolute = scaled(negative ? value.slice(1) : value);
+  const absolute = scaled(negative ? value.slice(1) : value, places);
   if (absolute == null) return null;
   return negative ? -absolute : absolute;
+}
+
+function sameIou(left, right) {
+  return left && right && left.currency === right.currency && left.issuer === right.issuer && left.value === right.value;
+}
+
+function bind(proof, mission) {
+  if (proof.hash !== String(mission.signed_hash || "").toUpperCase()) throw coded("proof hash is not the signed transaction", "PROOF");
+  const tx = proof.tx;
+  const reserved = mission.unsigned_tx || {};
+  if (tx.Sequence !== mission.sequence || tx.LastLedgerSequence !== mission.last_ledger_sequence || tx.Fee !== mission.fee_drops) {
+    throw coded("proof sequence, window, or fee does not match the reservation", "PROOF");
+  }
+  if (reserved.Flags != null && tx.Flags !== reserved.Flags) throw coded("proof flags do not match the reservation", "PROOF");
+  if (reserved.Amount != null && tx.Amount !== reserved.Amount) throw coded("proof amount does not match the reservation", "PROOF");
+  if (reserved.Amount2 != null && !sameIou(tx.Amount2, reserved.Amount2)) throw coded("proof second amount does not match the reservation", "PROOF");
+  if (reserved.LPTokenIn != null && !sameIou(tx.LPTokenIn, reserved.LPTokenIn)) throw coded("proof LP token does not match the reservation", "PROOF");
 }
 
 function dropsOf(value) {
@@ -84,8 +106,9 @@ function lineDelta(meta, currency, holder, issuer) {
     const code = fields.HighLimit.currency || fields.LowLimit.currency;
     if (code !== currency || !((high === issuer && low === holder) || (high === holder && low === issuer))) continue;
     const sign = holder === low && issuer === high ? 1n : -1n;
-    const after = deleted ? 0n : signedScaled(finalFields.Balance);
-    const before = created ? 0n : signedScaled(previousFields.Balance);
+    const places = currency === bounds.AETH ? 6 : 15;
+    const after = deleted ? 0n : signedScaled(finalFields.Balance, places);
+    const before = created ? 0n : signedScaled(previousFields.Balance, places);
     if (after == null || before == null) uncertain("token balance delta is malformed");
     delta += sign * (after - before);
     seen = true;
@@ -120,6 +143,7 @@ function ammXrpDelta(meta) {
 
 function depositOutcome(response, mission) {
   const proof = validatedTx(response);
+  bind(proof, mission);
   const tx = proof.tx;
   if (tx.TransactionType !== "AMMDeposit" || tx.Account !== bounds.ACCOUNT) throw coded("deposit proof is not the W1 deposit", "PROOF");
   if (tx.Amount !== mission.locked_drops || tx.Fee !== mission.fee_drops) throw coded("deposit proof does not match the reservation", "PROOF");
@@ -128,7 +152,8 @@ function depositOutcome(response, mission) {
   const fee = BigInt(tx.Fee);
   if (xrpDelta(proof.meta) !== -(xrpIn + fee)) uncertain("deposit XRP delta does not match the amount and fee");
   const aeth = lineDelta(proof.meta, bounds.AETH, bounds.ACCOUNT, bounds.ISSUER);
-  if (aeth >= 0n) uncertain("deposit did not deliver AETH into the pool");
+  const expectedAeth = tx.Amount2 ? signedScaled(tx.Amount2.value, 6) : null;
+  if (expectedAeth == null || aeth !== -expectedAeth) uncertain("deposit AETH delta does not match Amount2");
   const lp = lineDelta(proof.meta, mission.lp_currency, bounds.ACCOUNT, anchors.AMM);
   if (lp <= 0n) uncertain("deposit did not receive LP tokens");
   if (ammXrpDelta(proof.meta) !== xrpIn) uncertain("AMM XRP balance did not increase by the deposit");
@@ -137,6 +162,7 @@ function depositOutcome(response, mission) {
 
 function withdrawOutcome(response, mission) {
   const proof = validatedTx(response);
+  bind(proof, mission);
   const tx = proof.tx;
   if (tx.TransactionType !== "AMMWithdraw" || tx.Account !== bounds.ACCOUNT) throw coded("withdraw proof is not the W1 withdraw", "PROOF");
   if (tx.Fee !== mission.fee_drops) throw coded("withdraw proof does not match the reservation", "PROOF");
@@ -144,7 +170,8 @@ function withdrawOutcome(response, mission) {
   const fee = BigInt(tx.Fee);
   const balanceDelta = xrpDelta(proof.meta);
   const xrpOut = balanceDelta + fee;
-  if (xrpOut <= 0n) uncertain("withdraw did not return XRP");
+  const floor = BigInt(mission.min_xrp_out || "0");
+  if (floor <= 0n || xrpOut < floor) uncertain("withdraw returned less XRP than the reserved floor");
   const aeth = lineDelta(proof.meta, bounds.AETH, bounds.ACCOUNT, bounds.ISSUER);
   if (aeth <= 0n) uncertain("withdraw did not return AETH");
   const lp = lineDelta(proof.meta, tx.LPTokenIn.currency, bounds.ACCOUNT, anchors.AMM);

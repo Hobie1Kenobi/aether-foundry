@@ -13,9 +13,15 @@
  * is closed, and the XRP already in the pool stays consumed.
  */
 
+const { exclusive } = require("../missions/ledger");
+const { view } = require("../missions/engine");
+
 const BOUNDS_KIND = "w1-dex-offer";
 const LP_KIND = "w1-amm-lp";
 const BANKROLL_DROPS = 100000000n;
+const MARK_ID = "bankroll-lp-high-water";
+const MARK_KIND = "w1-bankroll-mark";
+const MIN_BID_DROPS = 1000000n;
 
 function drops(value) {
   return typeof value === "string" && /^[0-9]+$/.test(value) ? BigInt(value) : 0n;
@@ -47,6 +53,11 @@ function blank(code) {
   };
 }
 
+function storedHigh(state) {
+  const mission = state && state.missions && state.missions[MARK_ID];
+  return drops(mission && mission.lp_high_water_drops);
+}
+
 function aethBid(observed) {
   const pool = observed.pool;
   if (pool.balance > 0n && pool.aethScaled <= 0n) return { proved: false, xrp: 0n };
@@ -57,17 +68,23 @@ function aethBid(observed) {
   }
   const inventory = inPool + wallet;
   if (inventory === 0n) return { proved: true, xrp: 0n };
+  if (pool.aethScaled <= 0n) return { proved: false, xrp: 0n };
+  const floor = (pool.xrp * inventory) / pool.aethScaled;
+  if (floor <= 0n) return { proved: false, xrp: 0n };
   let covered = 0n;
   let xrp = 0n;
   for (const bid of observed.bids || []) {
-    if (!bid || typeof bid.xrp !== "bigint" || typeof bid.aeth !== "bigint") continue;
-    if (bid.xrp <= 0n || bid.aeth <= 0n || bid.xrp > BANKROLL_DROPS) continue;
+    if (!bid || bid.house === true) continue;
+    if (typeof bid.xrp !== "bigint" || typeof bid.aeth !== "bigint") continue;
+    if (bid.xrp < MIN_BID_DROPS || bid.aeth <= 0n || bid.xrp > BANKROLL_DROPS) continue;
     if (covered >= inventory) break;
     const take = inventory - covered < bid.aeth ? inventory - covered : bid.aeth;
-    xrp += (bid.xrp * take) / bid.aeth;
+    const part = (bid.xrp * take) / bid.aeth;
+    if (part <= 0n) continue;
+    xrp += part;
     covered += take;
   }
-  if (covered !== inventory) return { proved: false, xrp: 0n };
+  if (covered !== inventory || xrp < floor) return { proved: false, xrp: 0n };
   return { proved: true, xrp };
 }
 
@@ -111,7 +128,8 @@ function room(state, observed) {
   if (pool.supply <= 0n || pool.balance < 0n || pool.balance > pool.supply || pool.xrp < 0n || pool.aethScaled < 0n) {
     return blank("VALUATION");
   }
-  const lpXrp = pool.balance === 0n ? 0n : (pool.xrp * pool.balance) / pool.supply;
+  const currentLp = pool.balance === 0n ? 0n : (pool.xrp * pool.balance) / pool.supply;
+  const lpXrp = currentLp > storedHigh(state) ? currentLp : storedHigh(state);
   const reserve = ownerCount * reserveInc;
   const provedXrp = offerLock + lpXrp + reserveBase + reserve + pending + loss;
   const priced = aethBid(observed);
@@ -148,6 +166,52 @@ function spendable(observed) {
   return free > 0n ? free : 0n;
 }
 
+function commitMark(dir, current, now) {
+  const amount = typeof current === "bigint" ? current : 0n;
+  return exclusive(dir, (api) => {
+    const prev = storedHigh(view(dir, now));
+    const next = amount > prev ? amount : prev;
+    if (next === prev && view(dir, now).missions[MARK_ID]) return next;
+    api.append({
+      type: "mission.upsert",
+      at: now,
+      mission: {
+        id: MARK_ID,
+        kind: MARK_KIND,
+        lp_high_water_drops: next.toString(),
+        hold: "released",
+        outstanding_drops: "0",
+        updated_at: now,
+      },
+    });
+    return next;
+  });
+}
+
+function recover(dir, xrpOut, current, now) {
+  const back = typeof xrpOut === "bigint" ? xrpOut : 0n;
+  const live = typeof current === "bigint" ? current : 0n;
+  return exclusive(dir, (api) => {
+    const prev = storedHigh(view(dir, now));
+    const reduced = prev > back ? prev - back : 0n;
+    const next = live > reduced ? live : reduced;
+    api.append({
+      type: "mission.upsert",
+      at: now,
+      mission: {
+        id: MARK_ID,
+        kind: MARK_KIND,
+        lp_high_water_drops: next.toString(),
+        recovered_drops: back.toString(),
+        hold: "released",
+        outstanding_drops: "0",
+        updated_at: now,
+      },
+    });
+    return next;
+  });
+}
+
 function maxLock(observed, position, fee) {
   if (!position || position.uncertain || position.risk_increasing !== true) return 0n;
   const cost = fee + observed.reserveInc;
@@ -162,4 +226,7 @@ module.exports = {
   room,
   spendable,
   maxLock,
+  commitMark,
+  recover,
+  MIN_BID_DROPS,
 };
