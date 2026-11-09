@@ -95,7 +95,8 @@ function health(env) {
     issuer: bounds.ISSUER,
     ws: source.FOUNDRY_W1_DEX_WS || null,
     account_file: accountFile,
-    max_locked_drops: bounds.MAX_LOCKED_DROPS.toString(),
+    bankroll_drops: bounds.BANKROLL_DROPS.toString(),
+    max_locked_enforced: false,
     max_aeth: bounds.MAX_AETH,
     max_fee_drops: bounds.MAX_FEE_DROPS.toString(),
     owner_reserve: "validated_ledger.reserve_inc_xrp",
@@ -200,16 +201,7 @@ async function connectLive(env, deps) {
     clients: {
       mode: "live",
       bound: "w1-dex",
-      sign: (tx) => signer.sign(tx, {
-        type: tx.TransactionType,
-        account: bounds.ACCOUNT,
-        sequence: tx.Sequence,
-        last: tx.LastLedgerSequence,
-        fee: tx.Fee,
-        taker_pays: tx.TakerPays,
-        taker_gets: tx.TakerGets,
-        offer_sequence: tx.OfferSequence,
-      }, () => {
+      sign: (tx) => signer.sign(tx, liveExpected(tx), () => {
         const signed = wallet.sign(tx);
         return { tx_blob: signed.tx_blob, hash: signed.hash };
       }),
@@ -219,10 +211,28 @@ async function connectLive(env, deps) {
   };
 }
 
+function liveExpected(tx) {
+  return {
+    type: tx.TransactionType,
+    account: bounds.ACCOUNT,
+    sequence: tx.Sequence,
+    last: tx.LastLedgerSequence,
+    fee: tx.Fee,
+    taker_pays: tx.TakerPays,
+    taker_gets: tx.TakerGets,
+    offer_sequence: tx.OfferSequence,
+    flags: tx.Flags,
+    amount: tx.Amount,
+    amount2: tx.Amount2,
+    lp: tx.LPTokenIn,
+  };
+}
+
 module.exports = {
   WS,
   health,
   preflight,
   readPrivateW1,
   connectLive,
+  liveExpected,
 };

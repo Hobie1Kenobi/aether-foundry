@@ -51,7 +51,7 @@ function roleEnv(extra) {
     FOUNDRY_DEX_NETWORK: "xrpl:1",
     FOUNDRY_DEX_ACCOUNT: anchors.WALLETS.W1.address,
     FOUNDRY_DEX_ACTIVATE: bounds.PHRASE,
-    FOUNDRY_DEX_MAX_LOCKED_DROPS: bounds.MAX_LOCKED_DROPS.toString(),
+    FOUNDRY_DEX_BANKROLL_DROPS: bounds.BANKROLL_DROPS.toString(),
     FOUNDRY_DEX_MAX_AETH: bounds.MAX_AETH,
     FOUNDRY_DEX_AXELAR_DROPS: "0",
   }, extra || {});
@@ -120,6 +120,21 @@ function clients(state) {
         if (req.command === "account_tx") {
           if (!state.accountTx) throw new Error("account_tx");
           return state.accountTx(req);
+        }
+        if (req.command === "amm_info") {
+          return { result: { validated: true, ledger_index: state.seq, amm: state.amm || {
+            account: anchors.AMM,
+            amount: "1000000",
+            amount2: { currency: anchors.AETH_HEX, issuer: anchors.WALLETS.W0.address, value: "100" },
+            lp_token: { currency: "0158534100000000000000000000000000000000", issuer: anchors.AMM, value: "100" },
+            trading_fee: 500,
+          } } };
+        }
+        if (req.command === "account_lines") {
+          return { result: { validated: true, account: anchors.WALLETS.W1.address, marker: null, lines: state.lines || [] } };
+        }
+        if (req.command === "book_offers") {
+          return { result: { validated: true, ledger_index: state.seq, marker: null, offers: state.book || [] } };
         }
         if (req.command === "account_offers") {
           return { result: {
@@ -201,7 +216,7 @@ describe("dex adapter", () => {
     const unconfigured = await tick(roleEnv(), { now: NOW, ledger, idempotency_key: "w1-offer-0001", taker_gets: "1000", taker_pays: AETH });
     assert.equal(unconfigured.code, "NO_CLIENT");
     assert.equal(unconfigured.signed, false);
-    const raised = await tick(roleEnv({ FOUNDRY_DEX_MAX_LOCKED_DROPS: "900000" }), { now: NOW, ledger, idempotency_key: "w1-offer-0001", taker_gets: "1000", taker_pays: AETH }, clients(state));
+    const raised = await tick(roleEnv({ FOUNDRY_DEX_BANKROLL_DROPS: "100000001" }), { now: NOW, ledger, idempotency_key: "w1-offer-0001", taker_gets: "1000", taker_pays: AETH }, clients(state));
     assert.equal(raised.activated, false);
     await assert.rejects(() => tick(roleEnv(), { now: NOW, ledger, idempotency_key: "w1-offer-0001", taker_gets: "1000", taker_pays: AETH }, Object.assign(clients(state), { url: "wss://testnet.xrpl-labs.com" })), (error) => error.code === "LIVE");
     await assert.rejects(() => tick(roleEnv(), { now: NOW, ledger, idempotency_key: "w1-offer-0001", taker_gets: "1000", taker_pays: AETH, destination: "rpt1eK9nC8pQ2fY4mZ", account: anchors.WALLETS.W0.address }, clients(state)), (error) => error.code === "CALLER");
@@ -241,7 +256,7 @@ describe("dex adapter", () => {
     assert.equal(opened.tx.NetworkID, undefined);
     assert.equal(opened.outstanding_drops, "201010");
     assert.equal(opened.activity, "book_resting_offer_not_customer_revenue");
-    assert.equal(used(ledger), "202757");
+    assert.equal(used(ledger), "1747");
     assert.equal(state.signs, 1);
     assert.equal(state.submits, 1);
     const again = await tick(roleEnv(), { now: NOW, ledger, idempotency_key: "w1-offer-0001", taker_gets: "1000", taker_pays: AETH }, clients(state));
@@ -259,8 +274,10 @@ describe("dex adapter", () => {
       settlement: "submit_unknown",
       live: false,
     })}\n`);
-    await assert.rejects(() => tick(roleEnv(), { now: NOW, ledger, idempotency_key: "w1-offer-0002", taker_gets: "600000", taker_pays: AETH }, clients(state)), (error) => error.code === "CAP");
-    assert.equal(state.signs, 1);
+    const paymentBlocked = await tick(roleEnv(), { now: NOW, ledger, idempotency_key: "w1-offer-0002", taker_gets: "600000", taker_pays: AETH }, clients(state));
+    assert.equal(paymentBlocked.signed, true);
+    assert.equal(used(ledger), "4001747");
+    assert.equal(state.signs, 2);
     state.balance = "1201000";
     state.sequence = 12;
     await assert.rejects(() => tick(roleEnv(), { now: NOW, ledger: home(), idempotency_key: "w1-offer-0003", taker_gets: "1000", taker_pays: AETH }, clients(state)), (error) => error.code === "SPENDABLE");
@@ -345,7 +362,8 @@ describe("dex adapter", () => {
     assert.equal(gone.status, "dex_cancelled");
     assert.equal(gone.outstanding_drops, "0");
     assert.equal(gone.tx.Account, anchors.WALLETS.W1.address);
-    assert.equal(used(ledger), "1767");
+    assert.equal(used(ledger), "1747");
+    assert.equal(view(ledger, NOW).missions[opened.id].realized_loss_drops, "20");
     const replay = await tick(roleEnv(), { now: NOW, ledger, action: "cancel", mission_id: opened.id }, clients(state));
     assert.equal(replay.replay, true);
   });
@@ -367,7 +385,7 @@ describe("dex adapter", () => {
     const absent = await tick(roleEnv(), { now: NOW, ledger, action: "reconcile", mission_id: opened.id }, clients(state));
     assert.notEqual(absent.status, "dex_absent");
     assert.equal(absent.outstanding_drops, "201010");
-    assert.equal(used(ledger), "202757");
+    assert.equal(used(ledger), "1747");
   });
 
   it("keeps one reservation across a submit failure and a restart", async () => {
@@ -384,11 +402,11 @@ describe("dex adapter", () => {
     assert.equal(restart.replay, true);
     assert.equal(state.signs, 1);
     assert.equal(state.submits, 1);
-    assert.equal(used(ledger), "202757");
+    assert.equal(used(ledger), "1747");
     fs.appendFileSync(path.join(ledger, "events.jsonl"), `${JSON.stringify({ type: "control.kill", at: NOW })}\n`);
     state.sequence = 11;
     await assert.rejects(() => tick(roleEnv(), { now: NOW, ledger, idempotency_key: "w1-offer-0007", taker_gets: "1000", taker_pays: AETH }, clients(state)), (error) => error.code === "killed");
-    assert.equal(used(ledger), "202757");
+    assert.equal(used(ledger), "1747");
   });
 
   it("does not treat a missing or malformed remainder as a fill", () => {
@@ -533,9 +551,9 @@ describe("dex adapter", () => {
     const opened = await tick(roleEnv(), { now: NOW, ledger, idempotency_key: "w1-offer-lock1", taker_gets: "1000", taker_pays: AETH }, clients(state));
     assert.equal(opened.signed, true);
     const lines = fs.readFileSync(path.join(ledger, "events.jsonl"), "utf8").trim().split("\n");
-    const reservedAt = lines.findIndex((line) => line.includes("\"budget.reserved\"") && line.includes(opened.id));
-    assert.equal(JSON.parse(lines[reservedAt + 1]).type, "budget.uncertain");
-    assert.equal(JSON.parse(lines[reservedAt + 2]).type, "mission.upsert");
+    const upsert = lines.map((line) => JSON.parse(line)).filter((row) => row.type === "mission.upsert" && row.mission && row.mission.id === opened.id);
+    assert.equal(upsert.length >= 1, true);
+    assert.equal(lines.some((line) => line.includes("\"budget.reserved\"") && line.includes(opened.id)), false);
     state.sequence = 11;
     const raced = await Promise.allSettled([
       tick(roleEnv(), { now: NOW, ledger, idempotency_key: "w1-offer-lock2", taker_gets: "400000", taker_pays: AETH }, clients(state)),
@@ -763,14 +781,25 @@ describe("dex adapter", () => {
     assert.equal(held.written, false);
     assert.equal(reads, 0);
     state.reserveInc = 0.2;
+    const wider = await tick(roleEnv(), {
+      now: NOW,
+      ledger,
+      idempotency_key: "w1-offer-wider",
+      taker_gets: "800000",
+      taker_pays: AETH,
+    }, clients(state));
+    assert.equal(wider.signed, true);
+    assert.equal(state.signs, 1);
+    state.sequence = 11;
+    state.balance = "200000000";
     await assert.rejects(() => tick(roleEnv(), {
       now: NOW,
       ledger,
       idempotency_key: "w1-offer-too-wide",
-      taker_gets: "800000",
+      taker_gets: "100000000",
       taker_pays: AETH,
-    }, clients(state)), (error) => error.code === "CAP");
-    assert.equal(state.signs, 0);
+    }, clients(state)), (error) => error.code === "BANKROLL");
+    assert.equal(state.signs, 1);
     assert.equal(used(ledger), "1747");
     await assert.rejects(() => tick(roleEnv(), {
       now: NOW,
@@ -809,7 +838,7 @@ describe("dex adapter", () => {
     assert.equal(quiet.preexisting_locked_drops, "2275000");
     assert.equal(quiet.offer_count, 4);
     assert.equal(quiet.cap_blocked, false);
-    assert.equal(state.signs, 1);
+    assert.equal(state.signs, 2);
   });
 
   it("packs a checksummed handoff with no secret and no live proof", () => {

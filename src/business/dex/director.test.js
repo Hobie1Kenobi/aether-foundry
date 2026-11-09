@@ -37,7 +37,7 @@ function roleEnv(extra) {
     FOUNDRY_DEX_NETWORK: "xrpl:1",
     FOUNDRY_DEX_ACCOUNT: anchors.WALLETS.W1.address,
     FOUNDRY_DEX_ACTIVATE: bounds.PHRASE,
-    FOUNDRY_DEX_MAX_LOCKED_DROPS: bounds.MAX_LOCKED_DROPS.toString(),
+    FOUNDRY_DEX_BANKROLL_DROPS: bounds.BANKROLL_DROPS.toString(),
     FOUNDRY_DEX_MAX_AETH: bounds.MAX_AETH,
     FOUNDRY_DEX_AXELAR_DROPS: "0",
     FOUNDRY_W1_DEX_LIVE: "yes",
@@ -92,6 +92,21 @@ function clients(state) {
           return { result: { validated: true, ledger_index: state.seq, account_data: { Account: anchors.WALLETS.W1.address, Sequence: state.sequence, Balance: state.balance, OwnerCount: state.ownerCount, RegularKey: state.regularKey } } };
         }
         if (req.command === "fee") return { result: { drops: { open_ledger_fee: state.fee } } };
+        if (req.command === "amm_info") {
+          return { result: { validated: true, ledger_index: state.seq, amm: state.amm || {
+            account: anchors.AMM,
+            amount: "1000000",
+            amount2: { currency: anchors.AETH_HEX, issuer: anchors.WALLETS.W0.address, value: "100" },
+            lp_token: { currency: "0158534100000000000000000000000000000000", issuer: anchors.AMM, value: "100" },
+            trading_fee: 500,
+          } } };
+        }
+        if (req.command === "account_lines") {
+          return { result: { validated: true, account: anchors.WALLETS.W1.address, marker: null, lines: state.lines || [] } };
+        }
+        if (req.command === "book_offers") {
+          return { result: { validated: true, ledger_index: state.seq, marker: null, offers: state.book || [] } };
+        }
         if (req.command === "account_offers") {
           return { result: { validated: true, account: anchors.WALLETS.W1.address, ledger_index: 10001, marker: null, offers: state.offers } };
         }
@@ -195,10 +210,22 @@ describe("w1 director", () => {
     assert.equal(readJournal(journal).length, 4);
     assert.equal(fs.readFileSync(path.join(journal, "decisions.jsonl"), "utf8").includes("fixture-not-a-seed"), false);
     state.offers = [{ seq: 9, taker_gets: "4999000", taker_pays: AETH }];
+    state.amm = {
+      account: anchors.AMM,
+      amount: "100000000",
+      amount2: AETH,
+      lp_token: { currency: "0158534100000000000000000000000000000000", issuer: anchors.AMM, value: "100" },
+      trading_fee: 500,
+    };
+    state.lines = [{ account: anchors.AMM, currency: "0158534100000000000000000000000000000000", balance: "100" }];
     const blocked = await decide(roleEnv(), { now: NOW, ledger, journal }, clients(state));
-    assert.equal(blocked.decision, "observe");
+    assert.equal(blocked.decision, "research");
+    assert.equal(blocked.market, "sole_lp");
+    assert.equal(blocked.sole_lp, true);
+    assert.equal(blocked.lp_xrp_drops, "100000000");
     assert.equal(blocked.cap_blocked, true);
     assert.equal(blocked.traded, false);
+    assert.equal(blocked.bankroll_remaining_drops, "0");
   });
 
   it("places a standing order once, replays it, then reconciles a partial fill", async () => {

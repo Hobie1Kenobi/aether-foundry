@@ -12,6 +12,8 @@ const { view } = require("../../missions/engine");
 const policy = require("../../missions/policy");
 const missionConfig = require("../../missions/config");
 const bounds = require("./bounds");
+const bankroll = require("../bankroll");
+const market = require("./market");
 const snapshot = require("./snapshot");
 const proof = require("./proof");
 const signer = require("./signer");
@@ -84,7 +86,7 @@ function assertRequest(request) {
     throw coded("offer must exchange XRP and AETH issued by W0", "ASSET");
   }
   const locked = getsXrp == null ? 0n : getsXrp;
-  if (locked > bounds.MAX_LOCKED_DROPS) throw coded("locked XRP exceeds the operator bound", "CAP");
+  if (locked > bankroll.BANKROLL_DROPS) throw coded("locked XRP exceeds the shared bankroll", "BANKROLL");
   return {
     key,
     takerPays: paysXrp == null ? paysIou : paysXrp.toString(),
@@ -115,17 +117,19 @@ function sequenceHeld(state, sequence) {
   ));
 }
 
-function reserve(dir, order, shot, now) {
+function reserve(dir, order, shot, now, observed) {
   const exposure = order.locked + shot.fee + shot.reserveInc;
-  if (exposure <= 0n || exposure > missionConfig.PER_MISSION_DROPS) throw coded("offer exposure exceeds 1000000 drops", "CAP");
+  if (exposure <= 0n) throw coded("offer exposure is empty", "CAP");
   return exclusive(dir, (api) => {
     const state = view(dir, now);
     if (state.killed) throw coded("hard stop is on", "killed");
     const existing = findMission(state, order.key);
     if (existing) return { mission: existing, created: false };
     if (sequenceHeld(state, shot.sequence)) throw coded("validated sequence is already reserved", "SEQUENCE");
+    const position = bankroll.room(state, observed);
+    if (position.uncertain) throw coded("bankroll inventory is not proved", position.code || "UNCERTAIN");
+    if (exposure > position.remaining) throw coded("shared 100 XRP bankroll would be exceeded", "BANKROLL");
     const day = policy.chicagoDay(now);
-    if (policy.dayUsed(state, day) + exposure > missionConfig.DAILY_DROPS) throw coded("Chicago-day cap would be exceeded", "CAP");
     const mission = {
       id: missionId(order.key),
       idempotency_key: order.key,
@@ -154,6 +158,7 @@ function reserve(dir, order, shot, now) {
       reserve_drops: shot.reserveInc.toString(),
       locked_drops: order.locked.toString(),
       outstanding_drops: exposure.toString(),
+      realized_loss_drops: "0",
       taker_pays: order.takerPays,
       taker_gets: order.takerGets,
       fee_settled: false,
@@ -179,27 +184,7 @@ function reserve(dir, order, shot, now) {
       },
       updated_at: now,
     };
-    api.appendAll([
-      {
-        type: "budget.reserved",
-        at: now,
-        mission_id: mission.id,
-        day,
-        budget_drops: exposure.toString(),
-        components: mission.budget,
-        live: false,
-      },
-      {
-        type: "budget.uncertain",
-        at: now,
-        mission_id: mission.id,
-        day,
-        drops: exposure.toString(),
-        settlement: "dex_reserved",
-        live: false,
-      },
-      { type: "mission.upsert", at: now, mission },
-    ]);
+    api.append({ type: "mission.upsert", at: now, mission });
     return { mission, created: true };
   });
 }
@@ -216,33 +201,11 @@ function save(dir, mission) {
   });
 }
 
-function move(dir, mission, settled, released) {
+function move(dir, mission, settled) {
+  const loss = BigInt(mission.realized_loss_drops || "0") + (settled > 0n ? settled : 0n);
+  const next = Object.assign({}, mission, { realized_loss_drops: loss.toString() });
   exclusive(dir, (api) => {
-    const events = [];
-    if (settled > 0n) {
-      events.push({
-        type: "budget.settled",
-        at: mission.updated_at,
-        mission_id: mission.id,
-        day: mission.day,
-        drops: settled.toString(),
-        from: "uncertain",
-        live: false,
-      });
-    }
-    if (released > 0n) {
-      events.push({
-        type: "budget.unsigned_released",
-        at: mission.updated_at,
-        mission_id: mission.id,
-        day: mission.day,
-        drops: released.toString(),
-        reason: "dex_proof",
-        live: false,
-      });
-    }
-    events.push({ type: "mission.upsert", at: mission.updated_at, mission: stored(mission) });
-    api.appendAll(events);
+    api.append({ type: "mission.upsert", at: next.updated_at, mission: stored(next) });
   });
 }
 
@@ -291,21 +254,30 @@ async function place(dir, request, clients) {
   const order = assertRequest(request);
   const now = request.now || new Date().toISOString();
   const prior = Object.values(view(dir, now).missions || {}).find((mission) => mission && mission.kind === bounds.KIND && mission.idempotency_key === order.key);
+  const observed = await market.load(clients.ledger);
+  if (!prior && observed.pool.sole && observed.foreign.length === 0) {
+    throw coded("W1 is the sole LP and the book has no foreign quote. No new order.", "SOLE_LP");
+  }
   if (!prior) {
-    const book = await ownBook(clients.ledger);
-    if (book.count > 0) {
-      const used = policy.dayUsed(view(dir, now), policy.chicagoDay(now));
+    if (observed.offers.length > 0 && observed.foreign.length === 0) {
+      const position = bankroll.room(view(dir, now), observed);
       const error = coded("W1 book has only its own quotes. No new order.", "OBSERVE");
-      error.preexisting_locked_drops = book.locked.toString();
-      error.day_used_drops = used.toString();
-      error.offer_count = book.count;
-      error.cap_blocked = used + book.locked > missionConfig.DAILY_DROPS;
+      error.preexisting_locked_drops = observed.offers.reduce((sum, row) => sum + row.locked, 0n).toString();
+      error.offer_count = observed.offers.length;
+      error.cap_blocked = position.cap_blocked === true;
+      error.bankroll_remaining_drops = position.remaining.toString();
       throw error;
     }
   }
+  const position = bankroll.room(view(dir, now), observed);
+  if (!prior && position.risk_increasing !== true) {
+    throw coded("valuation is unproved or capital at risk is already over the shared bankroll", position.aeth_valuation === "unproved" ? "VALUATION" : "BANKROLL");
+  }
   const { shot } = await fetchSnapshot(clients.ledger);
   snapshot.assertSpendable(shot, order.locked);
-  const reserved = reserve(dir, order, shot, now);
+  const ceiling = bankroll.maxLock(observed, position, shot.fee);
+  if (order.locked > ceiling) throw coded("shared 100 XRP bankroll would be exceeded", "BANKROLL");
+  const reserved = reserve(dir, order, shot, now, observed);
   let mission = reserved.mission;
   if (mission.submit_attempted) return publish(mission, { replay: true, created: false });
   if (!mission.signed_blob) {
@@ -458,17 +430,15 @@ async function cancel(dir, request, clients) {
   if (mission.cancel_blob) return publish(mission, { replay: true });
   if (mission.status !== "dex_open" && mission.status !== "dex_partial") throw coded("offer is not reconciled open", "OFFER");
   const { shot } = await fetchSnapshot(clients.ledger);
+  const observed = await market.load(clients.ledger);
   if (shot.sequence <= mission.sequence) throw coded("validated sequence has not moved past the offer", "LEDGER");
   const fee = shot.fee;
   const claimed = exclusive(dir, (api) => {
     const current = view(dir, now).missions[mission.id];
     if (!current || current.cancel_blob || current.cancel_tx) return current;
-    const day = current.day;
-    const nextCommitted = BigInt(current.budget.budget_drops) + fee;
-    if (nextCommitted > missionConfig.PER_MISSION_DROPS) throw coded("offer exposure exceeds 1000000 drops", "CAP");
-    if (policy.dayUsed(view(dir, now), policy.chicagoDay(now)) + fee > missionConfig.DAILY_DROPS) {
-      throw coded("Chicago-day cap would be exceeded", "CAP");
-    }
+    const position = bankroll.room(view(dir, now), observed);
+    if (position.uncertain) throw coded("bankroll inventory is not proved", "UNCERTAIN");
+    if (bankroll.spendable(observed) < fee) throw coded("W1 cannot pay the cancel fee", "SPENDABLE");
     const cancelTx = {
       TransactionType: "OfferCancel",
       Account: bounds.ACCOUNT,
@@ -484,27 +454,7 @@ async function cancel(dir, request, clients) {
       outstanding_drops: (outstanding(current) + fee).toString(),
       updated_at: now,
     });
-    api.appendAll([
-      {
-        type: "budget.reserved",
-        at: now,
-        mission_id: next.id,
-        day,
-        budget_drops: fee.toString(),
-        components: { network_fee_drops: fee.toString(), budget_drops: fee.toString() },
-        live: false,
-      },
-      {
-        type: "budget.uncertain",
-        at: now,
-        mission_id: next.id,
-        day,
-        drops: fee.toString(),
-        settlement: "dex_cancel",
-        live: false,
-      },
-      { type: "mission.upsert", at: now, mission: next },
-    ]);
+    api.append({ type: "mission.upsert", at: now, mission: next });
     return next;
   });
   if (!claimed || claimed.cancel_blob) return publish(claimed || mission, { replay: true });
