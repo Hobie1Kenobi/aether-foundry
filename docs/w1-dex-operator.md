@@ -20,15 +20,17 @@ The adapter is installed and dormant. It does not read a key, open a socket, or 
 
 ## What one activation does
 
-A live process invocation makes one decision. It does not loop, invent prices, or churn orders. With the live gate on and no order amounts, the decision is `hold`: no socket, no key, no reservation. An explicit order, cancel, reconcile, or consume is one action and then the socket closes. Calling it again with the same idempotency key does not sign or submit a second time. Choosing no trade is a successful decision.
+`src/business/dex/supervisor.js` is the durable entry. It stays off unless `FOUNDRY_W1_DEX_SUPERVISOR=yes`. Each tick reads `FOUNDRY_MISSION_LEDGER`, `FOUNDRY_W1_DEX_JOURNAL`, the optional `FOUNDRY_W1_DEX_POLICY` file, and the latest validated book, then chooses one of research, observe, hold, reconcile, cancel, consume, or place. The journal is evidence of prior decisions. It is not model training. With the live gate on and only W1's own quotes, the choice is `observe`: `spend_enabled` is true and `traded` is false. No standing order is invented to create activity. A standing order in the policy file is used at most once per Chicago day, and only when the book is empty and the exposure fits. `cancel_standing` withdraws an order this director reserved. It does not cancel preexisting quotes.
 
 ## Default-off install
 
-Leave these unset: `FOUNDRY_W1_DEX_LIVE`, `FOUNDRY_DEX_EXECUTE`, and every `W0_SEED` through `W7_SEED`. Put the W1 seed only in an absolute file outside this checkout, mode `0600`, one link, not a symlink:
+Leave these unset: `FOUNDRY_W1_DEX_LIVE`, `FOUNDRY_DEX_EXECUTE`, and every `W0_SEED` through `W7_SEED`, including `W1_REGULAR_SEED`. This adapter does not read the shared secrets file. After the format below is provisioned locally, put only the W1 regular key in an absolute file outside this checkout, mode `0600`, one link, not a symlink. The regular key address is not W1. The transaction account stays W1. A derived address equal to W1 is the master key and is refused.
 
 ```json
-{"address":"rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS","seed":"<operator seed>"}
+{"account":"rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS","regular_key":"<address derived from the regular seed>","seed":"<W1 regular seed only>"}
 ```
+
+Before any signature, the socket must show network id 1 and the validated W1 `AccountRoot.RegularKey` must equal both the file's `regular_key` and the address derived from that seed. There is no master-key fallback. Preexisting W1 offers count as locked XRP. While those quotes are the whole book, the decision stays `observe`.
 
 Health reads the file mode and path only. It does not derive the key.
 
