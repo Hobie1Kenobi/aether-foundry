@@ -69,7 +69,7 @@ function world() {
     reserveBase: 1,
     reserveInc: 0.2,
     fee: "10",
-    offers: [{ seq: 10 }],
+    offers: [],
     signs: 0,
     submits: 0,
     lookup: null,
@@ -111,6 +111,7 @@ function clients(state) {
               Sequence: state.sequence,
               Balance: state.balance,
               OwnerCount: state.ownerCount,
+              RegularKey: state.regularKey,
             },
           } };
         }
@@ -578,9 +579,18 @@ describe("dex adapter", () => {
     const ledger = home();
     const file = path.join(os.tmpdir(), `w1-dex-${process.pid}.json`);
     const link = `${file}.link`;
-    fs.writeFileSync(file, JSON.stringify({ address: anchors.WALLETS.W1.address, seed: "fixture-not-a-seed" }), { mode: 0o600 });
+    const regular = xrpl.Wallet.generate().address;
+    fs.writeFileSync(file, JSON.stringify({
+      account: anchors.WALLETS.W1.address,
+      regular_key: regular,
+      seed: "fixture-not-a-seed",
+    }), { mode: 0o600 });
     try {
-      assert.equal(readPrivateW1(file).address, anchors.WALLETS.W1.address);
+      assert.equal(readPrivateW1(file).account, anchors.WALLETS.W1.address);
+      assert.equal(readPrivateW1(file).regular_key, regular);
+      fs.writeFileSync(file, JSON.stringify({ account: anchors.WALLETS.W1.address, regular_key: anchors.WALLETS.W1.address, seed: "fixture-not-a-seed" }), { mode: 0o600 });
+      assert.throws(() => readPrivateW1(file), (error) => error.code === "MASTER_KEY");
+      fs.writeFileSync(file, JSON.stringify({ account: anchors.WALLETS.W1.address, regular_key: regular, seed: "fixture-not-a-seed" }), { mode: 0o600 });
       fs.chmodSync(file, 0o644);
       assert.throws(() => readPrivateW1(file), (error) => error.code === "AUTH");
       fs.chmodSync(file, 0o600);
@@ -604,14 +614,16 @@ describe("dex adapter", () => {
       assert.equal(idle.activated, false);
       assert.equal(reads, 0);
       const state = world();
+      state.regularKey = regular;
       const calls = { urls: [], closed: 0, signatures: 0, opens: 0, order: [] };
       const deps = {
-        readAccount: async () => ({ address: anchors.WALLETS.W1.address, seed: "fixture-not-a-seed" }),
+        readAccount: async () => ({ account: anchors.WALLETS.W1.address, regular_key: regular, seed: "fixture-not-a-seed" }),
         openWallet: (seed) => {
           calls.opens += 1;
           calls.order.push("open");
           const wallet = {
-            address: anchors.WALLETS.W1.address,
+            address: regular,
+            classicAddress: regular,
             sign(tx) {
               calls.signatures += 1;
               const blob = xrpl.encode(Object.assign({}, tx, { SigningPubKey: `ED${"AA".repeat(32)}`, TxnSignature: "00".repeat(64) }));
@@ -683,6 +695,19 @@ describe("dex adapter", () => {
       }), (error) => error.code === "MAINNET");
       assert.equal(calls.signatures, 1);
       assert.equal(calls.opens, opensBeforeMainnet);
+      state.networkId = 1;
+      state.offers = [];
+      const master = Object.assign({}, deps, {
+        openWallet: () => ({ address: anchors.WALLETS.W1.address, classicAddress: anchors.WALLETS.W1.address, sign() { throw new Error("master signed"); } }),
+      });
+      await assert.rejects(() => tick(liveEnv, {
+        now: NOW,
+        ledger,
+        idempotency_key: "w1-offer-master",
+        taker_gets: "1000",
+        taker_pays: AETH,
+        deps: master,
+      }), (error) => error.code === "MASTER_KEY");
     } finally {
       fs.rmSync(link, { force: true });
       fs.rmSync(file, { force: true });
@@ -765,6 +790,26 @@ describe("dex adapter", () => {
     assert.equal(terminal.submitted, false);
     assert.equal(terminal.status, "dex_unknown");
     assert.equal(terminal.outstanding_drops, "201010");
+    state.offers = [
+      { seq: 4, taker_gets: "500000", taker_pays: AETH },
+      { seq: 5, taker_gets: "500000", taker_pays: AETH },
+      { seq: 6, taker_gets: "500000", taker_pays: AETH },
+      { seq: 7, taker_gets: "775000", taker_pays: AETH },
+    ];
+    const quiet = await tick(roleEnv(), {
+      now: NOW,
+      ledger,
+      idempotency_key: "w1-offer-own-book",
+      taker_gets: "1000",
+      taker_pays: AETH,
+    }, clients(state));
+    assert.equal(quiet.decision, "observe");
+    assert.equal(quiet.signed, false);
+    assert.equal(quiet.submitted, false);
+    assert.equal(quiet.preexisting_locked_drops, "2275000");
+    assert.equal(quiet.offer_count, 4);
+    assert.equal(quiet.cap_blocked, false);
+    assert.equal(state.signs, 1);
   });
 
   it("packs a checksummed handoff with no secret and no live proof", () => {

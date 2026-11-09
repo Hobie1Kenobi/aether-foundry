@@ -266,10 +266,41 @@ async function fetchSnapshot(ledger) {
   return { shot, server };
 }
 
+function offerLockedDrops(row) {
+  const gets = row && (row.taker_gets != null ? row.taker_gets : row.TakerGets);
+  return typeof gets === "string" && /^[0-9]+$/.test(gets) ? BigInt(gets) : 0n;
+}
+
+async function ownBook(ledger) {
+  const page = await ledger.request({
+    command: "account_offers",
+    account: bounds.ACCOUNT,
+    ledger_index: "validated",
+  });
+  const result = page && page.result;
+  if (!result || result.validated !== true || result.account !== bounds.ACCOUNT || !Array.isArray(result.offers) || result.marker != null) {
+    throw coded("validated account offers are missing", "UNCERTAIN");
+  }
+  let locked = 0n;
+  for (const row of result.offers) locked += offerLockedDrops(row);
+  return { count: result.offers.length, locked };
+}
+
 async function place(dir, request, clients) {
   assertClients(clients);
   const order = assertRequest(request);
   const now = request.now || new Date().toISOString();
+  const prior = Object.values(view(dir, now).missions || {}).find((mission) => mission && mission.kind === bounds.KIND && mission.idempotency_key === order.key);
+  if (!prior) {
+    const book = await ownBook(clients.ledger);
+    if (book.count > 0) {
+      const error = coded("W1 book has only its own quotes. No new order.", "OBSERVE");
+      error.preexisting_locked_drops = book.locked.toString();
+      error.offer_count = book.count;
+      error.cap_blocked = book.locked > missionConfig.DAILY_DROPS;
+      throw error;
+    }
+  }
   const { shot } = await fetchSnapshot(clients.ledger);
   snapshot.assertSpendable(shot, order.locked);
   const reserved = reserve(dir, order, shot, now);
@@ -645,6 +676,7 @@ async function consume(dir, request, clients) {
 }
 
 module.exports = {
+  inspectBook: ownBook,
   place,
   reconcile,
   cancel,

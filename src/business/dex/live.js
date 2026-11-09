@@ -58,11 +58,15 @@ function readPrivateW1(file) {
       throw coded("W1 account file must be mode 0600", "AUTH");
     }
     const body = JSON.parse(fs.readFileSync(fd, "utf8"));
-    if (!body || body.address !== bounds.ACCOUNT || typeof body.seed !== "string" || body.seed.length < 8) {
-      throw coded("W1 account file does not match the public wallet", "WALLET");
+    const xrpl = require("xrpl");
+    if (!body || body.account !== bounds.ACCOUNT || body.account === anchors.WALLETS.W0.address) {
+      throw coded("W1 regular-key file must name the W1 account", "WALLET");
     }
-    if (body.address === anchors.WALLETS.W0.address) throw coded("refusing W0", "W0");
-    return { address: body.address, seed: body.seed };
+    if (body.regular_key === bounds.ACCOUNT || body.regular_key === anchors.WALLETS.W0.address || !xrpl.isValidClassicAddress(body.regular_key || "")) {
+      throw coded("refusing a master key as the W1 signer", "MASTER_KEY");
+    }
+    if (typeof body.seed !== "string" || body.seed.length < 8) throw coded("W1 regular-key file is missing its seed", "WALLET");
+    return { account: body.account, regular_key: body.regular_key, seed: body.seed };
   } finally {
     fs.closeSync(fd);
   }
@@ -109,7 +113,7 @@ async function preflight(env, deps) {
   const read = options.readAccount || ((file) => readPrivateW1(file));
   const loaded = await read(source.FOUNDRY_W1_DEX_ACCOUNT_FILE);
   return {
-    address_match: loaded.address === bounds.ACCOUNT,
+    address_match: loaded.account === bounds.ACCOUNT && loaded.regular_key && loaded.regular_key !== bounds.ACCOUNT,
     derived: false,
     dormant: false,
     live_proof: false,
@@ -139,19 +143,11 @@ async function connectLive(env, deps) {
     return client;
   });
   const client = await connect(ws);
-  let wallet;
+  let wallet = null;
   try {
     const info = await client.request({ command: "server_info" });
     const network = info && info.result && info.result.info && info.result.info.network_id;
     if (Number(network) !== 1) throw coded("socket did not prove xrpl network id 1", "MAINNET");
-    const loaded = await read(source.FOUNDRY_W1_DEX_ACCOUNT_FILE);
-    if (!loaded || loaded.address !== bounds.ACCOUNT || loaded.address === anchors.WALLETS.W0.address) {
-      throw coded("W1 account file does not match the public wallet", "WALLET");
-    }
-    wallet = await open(loaded.seed);
-    const classic = wallet && (wallet.classicAddress || wallet.address);
-    if (classic === anchors.WALLETS.W0.address) throw coded("refusing to sign as W0", "W0");
-    if (classic !== bounds.ACCOUNT) throw coded("derived key does not match W1", "WALLET");
   } catch (error) {
     try {
       await client.disconnect();
@@ -159,6 +155,38 @@ async function connectLive(env, deps) {
       /* already closed */
     }
     throw error;
+  }
+  async function openKey() {
+    if (wallet) return;
+    try {
+      const account = await client.request({ command: "account_info", account: bounds.ACCOUNT, ledger_index: "validated" });
+      const data = account && account.result && account.result.account_data;
+      if (!account || account.result.validated !== true || !data || data.Account !== bounds.ACCOUNT) {
+        throw coded("validated W1 account is missing", "LEDGER");
+      }
+      const onLedger = data.RegularKey;
+      if (typeof onLedger !== "string" || onLedger === bounds.ACCOUNT || onLedger === anchors.WALLETS.W0.address) {
+        throw coded("W1 validated account has no regular key", "REGULAR_KEY");
+      }
+      const loaded = await read(source.FOUNDRY_W1_DEX_ACCOUNT_FILE);
+      if (!loaded || loaded.regular_key !== onLedger) {
+        throw coded("file regular key does not match AccountRoot.RegularKey", "REGULAR_KEY");
+      }
+      const opened = await open(loaded.seed);
+      const classic = opened && (opened.classicAddress || opened.address);
+      if (classic === bounds.ACCOUNT || classic === anchors.WALLETS.W0.address) {
+        throw coded("refusing to sign W1 with its master key", "MASTER_KEY");
+      }
+      if (classic !== onLedger) throw coded("derived key does not match AccountRoot.RegularKey", "REGULAR_KEY");
+      wallet = opened;
+    } catch (error) {
+      try {
+        await client.disconnect();
+      } catch {
+        /* already closed */
+      }
+      throw error;
+    }
   }
   let closed = false;
   async function close() {
@@ -168,6 +196,7 @@ async function connectLive(env, deps) {
   }
   return {
     close,
+    openKey,
     clients: {
       mode: "live",
       bound: "w1-dex",
