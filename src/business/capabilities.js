@@ -53,7 +53,7 @@ const CAPABILITIES = [
     pool: anchors.AMM,
     pool_state_verified: false,
     fees_are_apr: false,
-    note: "An AETH/XRP pool address is published. LP is not authorized until pool state and the live owner reserve are verified. Trading fees are not a guaranteed APR.",
+    note: "Deposit and withdraw code exists and stays disabled. Each activation must re-read amm_info. A sole LP position is inventory, not a reason to deposit more. Trading fees are not a guaranteed APR.",
   },
   {
     id: "xrpl.staking",
@@ -143,7 +143,8 @@ function activationCriteria() {
     "Axelar and EVM writes stay at zero gas and zero asset budget.",
     "The W1 DEX adapter reserves on the shared mission ledger and signs only through an injected client. Production is not activated, and the mission signer remains Payment-only.",
     "Every outstanding hold counts toward the Chicago-day cap. The 1747-drop hold is one of those holds, not a special exception.",
-    "AMM LP, native staking, and SAV/Lending are not authorized. LP fees are not a guaranteed APR.",
+    "DEX and LP share one 100000000-drop Testnet bankroll, including live LP XRP, open offers, incremental reserves, in-flight holds, and realized losses. It is not 100 XRP per agent and it does not refill daily. Payment missions stay at 1000000 and 5000000 drops.",
+    "AMM LP, native staking, and SAV/Lending are not authorized. A sole-owned pool is not external demand. LP fees are not a guaranteed APR.",
     "The original vendor HTTP 403 and the 1747-drop hold are specific open issues. They do not by themselves forbid an unrelated plan that still fits the aggregate cap.",
     "Diagnostic attempt locks and reconcile proofs are not deleted.",
   ];

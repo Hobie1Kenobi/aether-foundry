@@ -84,7 +84,7 @@ async function tick(env, input, clients) {
             execution_ready: false,
             preexisting_locked_drops: book.locked.toString(),
             offer_count: book.count,
-            cap_blocked: book.locked > 5000000n,
+            cap_blocked: book.locked > 100000000n,
           };
         }
       }

@@ -18,6 +18,7 @@ const TF_PASSIVE = 0x00010000;
 const TF_TAKING = 0x00020000 | 0x00040000;
 const LEDGER_WINDOW = 20;
 const MAX_LOCKED_DROPS = 800000n;
+const BANKROLL_DROPS = 100000000n;
 const MAX_AETH = "10";
 const MAX_FEE_DROPS = 10000n;
 const AXELAR_DROPS = "0";
@@ -30,7 +31,7 @@ function verifiedEnv(env) {
   if (source.FOUNDRY_DEX_ACCOUNT !== ACCOUNT) return null;
   if (source.FOUNDRY_DEX_ACCOUNT === anchors.WALLETS.W0.address) return null;
   if (source.FOUNDRY_DEX_ACTIVATE !== PHRASE) return null;
-  if (source.FOUNDRY_DEX_MAX_LOCKED_DROPS !== MAX_LOCKED_DROPS.toString()) return null;
+  if (source.FOUNDRY_DEX_BANKROLL_DROPS !== BANKROLL_DROPS.toString()) return null;
   if (source.FOUNDRY_DEX_MAX_AETH !== MAX_AETH) return null;
   if (source.FOUNDRY_DEX_AXELAR_DROPS !== AXELAR_DROPS) return null;
   return {
@@ -41,6 +42,7 @@ function verifiedEnv(env) {
     network_id: missionConfig.NETWORK_ID,
     phrase: PHRASE,
     max_locked_drops: MAX_LOCKED_DROPS.toString(),
+    bankroll_drops: BANKROLL_DROPS.toString(),
     max_aeth: MAX_AETH,
     axelar_drops: AXELAR_DROPS,
   };
@@ -57,6 +59,7 @@ module.exports = {
   TF_TAKING,
   LEDGER_WINDOW,
   MAX_LOCKED_DROPS,
+  BANKROLL_DROPS,
   MAX_AETH,
   MAX_FEE_DROPS,
   AXELAR_DROPS,

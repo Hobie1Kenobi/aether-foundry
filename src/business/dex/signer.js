@@ -29,6 +29,15 @@ function assertFields(tx, expected) {
   if (expected.type === "OfferCancel" && tx.OfferSequence !== expected.offer_sequence) {
     throw coded("signer refuses a changed offer sequence", "TX");
   }
+  if (expected.type === "AMMDeposit" || expected.type === "AMMWithdraw") {
+    if (tx.Flags !== expected.flags || tx.Fee !== expected.fee) throw coded("signer refuses a changed AMM flag or fee", "TX");
+    if (expected.amount != null && tx.Amount !== expected.amount) throw coded("signer refuses a changed AMM amount", "TX");
+    if (expected.amount2 != null && !same(tx.Amount2, expected.amount2)) throw coded("signer refuses a changed AMM amount", "TX");
+    if (expected.lp != null && !same(tx.LPTokenIn, expected.lp)) throw coded("signer refuses a changed LP balance", "TX");
+    if (!tx.Asset || tx.Asset.currency !== "XRP" || !tx.Asset2 || tx.Asset2.issuer !== bounds.ISSUER) {
+      throw coded("signer refuses an AMM asset that is not XRP and AETH", "TX");
+    }
+  }
 }
 
 async function sign(tx, expected, signer) {

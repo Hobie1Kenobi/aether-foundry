@@ -11,12 +11,14 @@ const fs = require("fs");
 const path = require("path");
 const { view } = require("../../missions/engine");
 const policy = require("../../missions/policy");
-const missionConfig = require("../../missions/config");
 const { verifiedEnv, KIND } = require("./bounds");
 const { connectLive } = require("./live");
 const engine = require("./engine");
+const market = require("./market");
+const bankroll = require("../bankroll");
+const amm = require("./amm");
 
-const CHOICES = ["research", "observe", "hold", "reconcile", "cancel", "place"];
+const CHOICES = ["research", "observe", "hold", "reconcile", "cancel", "place", "withdraw"];
 
 function journalPath(dir) {
   return path.join(dir, "decisions.jsonl");
@@ -62,6 +64,8 @@ function savedPolicy(env, body) {
   return {
     standing_offer: offer || null,
     cancel_standing: parsed.cancel_standing === true,
+    rebalance: parsed.rebalance || null,
+    max_action_drops: typeof parsed.max_action_drops === "string" ? parsed.max_action_drops : null,
   };
 }
 
@@ -105,18 +109,53 @@ async function decide(env, input, clients) {
   const ledgerClient = runtime ? runtime.ledger : live.clients.ledger;
   const actor = runtime || (live && live.clients);
   try {
-    const book = await engine.inspectBook(ledgerClient);
+    let observed;
+    try {
+      observed = await market.load(ledgerClient);
+    } catch (error) {
+      const row = Object.assign({}, base, {
+        decision: "research",
+        market: "unproved",
+        rationale: "The validated pool, balances, or book could not be proved. Nothing is placed.",
+        error_code: error.code || "UNCERTAIN",
+        traded: false,
+      });
+      return remember(body.journal, row);
+    }
+    const position = bankroll.room(view(body.ledger, now), observed);
+    let slip = null;
+    try {
+      const probe = observed.pool.xrp > 1000000n ? 1000000n : observed.pool.xrp / 10n;
+      if (probe > 0n) slip = market.slippage(observed.pool, probe);
+    } catch (error) {
+      slip = { error_code: error.code || "VALUATION" };
+    }
     const used = policy.dayUsed(view(body.ledger, now), policy.chicagoDay(now));
-    const capBlocked = used + book.locked > missionConfig.DAILY_DROPS;
+    const bookCount = observed.offers.length;
+    const inventory = {
+      learning: false,
+      traded: false,
+      day_used_drops: used.toString(),
+      lp_xrp_drops: position.lp_xrp.toString(),
+      offer_lock_drops: position.offer_lock.toString(),
+      reserve_drops: position.reserve.toString(),
+      bankroll_used_drops: position.uncertain ? null : position.used.toString(),
+      bankroll_remaining_drops: position.remaining.toString(),
+      bankroll_limit_drops: position.limit.toString(),
+      cap_blocked: position.cap_blocked === true,
+      sole_lp: observed.pool.sole === true,
+      foreign_quotes: observed.foreign.length,
+      slippage: slip,
+      preexisting_locked_drops: position.offer_lock.toString(),
+      offer_count: bookCount,
+    };
     const mission = body.ledger ? openMission(body.ledger, now) : null;
     if (mission && (mission.status === "dex_submitted" || mission.status === "dex_signed" || mission.status === "dex_unknown")) {
-      const row = Object.assign({}, base, {
+      const row = Object.assign({}, base, inventory, {
         decision: "reconcile",
-        market: book.count > 0 ? "own_book_only" : "empty",
+        market: bookCount > 0 ? "own_book_only" : "empty",
         rationale: "An earlier order is unresolved. Reconcile it instead of opening another.",
         mission_id: mission.id,
-        preexisting_locked_drops: book.locked.toString(),
-        day_used_drops: used.toString(),
       });
       if (actor) {
         try {
@@ -129,9 +168,9 @@ async function decide(env, input, clients) {
       return remember(body.journal, row);
     }
     if (mission && (mission.status === "dex_open" || mission.status === "dex_partial") && saved.cancel_standing === true) {
-      const row = Object.assign({}, base, {
+      const row = Object.assign({}, base, inventory, {
         decision: "cancel",
-        market: book.count > 0 ? "own_book_only" : "empty",
+        market: bookCount > 0 ? "own_book_only" : "empty",
         rationale: "The saved policy withdraws this director's open order. Preexisting quotes are not cancelled.",
         mission_id: mission.id,
       });
@@ -147,12 +186,11 @@ async function decide(env, input, clients) {
       return remember(body.journal, row);
     }
     if (mission && (mission.status === "dex_open" || mission.status === "dex_partial")) {
-      const row = Object.assign({}, base, {
+      const row = Object.assign({}, base, inventory, {
         decision: "consume",
-        market: book.count > 0 ? "own_book_only" : "empty",
+        market: bookCount > 0 ? "own_book_only" : "empty",
         rationale: "An open order may have been consumed. Check that history before placing another.",
         mission_id: mission.id,
-        preexisting_locked_drops: book.locked.toString(),
       });
       if (actor) {
         try {
@@ -163,32 +201,101 @@ async function decide(env, input, clients) {
       }
       return remember(body.journal, row);
     }
-    if (book.count > 0) {
-      const row = Object.assign({}, base, {
-        decision: "observe",
-        market: "own_book_only",
-        rationale: "The book is W1's own quotes. No external counterparty is allowlisted, so the choice is no trade.",
-        preexisting_locked_drops: book.locked.toString(),
-        day_used_drops: used.toString(),
-        offer_count: book.count,
-        cap_blocked: capBlocked,
+    if (observed.pool.sole && observed.foreign.length === 0 && bookCount >= 0) {
+      if (saved.rebalance === "exit-sole-lp" && actor) {
+        const row = Object.assign({}, base, inventory, {
+          decision: "withdraw",
+          market: "sole_lp",
+          rationale: "The saved policy exits the sole LP position. The pool XRP stays in the inventory until a later validated read shows it returned.",
+        });
+        try {
+          if (live) await live.openKey();
+          const exited = await amm.withdraw(body.ledger, { now }, actor);
+          row.signed = exited.signed === true;
+          row.submitted = exited.submitted === true;
+          row.replay = exited.replay === true;
+          row.status = exited.status;
+          row.traded = false;
+        } catch (error) {
+          row.error_code = error.code || "UNCERTAIN";
+          row.signed = false;
+        }
+        return remember(body.journal, row);
+      }
+      const row = Object.assign({}, base, inventory, {
+        decision: "research",
+        market: "sole_lp",
+        recommendation: "exit",
+        rationale: "W1 holds the entire LP balance and the book has no foreign AETH/XRP quote. Adding liquidity would only concentrate W1. No deposit and no self-trade.",
       });
       return remember(body.journal, row);
     }
+    if (bookCount > 0) {
+      const row = Object.assign({}, base, inventory, {
+        decision: "observe",
+        market: observed.foreign.length > 0 ? "foreign_while_resting" : "own_book_only",
+        rationale: observed.foreign.length > 0
+          ? "A foreign quote is on the book, and W1 already rests. No duplicate quote is added."
+          : "The book is W1's own quotes. No foreign quote is visible, so the choice is no trade.",
+      });
+      return remember(body.journal, row);
+    }
+    const foreignSize = observed.foreign.reduce((sum, row) => (row.size > sum ? row.size : sum), 0n);
+    if (foreignSize > 0n) {
+      const fee = 10n;
+      const ceiling = bankroll.maxLock(observed, position, fee);
+      const slice = position.remaining / 5n;
+      const bound = saved.max_action_drops ? BigInt(saved.max_action_drops) : slice;
+      let size = foreignSize < ceiling ? foreignSize : ceiling;
+      if (bound > 0n && size > bound) size = bound;
+      if (size <= 0n) {
+        return remember(body.journal, Object.assign({}, base, inventory, {
+          decision: "research",
+          market: "foreign",
+          rationale: "A foreign quote is visible, and the shared bankroll has no room for another quote.",
+        }));
+      }
+      const key = standingKey({ foreign: foreignSize.toString(), size: size.toString() }, policy.chicagoDay(now));
+      const row = Object.assign({}, base, inventory, {
+        decision: "place",
+        market: "foreign",
+        rationale: "A foreign quote is visible. The passive size is the smaller of that quote, one fifth of the remaining bankroll, and the free balance.",
+        idempotency_key: key,
+      });
+      if (actor) {
+        try {
+          if (live) await live.openKey();
+          const placed = await engine.place(body.ledger, {
+            now,
+            idempotency_key: key,
+            taker_gets: size.toString(),
+            taker_pays: { currency: require("../../director/anchors").AETH_HEX, issuer: require("../../director/anchors").WALLETS.W0.address, value: "1" },
+          }, actor);
+          row.signed = placed.signed === true;
+          row.submitted = placed.submitted === true;
+          row.replay = placed.replay === true;
+          row.status = placed.status;
+          row.traded = false;
+        } catch (error) {
+          row.signed = false;
+          row.error_code = error.code || "UNCERTAIN";
+          if (error.code === "OBSERVE") row.decision = "observe";
+        }
+      }
+      return remember(body.journal, row);
+    }
     const standing = saved.standing_offer;
-    if (!standing) {
-      const row = Object.assign({}, base, {
+    if (!standing || observed.pool.sole) {
+      const row = Object.assign({}, base, inventory, {
         decision: "research",
         market: "empty",
-        rationale: "Spend is enabled and the book is empty. No standing order is configured, so nothing is placed.",
-        preexisting_locked_drops: "0",
-        day_used_drops: used.toString(),
+        rationale: "Spend is enabled. No foreign quote is visible, so nothing is placed to manufacture activity.",
       });
       return remember(body.journal, row);
     }
     const day = policy.chicagoDay(now);
     const key = standingKey(standing, day);
-    const row = Object.assign({}, base, {
+    const row = Object.assign({}, base, inventory, {
       decision: "place",
       market: "empty",
       rationale: "The book is empty and the standing order fits the saved policy. This key is stable for the Chicago day.",

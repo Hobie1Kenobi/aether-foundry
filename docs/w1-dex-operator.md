@@ -12,11 +12,12 @@ The adapter is installed and dormant. It does not read a key, open a socket, or 
 
 ## Limits and reserve
 
-- Locked XRP on one offer is at most 800000 drops. That ceiling is not a promise that 800000 fits. Exposure is locked XRP plus the live owner-reserve increment plus the open-ledger fee, and that sum must be at most 1000000 drops. A 0.2 XRP reserve plus a fee makes 800000 drops too large. The code refuses it. Do not raise the cap. Choose a smaller order that fits, such as 100000 drops of locked XRP when the observed reserve and fee leave room.
+- DEX and LP share one 100000000-drop bankroll. It is not 100 XRP for each agent and it does not refill each Chicago day. A restart reads the same ledger.
+- The bankroll counts, once each: the proved LP share of the AMM's XRP, open-offer locked XRP, `OwnerCount * reserve_inc`, in-flight holds that are not already on the book, and realized XRP losses. The account base reserve is not a trading position. The AETH leg is the same LP position and is not marked as a second XRP charge.
+- Payment missions stay at 1000000 drops each and 5000000 drops per Chicago day, including the 1747-drop legacy hold. New DEX rows do not write `budget.reserved`.
 - The open-ledger fee must be from 1 to 10000 drops. The caller does not set it.
-- Exposure is locked XRP plus that fee plus one incremental owner reserve. The reserve is `validated_ledger.reserve_inc_xrp` from the socket, converted to drops. It is not a hardcoded 0.2 XRP and it is not a yield.
-- The shared mission ledger still caps one mission at 1000000 drops and a Chicago day at 5000000 drops, including every outstanding hold.
-- Creating the offer increases the account owner count by one. That reserve stays locked until a validated cancel or a validated consuming trade deletes the offer. The network fee is spent. Neither number is an APR.
+- A sole LP position with no foreign quote is research, not a deposit and not a self-trade. `rebalance: "exit-sole-lp"` in the policy file is the saved exit. The withdraw size is the validated LP balance. The pool XRP stays in the inventory until a later validated read shows it is gone.
+- Creating an offer increases the owner count by one. That reserve stays locked until a validated cancel or a consuming trade deletes the offer. The network fee is spent. Neither number is an APR. The AMM trading fee is not a yield.
 
 ## What one activation does
 
@@ -30,7 +31,11 @@ Leave these unset: `FOUNDRY_W1_DEX_LIVE`, `FOUNDRY_DEX_EXECUTE`, and every `W0_S
 {"account":"rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS","regular_key":"<address derived from the regular seed>","seed":"<W1 regular seed only>"}
 ```
 
-Before any signature, the socket must show network id 1 and the validated W1 `AccountRoot.RegularKey` must equal both the file's `regular_key` and the address derived from that seed. There is no master-key fallback. Preexisting W1 offers count as locked XRP. While those quotes are the whole book, the decision stays `observe`.
+Before any signature, the socket must show network id 1 and the validated W1 `AccountRoot.RegularKey` must equal both the file's `regular_key` and the address derived from that seed. There is no master-key fallback. Each tick re-reads `amm_info`, `account_lines`, `account_offers`, and `book_offers`. A previous snapshot is not reused when that read fails. While W1 holds the entire LP balance and no foreign quote is visible, the decision stays `research` with `traded: false`. `spend_enabled` can still be true.
+
+## Migration from the installed 1 XRP / 5 XRP DEX gate
+
+Do not delete the mission ledger or the decision journal. Do not reset the 1747-drop hold. Set `FOUNDRY_DEX_BANKROLL_DROPS=100000000` and remove `FOUNDRY_DEX_MAX_LOCKED_DROPS`. Until that variable is set, `verifiedEnv` fails and the supervisor holds. The bankroll is inactive until the operator installs this build and sets the variable. No fresh 100 XRP is added on top of the live LP or the open quotes. W0 is not a funder. No faucet and no transfer from W2–W7 is part of this package. W7 is an Xahau testnet account and is not an xrpl:1 balance.
 
 Health reads the file mode and path only. It does not derive the key.
 
@@ -57,7 +62,7 @@ All of these must be set together. A restart with the same environment and the s
 - `FOUNDRY_DEX_NETWORK=xrpl:1`
 - `FOUNDRY_DEX_ACCOUNT=rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS`
 - `FOUNDRY_DEX_ACTIVATE=ACTIVATE-W1-DEX-ROLE`
-- `FOUNDRY_DEX_MAX_LOCKED_DROPS=800000`
+- `FOUNDRY_DEX_BANKROLL_DROPS=100000000`
 - `FOUNDRY_DEX_MAX_AETH=10`
 - `FOUNDRY_DEX_AXELAR_DROPS=0`
 - `FOUNDRY_W1_DEX_LIVE=yes`
