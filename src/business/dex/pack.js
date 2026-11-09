@@ -62,7 +62,7 @@ function packDex(options) {
     legacy_drops: "1747",
     w1: "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
     axelar_drops: "0",
-    review_command: "node --test src/business/business.test.js src/business/dex.test.js src/business/dex/director.test.js src/business/bankroll.test.js src/business/bankroll-audit.test.js",
+    review_command: "node --test src/business/business.test.js src/business/dex.test.js src/business/dex/director.test.js src/business/bankroll.test.js src/business/bankroll-audit.test.js src/business/dex/w1-live-replay.test.js",
   };
   fs.writeFileSync(path.join(stage, "ATTESTATION.json"), `${JSON.stringify(attestation, null, 2)}\n`);
   const manifest = {

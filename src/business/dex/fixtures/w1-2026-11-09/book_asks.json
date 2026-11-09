@@ -1,0 +1,49 @@
+{
+  "result": {
+    "ledger_hash": "2A47CFDAEEA54DB6AFF05D3B4BD4E37D2948B713EF14560E50CFA2279AC49566",
+    "ledger_index": 22180885,
+    "offers": [
+      {
+        "Account": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+        "BookDirectory": "F8730041D18A1F6B7F2ACF870C9DD32EB27DA331F34F12FA5903BAF82D03A000",
+        "BookNode": "0",
+        "Flags": 65536,
+        "LedgerEntryType": "Offer",
+        "OwnerNode": "0",
+        "PreviousTxnID": "6038AC31F50B98EB8F2838ED8DA99AA923B774FAA78DE91462753EC763F6A76B",
+        "PreviousTxnLgrSeq": 21094036,
+        "Sequence": 21093737,
+        "TakerGets": {
+          "currency": "4145544800000000000000000000000000000000",
+          "issuer": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+          "value": "50"
+        },
+        "TakerPays": "525000",
+        "index": "7EDFAC72E8A3331B0237BCB11A482ECFC72DB82AD70E774493CC28CA95E9CAE3",
+        "owner_funds": "4976.457048475416",
+        "quality": "10500"
+      },
+      {
+        "Account": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+        "BookDirectory": "F8730041D18A1F6B7F2ACF870C9DD32EB27DA331F34F12FA5903E871B540C000",
+        "BookNode": "0",
+        "Flags": 65536,
+        "LedgerEntryType": "Offer",
+        "OwnerNode": "0",
+        "PreviousTxnID": "614D82BADB3ECF3862B20C04BCC3ABC6E83BF56305AD920E55BDC159CC41140F",
+        "PreviousTxnLgrSeq": 21094038,
+        "Sequence": 21093738,
+        "TakerGets": {
+          "currency": "4145544800000000000000000000000000000000",
+          "issuer": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+          "value": "200"
+        },
+        "TakerPays": "2200000",
+        "index": "D3EA8FD18C36FA303B012382E0AF8A68FC2DF3244D1C92E0B770C57D5F3B752B",
+        "quality": "11000"
+      }
+    ],
+    "status": "success",
+    "validated": true
+  }
+}

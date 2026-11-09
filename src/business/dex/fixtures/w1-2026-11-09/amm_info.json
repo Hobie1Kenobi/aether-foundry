@@ -1,0 +1,42 @@
+{
+  "result": {
+    "amm": {
+      "account": "r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w",
+      "amount": "51783389",
+      "amount2": {
+        "currency": "4145544800000000000000000000000000000000",
+        "issuer": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+        "value": "4923.542951524584"
+      },
+      "asset2_frozen": false,
+      "auction_slot": {
+        "account": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+        "discounted_fee": 50,
+        "expiration": "2026-09-28T14:38:00+0000",
+        "price": {
+          "currency": "0330E60FAE706EAD2C7D511D790B07A6F3B89931",
+          "issuer": "r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w",
+          "value": "0"
+        },
+        "time_interval": 20
+      },
+      "lp_token": {
+        "currency": "0330E60FAE706EAD2C7D511D790B07A6F3B89931",
+        "issuer": "r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w",
+        "value": "504886.5880440515"
+      },
+      "trading_fee": 500,
+      "vote_slots": [
+        {
+          "account": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+          "trading_fee": 500,
+          "vote_weight": 100000
+        }
+      ]
+    },
+    "ledger_hash": "2A47CFDAEEA54DB6AFF05D3B4BD4E37D2948B713EF14560E50CFA2279AC49566",
+    "ledger_index": 22180885,
+    "status": "success",
+    "validated": true
+  }
+}

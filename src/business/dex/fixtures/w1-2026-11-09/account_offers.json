@@ -1,0 +1,55 @@
+{
+  "result": {
+    "account": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+    "ledger_hash": "2A47CFDAEEA54DB6AFF05D3B4BD4E37D2948B713EF14560E50CFA2279AC49566",
+    "ledger_index": 22180885,
+    "offers": [
+      {
+        "flags": 65536,
+        "quality": "0.0001052631578947368",
+        "seq": 21093739,
+        "taker_gets": "475000",
+        "taker_pays": {
+          "currency": "4145544800000000000000000000000000000000",
+          "issuer": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+          "value": "50"
+        }
+      },
+      {
+        "flags": 65536,
+        "quality": "10500",
+        "seq": 21093737,
+        "taker_gets": {
+          "currency": "4145544800000000000000000000000000000000",
+          "issuer": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+          "value": "50"
+        },
+        "taker_pays": "525000"
+      },
+      {
+        "flags": 65536,
+        "quality": "11000",
+        "seq": 21093738,
+        "taker_gets": {
+          "currency": "4145544800000000000000000000000000000000",
+          "issuer": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+          "value": "200"
+        },
+        "taker_pays": "2200000"
+      },
+      {
+        "flags": 65536,
+        "quality": "0.0001111111111111111",
+        "seq": 21093740,
+        "taker_gets": "1800000",
+        "taker_pays": {
+          "currency": "4145544800000000000000000000000000000000",
+          "issuer": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+          "value": "200"
+        }
+      }
+    ],
+    "status": "success",
+    "validated": true
+  }
+}
