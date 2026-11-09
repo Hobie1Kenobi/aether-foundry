@@ -290,4 +290,46 @@ describe("w1 director", () => {
     const missions = Object.values(view(ledger, NOW).missions).filter((row) => row.kind === "w1-dex-offer");
     assert.equal(missions.length, 1);
   });
+
+  it("selects cancel for its own open order and does not release it early", async () => {
+    const ledger = home();
+    const journal = fs.mkdtempSync(path.join(os.tmpdir(), "dex-journal-"));
+    const state = world();
+    const standing = { taker_gets: "1000", taker_pays: AETH };
+    const input = { now: NOW, ledger, journal, policy: { standing_offer: standing } };
+    const placed = await decide(roleEnv(), input, clients(state));
+    assert.equal(placed.signed, true);
+    const mission = Object.values(view(ledger, NOW).missions).find((row) => row.kind === "w1-dex-offer");
+    state.offers = [{ seq: mission.sequence, taker_gets: "1000", taker_pays: AETH }];
+    state.lookup = () => ({
+      result: {
+        validated: true,
+        hash: mission.signed_hash,
+        ledger_index: 10001,
+        tx_json: mission.unsigned_tx,
+        meta: {
+          TransactionResult: "tesSUCCESS",
+          AffectedNodes: [
+            { ModifiedNode: { LedgerEntryType: "AccountRoot", FinalFields: { Account: anchors.WALLETS.W1.address, Balance: "19999990", OwnerCount: 1 }, PreviousFields: { Account: anchors.WALLETS.W1.address, Balance: "20000000", OwnerCount: 0 } } },
+            { CreatedNode: { LedgerEntryType: "Offer", NewFields: { Account: anchors.WALLETS.W1.address, Sequence: mission.sequence, TakerGets: "1000", TakerPays: AETH } } },
+          ],
+        },
+      },
+    });
+    const opened = await decide(roleEnv(), input, clients(state));
+    assert.equal(opened.decision, "reconcile");
+    assert.equal(view(ledger, NOW).missions[mission.id].status, "dex_open");
+    const before = view(ledger, NOW).missions[mission.id].outstanding_drops;
+    const withdrawn = await decide(roleEnv(), {
+      now: NOW,
+      ledger,
+      journal,
+      policy: { standing_offer: standing, cancel_standing: true },
+    }, clients(state));
+    assert.equal(withdrawn.decision, "cancel");
+    assert.equal(withdrawn.error_code, "LEDGER");
+    assert.equal(state.signs, 1);
+    assert.equal(view(ledger, NOW).missions[mission.id].outstanding_drops, before);
+    assert.notEqual(view(ledger, NOW).missions[mission.id].hold, "released");
+  });
 });
