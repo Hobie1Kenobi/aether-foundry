@@ -12,11 +12,15 @@ The adapter is installed and dormant. It does not read a key, open a socket, or 
 
 ## Limits and reserve
 
-- Locked XRP on one offer is at most 800000 drops. AETH on that offer is at most 10.
+- Locked XRP on one offer is at most 800000 drops. That ceiling is not a promise that 800000 fits. Exposure is locked XRP plus the live owner-reserve increment plus the open-ledger fee, and that sum must be at most 1000000 drops. A 0.2 XRP reserve plus a fee makes 800000 drops too large. The code refuses it. Do not raise the cap. Choose a smaller order that fits, such as 100000 drops of locked XRP when the observed reserve and fee leave room.
 - The open-ledger fee must be from 1 to 10000 drops. The caller does not set it.
 - Exposure is locked XRP plus that fee plus one incremental owner reserve. The reserve is `validated_ledger.reserve_inc_xrp` from the socket, converted to drops. It is not a hardcoded 0.2 XRP and it is not a yield.
 - The shared mission ledger still caps one mission at 1000000 drops and a Chicago day at 5000000 drops, including every outstanding hold.
 - Creating the offer increases the account owner count by one. That reserve stays locked until a validated cancel or a validated consuming trade deletes the offer. The network fee is spent. Neither number is an APR.
+
+## What one activation does
+
+A live process invocation makes one decision. It does not loop, invent prices, or churn orders. With the live gate on and no order amounts, the decision is `hold`: no socket, no key, no reservation. An explicit order, cancel, reconcile, or consume is one action and then the socket closes. Calling it again with the same idempotency key does not sign or submit a second time. Choosing no trade is a successful decision.
 
 ## Default-off install
 
@@ -36,7 +40,7 @@ A dormant result has `dormant: true`, `activated: false`, and `live_proof: false
 
 ## Preflight
 
-Preflight derives the key and checks that both the file address and the derived address are W1. It does not connect and does not submit. The result has no seed. Run it only on the operator machine, and do not pass dependency injection:
+Preflight checks the file address field against W1. It does not derive the key and does not connect. Derivation happens only inside an activated connection, and only after `server_info` has reported network id 1. A wrong network closes the socket before the key is opened. Run preflight only on the operator machine, and do not pass dependency injection:
 
 ```sh
 node -e 'require("./src/business/dex/live").preflight(process.env).then((row)=>console.log(JSON.stringify(row))).catch((error)=>console.log(error.code))'

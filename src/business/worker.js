@@ -33,10 +33,25 @@ async function tick(env, input, clients) {
     return { activated: true, signed: false, submitted: false, written: false, live: false, code: "killed" };
   }
   if (source.FOUNDRY_W1_DEX_LIVE === "yes") {
+    const action = body.action || (body.taker_pays == null && body.taker_gets == null ? "hold" : "place");
+    if (action === "hold") {
+      return {
+        decision: "hold",
+        activated: true,
+        enabled: true,
+        dormant: false,
+        signed: false,
+        submitted: false,
+        written: false,
+        live: false,
+        live_proof: false,
+        execution_ready: false,
+      };
+    }
     if (!body.ledger) throw Object.assign(new Error("mission ledger is missing"), { code: "LEDGER" });
     const live = await connectLive(source, body.deps);
     try {
-      const run = body.action === "cancel"
+      const run = action === "cancel"
         ? engine.cancel(body.ledger, body, live.clients)
         : body.action === "reconcile"
           ? engine.reconcile(body.ledger, body, live.clients)

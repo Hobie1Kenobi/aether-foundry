@@ -305,7 +305,7 @@ function rowValidated(entry) {
       validated: entry && entry.validated === true,
       hash: (entry && entry.hash) || (tx && tx.hash),
       ledger_index: (entry && entry.ledger_index) || (tx && tx.ledger_index),
-      meta: entry && (entry.meta || entry.metaData),
+      meta: entry && (entry.meta || entry.metaData || (entry.tx && (entry.tx.meta || entry.tx.metaData))),
       tx_json: tx,
     },
   });

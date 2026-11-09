@@ -107,12 +107,10 @@ async function preflight(env, deps) {
   }
   assertNoHouseSeeds(source);
   const read = options.readAccount || ((file) => readPrivateW1(file));
-  const open = options.openWallet || ((seed) => require("xrpl").Wallet.fromSeed(seed));
   const loaded = await read(source.FOUNDRY_W1_DEX_ACCOUNT_FILE);
-  const wallet = await open(loaded.seed);
-  const classic = wallet && (wallet.classicAddress || wallet.address);
   return {
-    address_match: loaded.address === bounds.ACCOUNT && classic === bounds.ACCOUNT,
+    address_match: loaded.address === bounds.ACCOUNT,
+    derived: false,
     dormant: false,
     live_proof: false,
     connected: false,
@@ -140,17 +138,20 @@ async function connectLive(env, deps) {
     await client.connect();
     return client;
   });
-  const loaded = await read(source.FOUNDRY_W1_DEX_ACCOUNT_FILE);
-  if (!loaded || loaded.address !== bounds.ACCOUNT) throw coded("W1 account file does not match the public wallet", "WALLET");
-  const wallet = await open(loaded.seed);
-  const classic = wallet && (wallet.classicAddress || wallet.address);
-  if (classic === anchors.WALLETS.W0.address) throw coded("refusing to sign as W0", "W0");
-  if (classic !== bounds.ACCOUNT) throw coded("derived key does not match W1", "WALLET");
   const client = await connect(ws);
+  let wallet;
   try {
     const info = await client.request({ command: "server_info" });
     const network = info && info.result && info.result.info && info.result.info.network_id;
     if (Number(network) !== 1) throw coded("socket did not prove xrpl network id 1", "MAINNET");
+    const loaded = await read(source.FOUNDRY_W1_DEX_ACCOUNT_FILE);
+    if (!loaded || loaded.address !== bounds.ACCOUNT || loaded.address === anchors.WALLETS.W0.address) {
+      throw coded("W1 account file does not match the public wallet", "WALLET");
+    }
+    wallet = await open(loaded.seed);
+    const classic = wallet && (wallet.classicAddress || wallet.address);
+    if (classic === anchors.WALLETS.W0.address) throw coded("refusing to sign as W0", "W0");
+    if (classic !== bounds.ACCOUNT) throw coded("derived key does not match W1", "WALLET");
   } catch (error) {
     try {
       await client.disconnect();

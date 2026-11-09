@@ -609,9 +609,11 @@ async function consume(dir, request, clients) {
   }
   const hits = [];
   for (const entry of result.transactions) {
+    const row = entry && entry.validated == null ? Object.assign({ validated: true }, entry) : entry;
+    if (row && row.validated === false) continue;
     let outcome;
     try {
-      outcome = proof.consumeOutcome(entry, mission);
+      outcome = proof.consumeOutcome(row, mission);
     } catch (error) {
       const next = Object.assign({}, mission, { status: "dex_unresolved", proof_reason: error.code || "UNCERTAIN", updated_at: now });
       save(dir, next);

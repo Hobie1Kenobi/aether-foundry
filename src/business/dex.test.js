@@ -5,6 +5,8 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { spawnSync } = require("child_process");
+const { packDex } = require("./dex/pack");
 const xrpl = require("xrpl");
 const anchors = require("../director/anchors");
 const missionConfig = require("../missions/config");
@@ -89,7 +91,7 @@ function clients(state) {
     submit: async () => {
       state.submits += 1;
       if (state.submitError) throw Object.assign(new Error("submit failed"), { code: state.submitError });
-      return { result: { engine_result: "tesSUCCESS" } };
+      return { result: { engine_result: state.engineResult || "tesSUCCESS" } };
     },
     ledger: {
       request: async (req) => {
@@ -602,11 +604,12 @@ describe("dex adapter", () => {
       assert.equal(idle.activated, false);
       assert.equal(reads, 0);
       const state = world();
-      const calls = { urls: [], closed: 0, signatures: 0, opens: 0 };
+      const calls = { urls: [], closed: 0, signatures: 0, opens: 0, order: [] };
       const deps = {
         readAccount: async () => ({ address: anchors.WALLETS.W1.address, seed: "fixture-not-a-seed" }),
         openWallet: (seed) => {
           calls.opens += 1;
+          calls.order.push("open");
           const wallet = {
             address: anchors.WALLETS.W1.address,
             sign(tx) {
@@ -620,9 +623,13 @@ describe("dex adapter", () => {
         },
         connect: async (url) => {
           calls.urls.push(url);
+          calls.order.push("connect");
           const injected = clients(state);
           return {
-            request: (body) => injected.ledger.request(body),
+            request: (body) => {
+              if (body.command === "server_info") calls.order.push("server_info");
+              return injected.ledger.request(body);
+            },
             submit: (blob) => injected.submit(blob),
             disconnect: async () => { calls.closed += 1; },
           };
@@ -635,7 +642,9 @@ describe("dex adapter", () => {
       });
       const checked = await preflight(liveEnv, deps);
       assert.equal(checked.address_match, true);
+      assert.equal(checked.derived, false);
       assert.equal(checked.connected, false);
+      assert.equal(calls.opens, 0);
       assert.equal(JSON.stringify(checked).includes("fixture-not-a-seed"), false);
       const opened = await tick(liveEnv, {
         now: NOW,
@@ -650,6 +659,7 @@ describe("dex adapter", () => {
       assert.deepEqual(calls.urls, [WS]);
       assert.equal(calls.closed, 1);
       assert.equal(calls.signatures, 1);
+      assert.equal(calls.order.indexOf("server_info") < calls.order.indexOf("open"), true);
       const again = await tick(liveEnv, {
         now: NOW,
         ledger,
@@ -661,6 +671,7 @@ describe("dex adapter", () => {
       assert.equal(again.replay, true);
       assert.equal(calls.signatures, 1);
       assert.equal(calls.closed, 2);
+      const opensBeforeMainnet = calls.opens;
       state.networkId = 0;
       await assert.rejects(() => tick(liveEnv, {
         now: NOW,
@@ -671,6 +682,7 @@ describe("dex adapter", () => {
         deps,
       }), (error) => error.code === "MAINNET");
       assert.equal(calls.signatures, 1);
+      assert.equal(calls.opens, opensBeforeMainnet);
     } finally {
       fs.rmSync(link, { force: true });
       fs.rmSync(file, { force: true });
@@ -704,5 +716,67 @@ describe("dex adapter", () => {
     const taken = await tick(roleEnv(), { now: NOW, ledger, action: "consume", mission_id: opened.id }, clients(state));
     assert.equal(taken.status, "dex_filled");
     assert.equal(taken.outstanding_drops, "0");
+  });
+
+  it("holds without a socket when no order is requested and refuses an order that cannot fit", async () => {
+    const ledger = home();
+    const state = world();
+    let reads = 0;
+    const liveEnv = roleEnv({
+      FOUNDRY_W1_DEX_LIVE: "yes",
+      FOUNDRY_W1_DEX_WS: WS,
+      FOUNDRY_W1_DEX_ACCOUNT_FILE: "/tmp/w1-dex-not-opened.json",
+    });
+    const held = await tick(liveEnv, {
+      now: NOW,
+      ledger,
+      deps: { readAccount: () => { reads += 1; } },
+    });
+    assert.equal(held.decision, "hold");
+    assert.equal(held.signed, false);
+    assert.equal(held.submitted, false);
+    assert.equal(held.written, false);
+    assert.equal(reads, 0);
+    state.reserveInc = 0.2;
+    await assert.rejects(() => tick(roleEnv(), {
+      now: NOW,
+      ledger,
+      idempotency_key: "w1-offer-too-wide",
+      taker_gets: "800000",
+      taker_pays: AETH,
+    }, clients(state)), (error) => error.code === "CAP");
+    assert.equal(state.signs, 0);
+    assert.equal(used(ledger), "1747");
+    await assert.rejects(() => tick(roleEnv(), {
+      now: NOW,
+      ledger,
+      idempotency_key: "w1-offer-round",
+      taker_gets: "1000",
+      taker_pays: { currency: anchors.AETH_HEX, issuer: anchors.WALLETS.W0.address, value: "1.0000001" },
+    }, clients(state)), (error) => error.code === "ASSET");
+    state.engineResult = "tecUNFUNDED_OFFER";
+    const terminal = await tick(roleEnv(), {
+      now: NOW,
+      ledger,
+      idempotency_key: "w1-offer-tec",
+      taker_gets: "1000",
+      taker_pays: AETH,
+    }, clients(state));
+    assert.equal(terminal.submitted, false);
+    assert.equal(terminal.status, "dex_unknown");
+    assert.equal(terminal.outstanding_drops, "201010");
+  });
+
+  it("packs a checksummed handoff with no secret and no live proof", () => {
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "w1-pack-"));
+    const packed = packDex({ root: path.resolve(__dirname, "..", ".."), outDir });
+    const extract = fs.mkdtempSync(path.join(os.tmpdir(), "w1-pack-out-"));
+    assert.equal(spawnSync("tar", ["-xf", packed.tarPath, "-C", extract]).status, 0);
+    assert.equal(spawnSync("sha256sum", ["-c", "SHA256SUMS"], { cwd: extract }).status, 0);
+    const attestation = JSON.parse(fs.readFileSync(path.join(extract, "ATTESTATION.json"), "utf8"));
+    assert.equal(attestation.live_proof, false);
+    assert.equal(attestation.caps_raised, false);
+    assert.equal(attestation.legacy_hold, PERMANENT_HOLD);
+    assert.equal(fs.readFileSync(path.join(extract, "ATTESTATION.json"), "utf8").includes("fixture-not-a-seed"), false);
   });
 });
