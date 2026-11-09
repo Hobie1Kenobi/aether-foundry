@@ -12,6 +12,8 @@ const { control, view } = require("../missions/engine");
 const policy = require("../missions/policy");
 const runtimePolicy = require("../runtime/policy");
 const bounds = require("./dex/bounds");
+const { createOutcome } = require("./dex/proof");
+const { LABS } = require("../missions/reconcile-endpoint");
 const { tick } = require("./worker");
 const { axelarAdapter, PERMANENT_HOLD } = require("./capabilities");
 
@@ -112,7 +114,13 @@ function clients(state) {
         if (req.command === "fee") return { result: { drops: { open_ledger_fee: state.fee } } };
         if (req.command === "tx") return state.lookup ? state.lookup(req) : { result: { error: "txnNotFound" } };
         if (req.command === "account_offers") {
-          return { result: { validated: true, account: anchors.WALLETS.W1.address, offers: state.offers } };
+          return { result: {
+            validated: true,
+            account: anchors.WALLETS.W1.address,
+            ledger_index: state.offerLedger == null ? 10001 : state.offerLedger,
+            marker: state.offerMarker == null ? null : state.offerMarker,
+            offers: state.offers,
+          } };
         }
         throw new Error(req.command);
       },
@@ -124,13 +132,47 @@ function used(ledger) {
   return policy.dayUsed(view(ledger, NOW), policy.chicagoDay(NOW)).toString();
 }
 
-function createResult(tx, hash, remainingGets) {
-  const nodes = [{ ModifiedNode: { LedgerEntryType: "AccountRoot", FinalFields: { Account: tx.Account } } }];
-  if (remainingGets != null) {
+function aeth(value) {
+  return { currency: anchors.AETH_HEX, issuer: anchors.WALLETS.W0.address, value };
+}
+
+function ripple(balance) {
+  return {
+    Balance: balance,
+    LowLimit: { currency: anchors.AETH_HEX, issuer: anchors.WALLETS.W1.address, value: "100" },
+    HighLimit: { currency: anchors.AETH_HEX, issuer: anchors.WALLETS.W0.address, value: "0" },
+  };
+}
+
+function createResult(tx, hash, remainingGets, remainingPays) {
+  const original = BigInt(tx.TakerGets);
+  const left = remainingGets == null ? original : BigInt(remainingGets);
+  const filled = original - left;
+  const before = 20000000n;
+  const after = (before - BigInt(tx.Fee) - filled).toString();
+  const open = remainingGets != null;
+  const nodes = [{
+    ModifiedNode: {
+      LedgerEntryType: "AccountRoot",
+      FinalFields: { Account: tx.Account, Balance: after, OwnerCount: open ? 1 : 0 },
+      PreviousFields: { Account: tx.Account, Balance: before.toString(), OwnerCount: 0 },
+    },
+  }];
+  if (filled > 0n) {
+    const received = remainingPays == null ? "1" : (1 - Number(remainingPays.value)).toFixed(1).replace(/\.0$/, "");
+    nodes.push({
+      ModifiedNode: {
+        LedgerEntryType: "RippleState",
+        FinalFields: ripple(received),
+        PreviousFields: ripple("0"),
+      },
+    });
+  }
+  if (open) {
     nodes.push({ CreatedNode: { LedgerEntryType: "Offer", NewFields: {
       Account: tx.Account,
       Sequence: tx.Sequence,
-      TakerPays: tx.TakerPays,
+      TakerPays: remainingPays,
       TakerGets: remainingGets,
     } } });
   }
@@ -220,25 +262,27 @@ describe("dex adapter", () => {
     const ledger = home();
     const state = world();
     const opened = await tick(roleEnv(), { now: NOW, ledger, idempotency_key: "w1-offer-0001", taker_gets: "1000", taker_pays: AETH }, clients(state));
-    state.lookup = () => createResult(opened.tx, "AA".repeat(32), "400");
+    state.lookup = () => createResult(opened.tx, "AA".repeat(32), "400", aeth("0.4"));
     await assert.rejects(() => tick(roleEnv(), { now: NOW, ledger, action: "reconcile", mission_id: opened.id, filled: true, validated_hash: opened.signed_hash }, clients(state)), (error) => error.code === "CALLER");
-    state.lookup = () => createResult(opened.tx, opened.signed_hash, "400");
+    state.lookup = () => createResult(opened.tx, opened.signed_hash, "400", aeth("0.4"));
     state.offers = [];
     const conflict = await tick(roleEnv(), { now: NOW, ledger, action: "reconcile", mission_id: opened.id }, clients(state));
     assert.equal(conflict.status, "dex_unresolved");
     assert.equal(conflict.outstanding_drops, "201010");
-    state.offers = [{ seq: 10 }];
+    state.offers = [{ seq: 10, taker_gets: "400", taker_pays: aeth("0.4") }];
     const partial = await tick(roleEnv(), { now: NOW, ledger, action: "reconcile", mission_id: opened.id }, clients(state));
     assert.equal(partial.status, "dex_partial");
     assert.equal(partial.outstanding_drops, "200400");
     assert.equal(partial.live, false);
     state.sequence = 11;
-    state.offers = [{ seq: 10 }];
+    state.offerLedger = 10001;
+    state.offers = [{ seq: 10, taker_gets: "400", taker_pays: aeth("0.4") }];
     state.lookup = (req) => ({
       result: {
         validated: true,
         hash: req.transaction,
-        meta: { TransactionResult: "tesSUCCESS", AffectedNodes: [{ ModifiedNode: { LedgerEntryType: "AccountRoot", FinalFields: { Account: anchors.WALLETS.W1.address } } }] },
+        ledger_index: 10001,
+        meta: { TransactionResult: "tesSUCCESS", AffectedNodes: [{ ModifiedNode: { LedgerEntryType: "AccountRoot", FinalFields: { Account: anchors.WALLETS.W1.address, Balance: "19999990", OwnerCount: 1 }, PreviousFields: { Account: anchors.WALLETS.W1.address, Balance: "20000000", OwnerCount: 1 } } }] },
         tx_json: {
           TransactionType: "OfferCancel",
           Account: anchors.WALLETS.W1.address,
@@ -259,20 +303,23 @@ describe("dex adapter", () => {
     const ledger = home();
     const state = world();
     const opened = await tick(roleEnv(), { now: NOW, ledger, idempotency_key: "w1-offer-0004", taker_gets: "1000", taker_pays: AETH }, clients(state));
-    state.lookup = () => createResult(opened.tx, opened.signed_hash, "1000");
+    state.lookup = () => createResult(opened.tx, opened.signed_hash, "1000", AETH);
+    state.offers = [{ seq: 10, taker_gets: "1000", taker_pays: AETH }];
     const resting = await tick(roleEnv(), { now: NOW, ledger, action: "reconcile", mission_id: opened.id }, clients(state));
     assert.equal(resting.status, "dex_open");
     assert.equal(resting.outstanding_drops, "201000");
     state.sequence = 11;
+    state.offerLedger = 10001;
     state.offers = [];
     state.lookup = (req) => ({
       result: {
         validated: true,
         hash: req.transaction,
+        ledger_index: 10001,
         meta: {
           TransactionResult: "tesSUCCESS",
           AffectedNodes: [
-            { ModifiedNode: { LedgerEntryType: "AccountRoot", FinalFields: { Account: anchors.WALLETS.W1.address } } },
+            { ModifiedNode: { LedgerEntryType: "AccountRoot", FinalFields: { Account: anchors.WALLETS.W1.address, Balance: "19999990", OwnerCount: 0 }, PreviousFields: { Account: anchors.WALLETS.W1.address, Balance: "20000000", OwnerCount: 1 } } },
             { DeletedNode: { LedgerEntryType: "Offer", FinalFields: { Account: anchors.WALLETS.W1.address, Sequence: 10, TakerGets: "1000", TakerPays: AETH } } },
           ],
         },
@@ -310,9 +357,9 @@ describe("dex adapter", () => {
     assert.equal(openWindow.outstanding_drops, "201010");
     state.seq = 10021;
     const absent = await tick(roleEnv(), { now: NOW, ledger, action: "reconcile", mission_id: opened.id }, clients(state));
-    assert.equal(absent.status, "dex_absent");
-    assert.equal(absent.outstanding_drops, "0");
-    assert.equal(used(ledger), "1747");
+    assert.notEqual(absent.status, "dex_absent");
+    assert.equal(absent.outstanding_drops, "201010");
+    assert.equal(used(ledger), "202757");
   });
 
   it("keeps one reservation across a submit failure and a restart", async () => {
@@ -334,5 +381,189 @@ describe("dex adapter", () => {
     state.sequence = 11;
     await assert.rejects(() => tick(roleEnv(), { now: NOW, ledger, idempotency_key: "w1-offer-0007", taker_gets: "1000", taker_pays: AETH }, clients(state)), (error) => error.code === "killed");
     assert.equal(used(ledger), "202757");
+  });
+
+  it("does not treat a missing or malformed remainder as a fill", () => {
+    const offer = {
+      sequence: 10,
+      fee_drops: "10",
+      last_ledger_sequence: 10020,
+      signed_hash: "11".repeat(32),
+      taker_gets: "1000",
+      taker_pays: AETH,
+    };
+    const tx = {
+      TransactionType: "OfferCreate",
+      Account: anchors.WALLETS.W1.address,
+      TakerGets: "1000",
+      TakerPays: AETH,
+      Fee: "10",
+      Sequence: 10,
+      LastLedgerSequence: 10020,
+      Flags: bounds.TF_PASSIVE,
+    };
+    const base = {
+      validated: true,
+      hash: offer.signed_hash,
+      ledger_index: 10001,
+      tx_json: tx,
+    };
+    assert.throws(() => createOutcome({ result: Object.assign({}, base, { meta: { TransactionResult: "tesSUCCESS", AffectedNodes: [{ ModifiedNode: { LedgerEntryType: "AccountRoot", FinalFields: { Account: tx.Account } } }] } }) }, offer), (error) => error.code === "UNCERTAIN");
+    const swapped = createResult(tx, offer.signed_hash, "1000", AETH);
+    swapped.result.meta.AffectedNodes.find((node) => node.CreatedNode).CreatedNode.NewFields = {
+      Account: tx.Account,
+      Sequence: 10,
+      TakerGets: AETH,
+      TakerPays: "1000",
+    };
+    assert.throws(() => createOutcome(swapped, offer), (error) => error.code === "UNCERTAIN");
+    const wrongIssuer = createResult(tx, offer.signed_hash, "1000", AETH);
+    wrongIssuer.result.meta.AffectedNodes.find((node) => node.CreatedNode).CreatedNode.NewFields.TakerPays = {
+      currency: anchors.AETH_HEX,
+      issuer: anchors.WALLETS.W1.address,
+      value: "1",
+    };
+    assert.throws(() => createOutcome(wrongIssuer, offer), (error) => error.code === "UNCERTAIN");
+    const worse = createResult(tx, offer.signed_hash, "100", aeth("0.05"));
+    assert.throws(() => createOutcome(worse, offer), (error) => error.code === "UNCERTAIN");
+  });
+
+  it("does not release when the offer page is incomplete or on another ledger", async () => {
+    const ledger = home();
+    const state = world();
+    const opened = await tick(roleEnv(), { now: NOW, ledger, idempotency_key: "w1-offer-page", taker_gets: "1000", taker_pays: AETH }, clients(state));
+    state.lookup = () => createResult(opened.tx, opened.signed_hash, "1000", AETH);
+    state.offers = [{ seq: 10, taker_gets: "1000", taker_pays: AETH }];
+    state.offerMarker = "next-page";
+    const paged = await tick(roleEnv(), { now: NOW, ledger, action: "reconcile", mission_id: opened.id }, clients(state));
+    assert.equal(paged.status, "dex_unresolved");
+    assert.equal(paged.outstanding_drops, "201010");
+    state.offerMarker = null;
+    state.offerLedger = 50;
+    const otherLedger = await tick(roleEnv(), { now: NOW, ledger, action: "reconcile", mission_id: opened.id }, clients(state));
+    assert.equal(otherLedger.status, "dex_unresolved");
+    assert.equal(otherLedger.outstanding_drops, "201010");
+  });
+
+  it("releases absence only through the sanctioned account-history guard", async () => {
+    const ledger = home();
+    const state = world();
+    state.sequence = 10;
+    const opened = await tick(roleEnv(), { now: NOW, ledger, idempotency_key: "w1-offer-absent", taker_gets: "1000", taker_pays: AETH }, clients(state));
+    const creation = "AB".repeat(32);
+    const seen = [];
+    state.lookup = (req) => {
+      seen.push(req.transaction);
+      if (req.transaction === creation) {
+        return { result: {
+          validated: true,
+          hash: creation,
+          ledger_index: 10,
+          meta: { TransactionResult: "tesSUCCESS", AffectedNodes: [{ CreatedNode: { LedgerEntryType: "AccountRoot", NewFields: { Account: anchors.WALLETS.W1.address, Sequence: 10 } } }] },
+        } };
+      }
+      return { result: { error: "txnNotFound" } };
+    };
+    const originalRequest = clients(state).ledger.request;
+    const guarded = clients(state);
+    guarded.ledger.request = async (req) => {
+      if (req.command === "server_info") {
+        return { result: { info: { network_id: 1, complete_ledgers: "10-10020", validated_ledger: { seq: 10021, reserve_base_xrp: 1, reserve_inc_xrp: 0.2 } } } };
+      }
+      if (req.command === "account_info" && req.ledger_index === 10021) {
+        return { result: { validated: true, ledger_index: 10021, account_data: { Account: anchors.WALLETS.W1.address, Sequence: 10, PreviousTxnLgrSeq: 10, PreviousTxnID: creation } } };
+      }
+      if (req.command === "account_info" && req.ledger_index === 9) return { result: { ledger_index: 9, error: "actNotFound" } };
+      if (req.command === "account_tx") {
+        seen.push(req.ledger_index_min);
+        return { result: { validated: true, ledger_index_min: 10, ledger_index_max: 10020, transactions: [{ hash: creation, ledger_index: 10, validated: true }] } };
+      }
+      if (req.command === "ledger") return { result: { validated: true, ledger_index: 10020, ledger: { ledger_index: 10020, ledger_hash: "CD".repeat(32) } } };
+      return originalRequest(req);
+    };
+    const proven = await tick(roleEnv(), { now: NOW, ledger, action: "reconcile", mission_id: opened.id }, guarded);
+    assert.equal(seen[0], opened.signed_hash);
+    assert.equal(proven.status, "dex_absent");
+    assert.equal(proven.outstanding_drops, "0");
+    assert.equal(used(ledger), "1747");
+  });
+
+  it("keeps the reservation when sanctioned history contains another transaction", async () => {
+    const ledger = home();
+    const state = world();
+    const opened = await tick(roleEnv(), { now: NOW, ledger, idempotency_key: "w1-offer-history", taker_gets: "1000", taker_pays: AETH }, clients(state));
+    const creation = "AB".repeat(32);
+    const guarded = clients(state);
+    const originalRequest = guarded.ledger.request;
+    guarded.ledger.request = async (req) => {
+      if (req.command === "server_info") {
+        return { result: { info: { network_id: 1, complete_ledgers: "10-10020", validated_ledger: { seq: 10021, reserve_base_xrp: 1, reserve_inc_xrp: 0.2 } } } };
+      }
+      if (req.command === "tx" && req.transaction === creation) {
+        return { result: { validated: true, hash: creation, ledger_index: 10, meta: { TransactionResult: "tesSUCCESS", AffectedNodes: [{ CreatedNode: { LedgerEntryType: "AccountRoot", NewFields: { Account: anchors.WALLETS.W1.address, Sequence: 10 } } }] } } };
+      }
+      if (req.command === "tx") return { result: { error: "txnNotFound" } };
+      if (req.command === "account_info" && req.ledger_index === 10021) {
+        return { result: { validated: true, ledger_index: 10021, account_data: { Account: anchors.WALLETS.W1.address, Sequence: 10, PreviousTxnLgrSeq: 10, PreviousTxnID: creation } } };
+      }
+      if (req.command === "account_info") return { result: { ledger_index: req.ledger_index, error: "actNotFound" } };
+      if (req.command === "account_tx") {
+        return { result: { validated: true, ledger_index_min: 10, ledger_index_max: 10020, transactions: [{ hash: creation, ledger_index: 10 }, { hash: "EF".repeat(32), ledger_index: 11 }] } };
+      }
+      if (req.command === "ledger") return { result: { validated: true, ledger_index: 10020, ledger: { ledger_hash: "CD".repeat(32) } } };
+      return originalRequest(req);
+    };
+    const held = await tick(roleEnv(), { now: NOW, ledger, action: "reconcile", mission_id: opened.id }, guarded);
+    assert.notEqual(held.status, "dex_absent");
+    assert.equal(held.outstanding_drops, "201010");
+  });
+
+  it("serializes a second offer on the shared payment lock and commits the reservation together", async () => {
+    const ledger = home();
+    fs.appendFileSync(path.join(ledger, "events.jsonl"), `${JSON.stringify({ type: "budget.uncertain", at: NOW, mission_id: "msnffffffffffffffff", day: "2026-11-07", drops: "4000000", settlement: "submit_unknown", live: false })}\n`);
+    const state = world();
+    const opened = await tick(roleEnv(), { now: NOW, ledger, idempotency_key: "w1-offer-lock1", taker_gets: "1000", taker_pays: AETH }, clients(state));
+    assert.equal(opened.signed, true);
+    const lines = fs.readFileSync(path.join(ledger, "events.jsonl"), "utf8").trim().split("\n");
+    const reservedAt = lines.findIndex((line) => line.includes("\"budget.reserved\"") && line.includes(opened.id));
+    assert.equal(JSON.parse(lines[reservedAt + 1]).type, "budget.uncertain");
+    assert.equal(JSON.parse(lines[reservedAt + 2]).type, "mission.upsert");
+    state.sequence = 11;
+    const raced = await Promise.allSettled([
+      tick(roleEnv(), { now: NOW, ledger, idempotency_key: "w1-offer-lock2", taker_gets: "400000", taker_pays: AETH }, clients(state)),
+      tick(roleEnv(), { now: NOW, ledger, idempotency_key: "w1-offer-lock3", taker_gets: "400000", taker_pays: AETH }, clients(state)),
+    ]);
+    const signed = raced.filter((row) => row.status === "fulfilled" && row.value.signed === true);
+    assert.equal(signed.length, 1);
+    assert.equal(raced.filter((row) => row.status === "rejected").length, 1);
+  });
+
+  it("wires an opt-in production client without a socket or a key", async () => {
+    const ledger = home();
+    const state = world();
+    const injected = clients(state);
+    const endpoints = [];
+    await assert.rejects(async () => tick(roleEnv({ FOUNDRY_DEX_PRODUCTION: "opt-in" }), { now: NOW, ledger, idempotency_key: "w1-offer-prod", taker_gets: "1000", taker_pays: AETH }, { mode: "production", endpoint: "wss://s1.ripple.com", transport: injected.ledger.request, sign: injected.sign, submit: injected.submit }), (error) => error.code === "HOST");
+    await assert.rejects(async () => tick(roleEnv({ FOUNDRY_DEX_PRODUCTION: "opt-in" }), { now: NOW, ledger, idempotency_key: "w1-offer-prod", taker_gets: "1000", taker_pays: AETH }, { mode: "production", endpoint: LABS, seed: "snooping", transport: injected.ledger.request, sign: injected.sign, submit: injected.submit }), (error) => error.code === "SECRET");
+    assert.equal(state.signs, 0);
+    const quiet = await tick(roleEnv(), { now: NOW, ledger, idempotency_key: "w1-offer-prod", taker_gets: "1000", taker_pays: AETH }, { mode: "production", endpoint: LABS, transport: injected.ledger.request, sign: injected.sign, submit: injected.submit });
+    assert.equal(quiet.code, "NO_CLIENT");
+    assert.equal(quiet.signed, false);
+    const opened = await tick(roleEnv({ FOUNDRY_DEX_PRODUCTION: "opt-in" }), { now: NOW, ledger, idempotency_key: "w1-offer-prod", taker_gets: "1000", taker_pays: AETH }, {
+      mode: "production",
+      endpoint: LABS,
+      account: anchors.WALLETS.W1.address,
+      transport: async (endpoint, body) => {
+        endpoints.push(endpoint);
+        return injected.ledger.request(body);
+      },
+      sign: injected.sign,
+      submit: injected.submit,
+    });
+    assert.equal(opened.signed, true);
+    assert.equal(opened.live, false);
+    assert.equal(opened.execution_ready, false);
+    assert.equal(endpoints.every((endpoint) => endpoint === LABS), true);
+    assert.equal(state.submits, 1);
   });
 });

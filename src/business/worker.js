@@ -9,6 +9,7 @@
 
 const { propose } = require("./schedule");
 const { verifiedEnv } = require("./dex/bounds");
+const { bindProduction } = require("./dex/production");
 const engine = require("./dex/engine");
 
 function tick(env, input, clients) {
@@ -30,7 +31,14 @@ function tick(env, input, clients) {
   if (source.FOUNDRY_DEX_KILL === "yes" || body.killed === true) {
     return { activated: true, signed: false, submitted: false, written: false, live: false, code: "killed" };
   }
-  if (!clients || clients.mode !== "injected") {
+  let runtime = clients;
+  if (source.FOUNDRY_DEX_PRODUCTION === "opt-in") {
+    try {
+      runtime = bindProduction(clients);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  } else if (!clients || clients.mode !== "injected") {
     return { activated: true, signed: false, submitted: false, written: false, live: false, code: "NO_CLIENT" };
   }
   if (!body.ledger) {
@@ -39,10 +47,10 @@ function tick(env, input, clients) {
     throw error;
   }
   const run = body.action === "cancel"
-    ? engine.cancel(body.ledger, body, clients)
+    ? engine.cancel(body.ledger, body, runtime)
     : body.action === "reconcile"
-      ? engine.reconcile(body.ledger, body, clients)
-      : engine.place(body.ledger, body, clients);
+      ? engine.reconcile(body.ledger, body, runtime)
+      : engine.place(body.ledger, body, runtime);
   return Promise.resolve(run).then((result) => Object.assign({ activated: true, enabled: true, written: result.created === true }, result, {
     live: false,
     execution_ready: false,

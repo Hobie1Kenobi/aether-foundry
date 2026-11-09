@@ -114,17 +114,6 @@ function sequenceHeld(state, sequence) {
   ));
 }
 
-function appendMoney(api, type, mission, dropsValue, extra) {
-  api.append(Object.assign({
-    type,
-    at: mission.updated_at,
-    mission_id: mission.id,
-    day: mission.day,
-    drops: dropsValue,
-    live: false,
-  }, extra || {}));
-}
-
 function reserve(dir, order, shot, now) {
   const exposure = order.locked + shot.fee + shot.reserveInc;
   if (exposure <= 0n || exposure > missionConfig.PER_MISSION_DROPS) throw coded("offer exposure exceeds 1000000 drops", "CAP");
@@ -189,25 +178,27 @@ function reserve(dir, order, shot, now) {
       },
       updated_at: now,
     };
-    api.append({
-      type: "budget.reserved",
-      at: now,
-      mission_id: mission.id,
-      day,
-      budget_drops: exposure.toString(),
-      components: mission.budget,
-      live: false,
-    });
-    api.append({
-      type: "budget.uncertain",
-      at: now,
-      mission_id: mission.id,
-      day,
-      drops: exposure.toString(),
-      settlement: "dex_reserved",
-      live: false,
-    });
-    api.append({ type: "mission.upsert", at: now, mission });
+    api.appendAll([
+      {
+        type: "budget.reserved",
+        at: now,
+        mission_id: mission.id,
+        day,
+        budget_drops: exposure.toString(),
+        components: mission.budget,
+        live: false,
+      },
+      {
+        type: "budget.uncertain",
+        at: now,
+        mission_id: mission.id,
+        day,
+        drops: exposure.toString(),
+        settlement: "dex_reserved",
+        live: false,
+      },
+      { type: "mission.upsert", at: now, mission },
+    ]);
     return { mission, created: true };
   });
 }
@@ -226,9 +217,31 @@ function save(dir, mission) {
 
 function move(dir, mission, settled, released) {
   exclusive(dir, (api) => {
-    if (settled > 0n) appendMoney(api, "budget.settled", mission, settled.toString(), { from: "uncertain" });
-    if (released > 0n) appendMoney(api, "budget.unsigned_released", mission, released.toString(), { reason: "dex_proof" });
-    api.append({ type: "mission.upsert", at: mission.updated_at, mission: stored(mission) });
+    const events = [];
+    if (settled > 0n) {
+      events.push({
+        type: "budget.settled",
+        at: mission.updated_at,
+        mission_id: mission.id,
+        day: mission.day,
+        drops: settled.toString(),
+        from: "uncertain",
+        live: false,
+      });
+    }
+    if (released > 0n) {
+      events.push({
+        type: "budget.unsigned_released",
+        at: mission.updated_at,
+        mission_id: mission.id,
+        day: mission.day,
+        drops: released.toString(),
+        reason: "dex_proof",
+        live: false,
+      });
+    }
+    events.push({ type: "mission.upsert", at: mission.updated_at, mission: stored(mission) });
+    api.appendAll(events);
   });
 }
 
@@ -344,11 +357,15 @@ async function reconcile(dir, request, clients) {
   if (!mission || mission.kind !== bounds.KIND) throw coded("offer mission not found", "OFFER");
   const working = Object.assign({}, mission, { ledger_dir: dir });
   if (!working.signed_hash) return publish(working, { replay: true });
-  const { server } = await fetchSnapshot(clients.ledger);
   const lookup = await clients.ledger.request({ command: "tx", transaction: working.signed_hash, binary: false });
-  const absent = proof.absenceProven(server, lookup, working);
+  let absent = { proven: false, reason: "not_proven" };
+  try {
+    absent = await proof.proveAbsence(clients, working);
+  } catch (error) {
+    absent = { proven: false, reason: error.code || "PROOF" };
+  }
   const absenceAllowed = !working.create_seen && working.status !== "dex_open" && working.status !== "dex_partial" && working.status !== "dex_filled" && working.status !== "dex_cancelled";
-  if (absenceAllowed && absent.proven && working.hold !== "released") {
+  if (absenceAllowed && absent.proven === true && absent.creation_proven === true && absent.history_covers === true && working.hold !== "released") {
     const release = outstanding(working);
     const next = Object.assign({}, working, {
       status: "dex_absent",
@@ -369,12 +386,19 @@ async function reconcile(dir, request, clients) {
     save(dir, next);
     return publish(next, { replay: false });
   }
-  const offers = proof.listedOffers(await clients.ledger.request({
-    command: "account_offers",
-    account: bounds.ACCOUNT,
-    ledger_index: "validated",
-  }));
-  const listed = proof.containsSequence(offers, working.sequence);
+  let listed;
+  try {
+    const page = await clients.ledger.request({
+      command: "account_offers",
+      account: bounds.ACCOUNT,
+      ledger_index: outcome.ledgerIndex,
+    });
+    listed = proof.containsOffer(proof.listedOffers(page, outcome.ledgerIndex), working.sequence, outcome.remainder);
+  } catch (error) {
+    const next = Object.assign({}, working, { status: "dex_unresolved", proof_reason: error.code || "UNCERTAIN", create_seen: true, updated_at: now });
+    save(dir, next);
+    return publish(next, { replay: false });
+  }
   if (outcome.open !== listed) {
     const next = Object.assign({}, working, { status: "dex_unresolved", proof_reason: "offer_list", create_seen: true, updated_at: now });
     save(dir, next);
@@ -425,25 +449,27 @@ async function cancel(dir, request, clients) {
       outstanding_drops: (outstanding(current) + fee).toString(),
       updated_at: now,
     });
-    api.append({
-      type: "budget.reserved",
-      at: now,
-      mission_id: next.id,
-      day,
-      budget_drops: fee.toString(),
-      components: { network_fee_drops: fee.toString(), budget_drops: fee.toString() },
-      live: false,
-    });
-    api.append({
-      type: "budget.uncertain",
-      at: now,
-      mission_id: next.id,
-      day,
-      drops: fee.toString(),
-      settlement: "dex_cancel",
-      live: false,
-    });
-    api.append({ type: "mission.upsert", at: now, mission: next });
+    api.appendAll([
+      {
+        type: "budget.reserved",
+        at: now,
+        mission_id: next.id,
+        day,
+        budget_drops: fee.toString(),
+        components: { network_fee_drops: fee.toString(), budget_drops: fee.toString() },
+        live: false,
+      },
+      {
+        type: "budget.uncertain",
+        at: now,
+        mission_id: next.id,
+        day,
+        drops: fee.toString(),
+        settlement: "dex_cancel",
+        live: false,
+      },
+      { type: "mission.upsert", at: now, mission: next },
+    ]);
     return next;
   });
   if (!claimed || claimed.cancel_blob) return publish(claimed || mission, { replay: true });
@@ -478,12 +504,19 @@ async function cancel(dir, request, clients) {
     save(dir, next);
     return publish(next, { replay: false });
   }
-  const offers = proof.listedOffers(await clients.ledger.request({
-    command: "account_offers",
-    account: bounds.ACCOUNT,
-    ledger_index: "validated",
-  }));
-  const listed = proof.containsSequence(offers, next.sequence);
+  let listed;
+  try {
+    const page = await clients.ledger.request({
+      command: "account_offers",
+      account: bounds.ACCOUNT,
+      ledger_index: outcome.ledgerIndex,
+    });
+    listed = proof.containsOffer(proof.listedOffers(page, outcome.ledgerIndex), next.sequence, null);
+  } catch (error) {
+    next = Object.assign({}, next, { status: "dex_unresolved", proof_reason: error.code || "UNCERTAIN", updated_at: now });
+    save(dir, next);
+    return publish(next, { replay: false });
+  }
   if (outcome.deleted === listed) {
     next = Object.assign({}, next, { status: "dex_unresolved", proof_reason: "offer_list", updated_at: now });
     save(dir, next);
