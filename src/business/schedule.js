@@ -75,7 +75,7 @@ function propose(input) {
     return refused(body, now, capability("xrpl.staking"), "EXCLUDED", "W0 is not an autonomous spender, and native XRP staking is not implemented.");
   }
   if (role === "trading") {
-    return refused(body, now, capability("xrpl.dex.offer"), "DISABLED", "Unsigned OfferCreate is prepared only by the business worker when it is explicitly enabled. This call did not prepare or submit one.");
+    return refused(body, now, capability("xrpl.dex.offer"), "DISABLED", "The W1 offer role is not activated. This call does not reserve, sign, or submit.");
   }
   if (role === "liquidity") {
     return refused(body, now, capability("xrpl.amm.lp"), "UNSUPPORTED", "The published AETH/XRP pool is an LP candidate only after pool state and the live owner reserve are verified. This call does not deposit.");

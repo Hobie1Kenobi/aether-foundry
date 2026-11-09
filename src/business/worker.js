@@ -1,36 +1,52 @@
 "use strict";
 
 /**
- * Business worker. Disabled unless FOUNDRY_BUSINESS_EXECUTE=yes.
- * Even then it only prepares unsigned offers. It does not sign or submit.
+ * Production entry for the W1 offer role.
+ * It stays inactive unless the environment matches the hard-coded role
+ * bounds. Even then it refuses a live socket. Tests pass injected clients.
+ * This module does not read a seed and does not start the mission runtime.
  */
 
 const { propose } = require("./schedule");
-const { prepareOffer, prepareCancel } = require("./offer");
+const { verifiedEnv } = require("./dex/bounds");
+const engine = require("./dex/engine");
 
-function tick(env, input) {
+function tick(env, input, clients) {
   const source = env || {};
-  const enabled = source.FOUNDRY_BUSINESS_EXECUTE === "yes";
+  const config = verifiedEnv(source);
   const body = input || {};
-  if (!enabled) {
-    return { enabled: false, signed: false, submitted: false, written: false, plan: propose(body) };
+  if (!config) {
+    return {
+      activated: false,
+      enabled: false,
+      signed: false,
+      submitted: false,
+      written: false,
+      live: false,
+      execution_ready: false,
+      plan: propose(body),
+    };
   }
-  if (source.FOUNDRY_BUSINESS_KILL === "yes" || body.killed === true) {
-    return { enabled: true, signed: false, submitted: false, written: false, code: "killed" };
+  if (source.FOUNDRY_DEX_KILL === "yes" || body.killed === true) {
+    return { activated: true, signed: false, submitted: false, written: false, live: false, code: "killed" };
   }
-  if (body.role !== "trading") {
-    return { enabled: true, signed: false, submitted: false, written: false, plan: propose(body) };
+  if (!clients || clients.mode !== "injected") {
+    return { activated: true, signed: false, submitted: false, written: false, live: false, code: "NO_CLIENT" };
   }
-  if (!body.home) throw Object.assign(new Error("offer home is missing"), { code: "LEDGER" });
-  const prepared = body.action === "cancel" ? prepareCancel(body.home, body) : prepareOffer(body.home, body);
-  return {
-    enabled: true,
-    signed: false,
-    submitted: false,
-    written: prepared.replay !== true,
-    replay: prepared.replay === true,
-    offer: prepared.offer,
-  };
+  if (!body.ledger) {
+    const error = new Error("mission ledger is missing");
+    error.code = "LEDGER";
+    throw error;
+  }
+  const run = body.action === "cancel"
+    ? engine.cancel(body.ledger, body, clients)
+    : body.action === "reconcile"
+      ? engine.reconcile(body.ledger, body, clients)
+      : engine.place(body.ledger, body, clients);
+  return Promise.resolve(run).then((result) => Object.assign({ activated: true, enabled: true, written: result.created === true }, result, {
+    live: false,
+    execution_ready: false,
+  }));
 }
 
 module.exports = { tick };
