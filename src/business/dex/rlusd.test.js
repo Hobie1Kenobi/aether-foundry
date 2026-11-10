@@ -1031,6 +1031,80 @@ describe("rlusd trading", () => {
     assert.equal(roundedState.signs, 0);
   });
 
+  it("keeps a resting RLUSD sell through later ticks and cancels it only when the bid crosses", async () => {
+    const shape = JSON.parse(fs.readFileSync(path.join(RLUSDFIX, "fill-21093748.json"), "utf8"));
+    const sequence = 21093749;
+    const gets = { currency: shape.currency, issuer: shape.issuer, value: shape.balance };
+    const pays = "1014158";
+    const ledger = home();
+    const journal = fs.mkdtempSync(path.join(os.tmpdir(), "rlusd-rest-sell-"));
+    fs.appendFileSync(path.join(ledger, "events.jsonl"), `${JSON.stringify({
+      type: "mission.upsert",
+      at: TODAY,
+      mission: {
+        id: "msnrestsell21093749",
+        idempotency_key: "w1-rlusd-sell-2026-11-10",
+        kind: "w1-rlusd",
+        status: "rlusd_resting",
+        action: "sell",
+        hold: "uncertain",
+        signed: true,
+        submitted: true,
+        submit_attempted: true,
+        role: "W1",
+        account: anchors.WALLETS.W1.address,
+        chicago_day: "2026-11-10",
+        sequence,
+        outstanding_drops: "200010",
+        signed_hash: "4A95A4E767C53A957DB232AF1548DED51023D021088F9D2F76237BCB2FF45AF2",
+        updated_at: TODAY,
+        unsigned_tx: {
+          TransactionType: "OfferCreate",
+          Account: anchors.WALLETS.W1.address,
+          Flags: bounds.TF_PASSIVE,
+          Sequence: sequence,
+          Fee: "10",
+          LastLedgerSequence: 22225421,
+          TakerGets: gets,
+          TakerPays: pays,
+        },
+      },
+    })}\n`);
+    const calm = {
+      Account: "r4AYdKPB9k3mN7pQ2sT5uV8wX1yZ4aB6cD",
+      TakerGets: "42423455",
+      TakerPays: { currency: shape.currency, issuer: shape.issuer, value: "3.266606035" },
+    };
+    const state = {
+      signs: 0,
+      submits: 0,
+      types: [],
+      fillBalance: shape.balance,
+      bookedRlusd: { Account: anchors.WALLETS.W1.address, seq: sequence, Sequence: sequence, TakerGets: gets, TakerPays: pays },
+      liveBook: { bids: [calm], asks: [{ Account: "rNv54ueuxFt5a3TgqYA4QqmN2hJX2q2TGv", TakerGets: { currency: shape.currency, issuer: shape.issuer, value: "0.29145" }, TakerPays: "3800000" }] },
+    };
+    const second = await decide(env(), { now: TODAY, ledger, journal }, client(state));
+    const third = await decide(env(), { now: TODAY, ledger, journal }, client(state));
+    assert.notEqual(second.rlusd_error, "UNCERTAIN");
+    assert.notEqual(third.rlusd_error, "UNCERTAIN");
+    assert.equal(second.decision, "research");
+    assert.equal(third.decision, "research");
+    assert.equal(state.signs, 0);
+    assert.equal(Object.values(view(ledger, TODAY).missions).find((row) => row.sequence === sequence).outstanding_drops, "200010");
+    state.liveBook.bids = [{
+      Account: "r4AYdKPB9k3mN7pQ2sT5uV8wX1yZ4aB6cD",
+      TakerGets: "20000000",
+      TakerPays: { currency: shape.currency, issuer: shape.issuer, value: "1" },
+    }];
+    const stale = await decide(env(), { now: TODAY, ledger, journal }, client(state));
+    assert.equal(stale.decision, "cancel");
+    assert.equal(stale.signed, true);
+    assert.equal(state.signs, 1);
+    assert.equal(state.lastTx.TransactionType, "OfferCancel");
+    assert.equal(state.lastTx.OfferSequence, sequence);
+    assert.equal(state.types.filter((type) => type === "OfferCreate").length, 0);
+  });
+
   it("does not sell RLUSD when the outside ask is missing", async () => {
     const shape = JSON.parse(fs.readFileSync(path.join(RLUSDFIX, "fill-21093748.json"), "utf8"));
     const ledger = home();

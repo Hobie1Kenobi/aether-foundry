@@ -1452,6 +1452,7 @@ async function manageRest(dir, resting, now, clients, observed, room, day, gate)
   }
   const reduced = await bookRemainder(dir, resting, now, clients, observed, listed);
   if (reduced) return reduced;
+  if (resting.action === "sell") return manageSellRest(dir, resting, now, clients, observed, room, day, gate);
   if (Array.isArray(resting.absence_ledgers) && resting.absence_ledgers.length) {
     resting = Object.assign({}, resting, { absence_ledgers: [], updated_at: now });
     save(dir, resting);
@@ -1485,6 +1486,46 @@ async function manageRest(dir, resting, now, clients, observed, room, day, gate)
     offer_sequence: sequence,
   }, clients, now, gate);
   if (sent.replay) return { decision: "cancel", replay: true, traded: false };
+  return { decision: "cancel", signed: true, submitted: sent.mission.submitted === true, traded: false, status: sent.mission.status };
+}
+
+async function manageSellRest(dir, resting, now, clients, observed, room, day, gate) {
+  const pays = marketXrp(resting.unsigned_tx && resting.unsigned_tx.TakerPays);
+  const gets = exactOf(resting.unsigned_tx && resting.unsigned_tx.TakerGets);
+  if (pays == null || !gets) {
+    return { decision: "research", traded: false, signed: false, rationale: "The resting RLUSD sell amounts are not proved." };
+  }
+  const stale = (observed.bids || []).some((bid) => bid && outside(bid.account) && !rateLess(bid.xrp, bid.exact, pays, gets));
+  if (!stale) {
+    return { decision: "research", traded: false, signed: false, rationale: "The resting RLUSD sell is still above the outside bid." };
+  }
+  const state = view(dir, now);
+  if (dayTrades(state, day) >= MAX_TRADES_PER_DAY) {
+    return { decision: "research", traded: false, signed: false, rationale: "The stale RLUSD sell is through the outside bid. The Chicago day has no order left to cancel it." };
+  }
+  const shot = await shotOf(clients.ledger);
+  const exposure = shot.fee;
+  if (exposure > room.headroom || openExposure(state) + exposure > MAX_TRADE_DROPS) {
+    return { decision: "research", traded: false, signed: false, rationale: "The stale RLUSD sell is through the outside bid. The cancel fee does not fit the cap." };
+  }
+  const tx = {
+    TransactionType: "OfferCancel",
+    Account: bounds.ACCOUNT,
+    OfferSequence: resting.sequence,
+    Fee: shot.fee.toString(),
+    Sequence: shot.sequence,
+    LastLedgerSequence: shot.validatedLedger + bounds.LEDGER_WINDOW,
+  };
+  const reserved = reserve(dir, { key: `w1-rlusd-cancel-${resting.sequence}`, action: "cancel", day, exposure, tx }, shot, now);
+  const sent = await submitSigned(dir, reserved, tx, {
+    type: "OfferCancel",
+    account: bounds.ACCOUNT,
+    sequence: shot.sequence,
+    last: tx.LastLedgerSequence,
+    fee: shot.fee.toString(),
+    offer_sequence: resting.sequence,
+  }, clients, now, gate);
+  if (sent.replay) return { decision: "cancel", replay: true, traded: false, signed: false };
   return { decision: "cancel", signed: true, submitted: sent.mission.submitted === true, traded: false, status: sent.mission.status };
 }
 

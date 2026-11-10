@@ -127,6 +127,32 @@ describe("shared dex lp bankroll", () => {
     assert.equal(position.remaining.toString(), "0");
     assert.equal(position.limit.toString(), "100000000");
     assert.equal(bankroll.spendable(operatorShape()).toString(), "44147152");
+    const live = {
+      proved: true,
+      reserveInc: 200000n,
+      reserveBase: 1000000n,
+      ownerCount: 10n,
+      balance: 50000000n,
+      offers: [{ seq: 4, locked: 2275000n, aeth: 0n }],
+      rlusdOffers: [{ seq: 21093749, locked: 0n, aeth: 0n }],
+      bids: [],
+      walletAeth: 0n,
+      aethFrozen: false,
+      aethDebt: false,
+      pool: { xrp: 51783389n, aethScaled: 1n, balance: 1n, supply: 1n, sole: true },
+    };
+    const withSell = bankroll.room({
+      missions: {
+        sell: { kind: "w1-rlusd", hold: "uncertain", status: "rlusd_resting", sequence: 21093749, outstanding_drops: "200010", realized_loss_drops: "0" },
+        vanished: { kind: "w1-rlusd", hold: "uncertain", status: "rlusd_vanished_unattributed", sequence: 21093748, outstanding_drops: "1000000", realized_loss_drops: "0" },
+      },
+    }, live);
+    assert.equal(withSell.lp_xrp.toString(), "51783389");
+    assert.equal(withSell.offer_lock.toString(), "2275000");
+    assert.equal(withSell.reserve.toString(), "2000000");
+    assert.equal(withSell.base_reserve.toString(), "1000000");
+    assert.equal(withSell.pending.toString(), "0");
+    assert.equal(withSell.proved_xrp.toString(), "57058389");
     const doubled = bankroll.room({
       missions: {
         lp: { kind: "w1-amm-lp", status: "amm_open", outstanding_drops: "51783000", hold: "uncertain", realized_loss_drops: "0" },
