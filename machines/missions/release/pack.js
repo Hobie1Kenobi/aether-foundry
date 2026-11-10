@@ -99,8 +99,7 @@ function pack(options) {
   const opts = options || {};
   const root = opts.root || REPO;
   const git = spawnSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" });
-  if (git.status !== 0) throw new Error("git rev-parse failed");
-  const gitSha = git.stdout.trim();
+  const gitSha = (typeof opts.gitSha === "string" && opts.gitSha.trim()) || (git.status === 0 && git.stdout.trim()) || "unknown";
   const seen = new Set();
   for (const entry of ENTRIES.concat(scriptsFromBins(root))) walkRequires(root, entry, seen);
   for (const extra of EXTRA) {

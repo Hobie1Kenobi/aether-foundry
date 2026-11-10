@@ -17,6 +17,7 @@ const bankroll = require("../bankroll");
 const bounds = require("./bounds");
 const market = require("./market");
 const signer = require("./signer");
+const live = require("./live");
 const snapshot = require("./snapshot");
 const proof = require("./amm-proof");
 
@@ -180,7 +181,7 @@ async function reconcile(dir, request, clients) {
   const now = (request && request.now) || new Date().toISOString();
   const mission = view(dir, now).missions[request.mission_id];
   if (!mission || mission.kind !== bankroll.LP_KIND || !mission.signed_hash) throw coded("LP mission is not ready to reconcile", "OFFER");
-  const lookup = await clients.ledger.request({ command: "tx", transaction: mission.signed_hash, binary: false });
+  const lookup = await live.settledRequest((payload) => clients.ledger.request(payload), { command: "tx", transaction: mission.signed_hash, binary: false });
   const fresh = await market.load(clients.ledger);
   const kind = mission.unsigned_tx && mission.unsigned_tx.TransactionType;
   let outcome;

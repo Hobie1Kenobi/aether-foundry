@@ -17,6 +17,7 @@ const market = require("./market");
 const snapshot = require("./snapshot");
 const proof = require("./proof");
 const signer = require("./signer");
+const live = require("./live");
 
 const BANNED = [
   "account",
@@ -368,7 +369,7 @@ async function reconcile(dir, request, clients) {
   if (!mission || mission.kind !== bounds.KIND) throw coded("offer mission not found", "OFFER");
   const working = Object.assign({}, mission, { ledger_dir: dir });
   if (!working.signed_hash) return publish(working, { replay: true });
-  const lookup = await clients.ledger.request({ command: "tx", transaction: working.signed_hash, binary: false });
+  const lookup = await live.settledRequest((payload) => clients.ledger.request(payload), { command: "tx", transaction: working.signed_hash, binary: false });
   let absent = { proven: false, reason: "not_proven" };
   try {
     absent = await proof.proveAbsence(clients, working);
@@ -484,7 +485,7 @@ async function cancel(dir, request, clients) {
     save(dir, next);
     return publish(next, { replay: false });
   }
-  const lookup = await clients.ledger.request({ command: "tx", transaction: next.cancel_hash, binary: false });
+  const lookup = await live.settledRequest((payload) => clients.ledger.request(payload), { command: "tx", transaction: next.cancel_hash, binary: false });
   let outcome;
   try {
     outcome = proof.cancelOutcome(lookup, next);
@@ -582,7 +583,7 @@ async function consume(dir, request, clients) {
   if (!info || Number(info.network_id) !== 1 || !Number.isInteger(validated) || validated < mission.create_ledger) {
     throw coded("validated testnet ledger is missing", "LEDGER");
   }
-  const page = await clients.ledger.request({
+  const page = await live.settledRequest((payload) => clients.ledger.request(payload), {
     command: "account_tx",
     account: bounds.ACCOUNT,
     ledger_index_min: mission.create_ledger,

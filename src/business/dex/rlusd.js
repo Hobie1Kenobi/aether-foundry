@@ -16,6 +16,7 @@ const bounds = require("./bounds");
 const market = require("./market");
 const signer = require("./signer");
 const snapshot = require("./snapshot");
+const live = require("./live");
 
 const ISSUER = "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV";
 const CURRENCY = "524C555344000000000000000000000000000000";
@@ -605,10 +606,14 @@ function fillPrice(drops, exact) {
   return formatDiv(drops, exact.coeff, -exact.exp, "down");
 }
 
+async function ledgerRequest(clients, body) {
+  return live.settledRequest((payload) => clients.ledger.request(payload), body);
+}
+
 async function historyOf(clients, mission) {
   let page;
   try {
-    page = await clients.ledger.request({
+    page = await ledgerRequest(clients, {
       command: "account_tx",
       account: bounds.ACCOUNT,
       ledger_index_min: mission.create_ledger || -1,
@@ -619,6 +624,7 @@ async function historyOf(clients, mission) {
     return { threw: true, transactions: [] };
   }
   const result = page && page.result;
+  if (result && result.error) return { threw: true, transactions: [] };
   if (!result || result.validated !== true || !Array.isArray(result.transactions) || result.marker != null) {
     return { incomplete: true, transactions: [] };
   }
@@ -709,7 +715,7 @@ async function readRanges(clients) {
 async function inspectTx(clients, hash, mission, ranges) {
   let lookup;
   try {
-    lookup = await clients.ledger.request({ command: "tx", transaction: hash, binary: false });
+    lookup = await ledgerRequest(clients, { command: "tx", transaction: hash, binary: false });
   } catch (error) {
     return { unknown: true };
   }
@@ -811,7 +817,7 @@ async function noteAbsence(dir, resting, now, clients, observed) {
   if (!Number.isInteger(seq) || seq <= 0 || reserve == null) {
     return { decision: "research", traded: false, signed: false, rationale: "The validated ledger is missing. The offer exposure stays open." };
   }
-  const ledgers = absenceLedgers(resting.absence_ledgers, seq);
+  const ledgers = absenceLedgers(resting.absence_ledgers, seq).slice(0, VANISH_TICKS);
   if (ledgers.length < VANISH_TICKS) {
     save(dir, Object.assign({}, resting, { absence_ledgers: ledgers, updated_at: now }));
     return { decision: "research", traded: false, signed: false, learning: false, absence_ledgers: ledgers.length, rationale: "The offer is absent from this validated ledger. History cannot attribute it yet, so the exposure stays open." };
@@ -1216,6 +1222,20 @@ function xrpFor(balance, exact, xrp, numerator, denominator) {
   return shift >= 0 ? (num * (10n ** BigInt(shift))) / den : num / (den * (10n ** BigInt(-shift)));
 }
 
+function dropsAbove(balance, exact, xrp) {
+  let drops = xrpFor(balance, exact, xrp, 1n, 1n);
+  for (let step = 0; step < 8 && !rateLess(xrp, exact, drops, balance); step += 1) drops += 1n;
+  if (!rateLess(xrp, exact, drops, balance)) return null;
+  return drops;
+}
+
+function dropsAtOrBelow(balance, exact, xrp) {
+  let drops = xrpFor(balance, exact, xrp, 1n, 1n);
+  if (rateLess(xrp, exact, drops, balance) && drops > 0n) drops -= 1n;
+  if (drops <= 0n || rateLess(xrp, exact, drops, balance)) return null;
+  return drops;
+}
+
 function passiveSell(observed, balance) {
   const bids = (observed.bids || []).filter((bid) => bid && outside(bid.account));
   const asks = (observed.asks || []).filter((ask) => ask && outside(ask.account));
@@ -1228,13 +1248,15 @@ function passiveSell(observed, balance) {
   for (const ask of asks) {
     if (rateLess(ask.xrp, ask.exact, bestAsk.xrp, bestAsk.exact)) bestAsk = ask;
   }
+  const floor = dropsAbove(balance, bestBid.exact, bestBid.xrp);
+  const ceiling = dropsAtOrBelow(balance, bestAsk.exact, bestAsk.xrp);
+  if (floor == null || ceiling == null || floor > ceiling) return null;
   let drops = xrpFor(balance, bestBid.exact, bestBid.xrp, 101n, 100n);
-  if (!rateLess(drops, balance, bestAsk.xrp, bestAsk.exact)) {
-    drops = xrpFor(balance, bestAsk.exact, bestAsk.xrp, 99n, 100n);
-  }
+  if (drops < floor) drops = floor;
+  if (drops > ceiling) drops = ceiling;
   if (drops <= 0n || drops > MAX_TRADE_DROPS) return null;
   if (!rateLess(bestBid.xrp, bestBid.exact, drops, balance)) return null;
-  if (!rateLess(drops, balance, bestAsk.xrp, bestAsk.exact)) return null;
+  if (rateLess(bestAsk.xrp, bestAsk.exact, drops, balance)) return null;
   const text = formatCoeff(balance.coeff, balance.exp);
   if (!text) return null;
   return { taker_gets: { currency: CURRENCY, issuer: ISSUER, value: text }, taker_pays: drops.toString() };
@@ -1443,7 +1465,7 @@ function keep(dir, mission, now, reason) {
 
 async function reconcile(dir, mission, now, clients) {
   if (!mission.signed_hash) return keep(dir, mission, now, "unproved");
-  const lookup = await clients.ledger.request({ command: "tx", transaction: mission.signed_hash, binary: false });
+  const lookup = await ledgerRequest(clients, { command: "tx", transaction: mission.signed_hash, binary: false });
   const result = lookup && lookup.result;
   const meta = result && (result.meta || result.metaData);
   if (!result || result.validated !== true || !meta || meta.TransactionResult !== "tesSUCCESS") return keep(dir, mission, now, "unproved");

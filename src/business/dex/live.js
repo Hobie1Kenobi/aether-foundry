@@ -20,6 +20,30 @@ const ROOT = path.resolve(__dirname, "../../..");
 const WS = "wss://testnet.xrpl-labs.com";
 const CONNECTION_TIMEOUT_MS = 20000;
 const HOUSE_ENVS = ["W0_SEED", "W1_SEED", "W2_SEED", "W3_SEED", "W4_SEED", "W5_SEED", "W6_SEED", "W7_SEED"];
+const NOT_FOUND_ERRORS = new Set(["txnNotFound", "entryNotFound", "actNotFound", "lgrNotFound"]);
+
+function rippledCode(error) {
+  const data = error && error.data;
+  if (!data || typeof data !== "object") return null;
+  const code = data.error || data.error_code;
+  return typeof code === "string" ? code : null;
+}
+
+function notFoundResponse(error) {
+  const code = rippledCode(error);
+  if (!code || !NOT_FOUND_ERRORS.has(code)) return null;
+  return { result: Object.assign({ status: "error" }, error.data, { error: code }) };
+}
+
+async function settledRequest(request, body) {
+  try {
+    return await request(body);
+  } catch (error) {
+    const found = notFoundResponse(error);
+    if (found) return found;
+    throw error;
+  }
+}
 
 const ALLOWED_HOSTS = {
   "testnet.xrpl-labs.com": new Set([""]),
@@ -233,7 +257,7 @@ async function connectLive(env, deps) {
         return { tx_blob: signed.tx_blob, hash: signed.hash };
       }),
       submit: (blob) => client.submit(blob),
-      ledger: { request: (body) => client.request(body) },
+      ledger: { request: (body) => settledRequest((payload) => client.request(payload), body) },
     },
   };
 }
@@ -267,4 +291,7 @@ module.exports = {
   readPrivateW1,
   connectLive,
   liveExpected,
+  settledRequest,
+  notFoundResponse,
+  NOT_FOUND_ERRORS,
 };

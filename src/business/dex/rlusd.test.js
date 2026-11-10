@@ -107,6 +107,10 @@ function client(state) {
         }
         if (req.command === "fee") return w1("fee.json");
         if (req.command === "tx") {
+          if (state.throwNotFound) {
+            const { RippledError } = require("xrpl");
+            throw new RippledError("Transaction not found.", { error: state.throwNotFound });
+          }
           if (state.txError) return { result: { error: state.txError } };
           if (state.notFound) return { result: { validated: false, error: "txnNotFound" } };
           if (state.trustProof && req.transaction === state.trustHash) return state.trustProof;
@@ -120,6 +124,10 @@ function client(state) {
         if (req.command === "book_offers") {
           const issuer = (req.taker_pays && req.taker_pays.issuer) || (req.taker_gets && req.taker_gets.issuer);
           if (issuer === rlusd.ISSUER) {
+            if (state.liveBook) {
+              const offers = req.taker_gets && req.taker_gets.currency === "XRP" ? state.liveBook.bids : state.liveBook.asks;
+              return { result: { validated: true, ledger_index: 1, marker: null, offers } };
+            }
             if (req.taker_gets && req.taker_gets.currency === "XRP") {
               if (state.noBids) return { result: { validated: true, ledger_index: 1, marker: null, offers: [] } };
               return rl("bids.json");
@@ -516,6 +524,45 @@ describe("rlusd trading", () => {
     assert.equal(state.signs, 0);
   });
 
+  it("counts a thrown txnNotFound and closes on the third distinct ledger", async () => {
+    const { RippledError } = require("xrpl");
+    const { settledRequest } = require("./live");
+    const shape = JSON.parse(fs.readFileSync(path.join(RLUSDFIX, "fill-21093748.json"), "utf8"));
+    for (const code of ["entryNotFound", "actNotFound", "lgrNotFound"]) {
+      const settled = await settledRequest(() => {
+        throw new RippledError(code, { error: code });
+      }, { command: "tx" });
+      assert.equal(settled.result.error, code);
+    }
+    const ledger = home();
+    const journal = fs.mkdtempSync(path.join(os.tmpdir(), "rlusd-throw-"));
+    const tx = seedFill(ledger, shape, shape.create_hash, { legacy: true });
+    const state = {
+      signs: 0,
+      submits: 0,
+      types: [],
+      fillBalance: shape.balance,
+      history: { result: { validated: true, marker: null, transactions: [] } },
+      throwNotFound: "txnNotFound",
+      completeLedgers: shape.labs_window,
+      lastTx: tx,
+      lastHash: shape.create_hash,
+    };
+    for (const seq of [22225053, 22225054]) {
+      state.validatedSeq = seq;
+      const row = await decide(env(), { now: NOW, ledger, journal }, client(state));
+      assert.equal(row.status, undefined);
+      assert.equal(state.signs, 0);
+    }
+    state.validatedSeq = 22225055;
+    const closed = await decide(env(), { now: NOW, ledger, journal }, client(state));
+    assert.equal(closed.status, "rlusd_vanished_unattributed");
+    assert.equal(closed.proof_type, "state_only");
+    const mission = Object.values(view(ledger, NOW).missions).find((row) => row.sequence === shape.sequence);
+    assert.deepEqual(mission.absence_ledgers, [22225053, 22225054, 22225055]);
+    assert.equal(state.signs, 0);
+  });
+
   it("does not count an absence when the tx lookup is not txnNotFound", async () => {
     const shape = JSON.parse(fs.readFileSync(path.join(RLUSDFIX, "fill-21093748.json"), "utf8"));
     const ledger = home();
@@ -545,6 +592,71 @@ describe("rlusd trading", () => {
     assert.equal(mission.outstanding_drops, "1200010");
     assert.equal(mission.status, "rlusd_resting");
     assert.equal(state.signs, 0);
+  });
+
+  it("sells inside the live 12.987 to 13.038 spread", async () => {
+    const shape = JSON.parse(fs.readFileSync(path.join(RLUSDFIX, "fill-21093748.json"), "utf8"));
+    const market = require("./market");
+    const ledger = home();
+    const journal = fs.mkdtempSync(path.join(os.tmpdir(), "rlusd-spread-"));
+    const bidAccount = "r4AYdKPB9k3mN7pQ2sT5uV8wX1yZ4aB6cD";
+    const askAccount = "rNv54ueuxFt5a3TgqYA4QqmN2hJX2q2TGv";
+    fs.appendFileSync(path.join(ledger, "events.jsonl"), `${JSON.stringify({
+      type: "mission.upsert",
+      at: NOW,
+      mission: {
+        id: "msnlivebook21093748",
+        idempotency_key: "w1-rlusd-rest",
+        kind: "w1-rlusd",
+        status: "rlusd_vanished_unattributed",
+        proof_type: "state_only",
+        role: "W1",
+        account: anchors.WALLETS.W1.address,
+        hold: "uncertain",
+        signed: true,
+        submitted: true,
+        action: "rest",
+        chicago_day: "2026-11-08",
+        sequence: shape.sequence,
+        submit_attempted: true,
+        inventory_rlusd: shape.balance,
+        inventory_drops: "907690",
+        outstanding_drops: "907690",
+        updated_at: NOW,
+      },
+    })}\n`);
+    const state = {
+      signs: 0,
+      submits: 0,
+      types: [],
+      fillBalance: shape.balance,
+      liveBook: {
+        bids: [{
+          Account: bidAccount,
+          TakerGets: "42423455",
+          TakerPays: { currency: shape.currency, issuer: shape.issuer, value: "3.266606035" },
+        }],
+        asks: [{
+          Account: askAccount,
+          TakerGets: { currency: shape.currency, issuer: shape.issuer, value: "0.29145" },
+          TakerPays: "3800000",
+        }],
+      },
+    };
+    const placed = await decide(env(), { now: TODAY, ledger, journal }, client(state));
+    assert.equal(placed.decision, "place");
+    assert.equal(state.signs, 1);
+    assert.equal(state.lastTx.TakerGets.value, shape.balance);
+    const pays = BigInt(state.lastTx.TakerPays);
+    const bidRate = 42423455 / 3.266606035;
+    const askRate = 3800000 / 0.29145;
+    const ourRate = Number(pays) / 0.07778336573477218;
+    assert.equal(ourRate > bidRate, true);
+    assert.equal(ourRate <= askRate, true);
+    assert.equal(market.exactIou(shape.balance).coeff > 0n, true);
+    const exposure = Object.values(view(ledger, TODAY).missions).filter((mission) => mission.kind === "w1-rlusd" && mission.hold !== "released").reduce((sum, mission) => sum + BigInt(mission.outstanding_drops || "0"), 0n);
+    assert.equal(exposure, 200010n);
+    assert.equal(exposure < 42033911n, true);
   });
 
   it("does not sell RLUSD when the outside ask is missing", async () => {
