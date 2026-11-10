@@ -407,6 +407,21 @@ describe("rlusd trading", () => {
     const insideMission = Object.values(view(inside.ledger, NOW).missions).find((mission) => mission.sequence === shape.sequence);
     assert.equal(insideMission.status, "rlusd_resting");
     assert.equal(insideMission.outstanding_drops, "1200010");
+    const bare = await runFill({ history: false, pruned: true, bare: true });
+    assert.equal(bare.row.decision, "research");
+    assert.equal(bare.row.proof_type, undefined);
+    const bareMission = Object.values(view(bare.ledger, NOW).missions).find((mission) => mission.sequence === shape.sequence);
+    assert.equal(bareMission.status, "rlusd_resting");
+    assert.equal(bareMission.outstanding_drops, "1200010");
+    assert.equal(bareMission.proof_result, undefined);
+    assert.equal(bareMission.validated_ledger, undefined);
+  });
+
+  it("treats only ledgers older than every complete_ledgers start as pruned", () => {
+    const gap = [[22220000, 22221000], [22224000, 22225000]];
+    assert.equal(rlusd.historyDropped(gap, 22223170), false);
+    assert.equal(rlusd.historyDropped(gap, 22219000), true);
+    assert.equal(rlusd.historyDropped([[22224000, 22225000]], 22223170), true);
   });
 
   it("does not convert a line that is merely larger than the offer", async () => {
@@ -516,7 +531,7 @@ function liveOffer(shape, hash) {
   };
 }
 
-function seedFill(ledger, shape, hash) {
+function seedFill(ledger, shape, hash, extra) {
   const tx = liveOffer(shape, hash);
   const mission = {
     id: "msnrlusdfill21093748",
@@ -538,10 +553,10 @@ function seedFill(ledger, shape, hash) {
     realized_pnl_drops: "0",
     submit_attempted: true,
     signed_hash: hash,
-    proof_hash: hash,
-    proof_result: "tesSUCCESS",
-    rlusd_baseline: shape.baseline,
-    validated_ledger: shape.stored_ledger,
+    proof_hash: extra.bare ? undefined : hash,
+    proof_result: extra.bare ? undefined : "tesSUCCESS",
+    rlusd_baseline: "1.5",
+    validated_ledger: extra.bare ? undefined : shape.stored_ledger,
     updated_at: NOW,
     unsigned_tx: tx,
   };
@@ -627,8 +642,8 @@ async function runFill(options) {
   assert.equal(trust.length, 64);
   const ledger = home();
   const journal = fs.mkdtempSync(path.join(os.tmpdir(), "rlusd-fill-"));
-  const tx = seedFill(ledger, shape, hash);
-  if (options.trust) seedTrust(ledger, shape, trust);
+  const tx = seedFill(ledger, shape, hash, options);
+  if (options.trust && !options.bare) seedTrust(ledger, shape, trust);
   const takerHash = `${"11".repeat(32)}`;
   const fields = {
     Account: anchors.WALLETS.W1.address,

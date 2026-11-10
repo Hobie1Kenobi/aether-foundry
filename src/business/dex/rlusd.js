@@ -663,16 +663,13 @@ function ledgerRanges(text) {
 }
 
 function historyDropped(ranges, ledger) {
-  if (!ranges || !Number.isInteger(ledger)) return false;
-  const kept = ranges.some(([start, end]) => ledger >= start && ledger <= end);
-  if (kept) return false;
-  const newest = ranges.reduce((high, range) => Math.max(high, range[1]), 0);
-  return ledger < newest;
+  if (!ranges || !ranges.length || !Number.isInteger(ledger)) return false;
+  const oldest = ranges.reduce((low, range) => Math.min(low, range[0]), ranges[0][0]);
+  return ledger < oldest;
 }
 
 function provedLedger(mission) {
   if (mission && Number.isInteger(mission.validated_ledger)) return mission.validated_ledger;
-  if (mission && Number.isInteger(mission.last_ledger_sequence)) return mission.last_ledger_sequence;
   return null;
 }
 
@@ -704,10 +701,13 @@ async function inspectTx(clients, hash, mission, ranges) {
 
 function storedCreate(mission, hash) {
   const tx = mission && mission.unsigned_tx;
-  const recorded = String(mission && (mission.proof_hash || mission.signed_hash) || "").toUpperCase();
-  if (!tx || recorded !== String(hash || "").toUpperCase() || !/^[0-9A-F]{64}$/.test(recorded)) return false;
+  const signed = String(mission && mission.signed_hash || "").toUpperCase();
+  const proof = String(mission && mission.proof_hash || "").toUpperCase();
+  if (!tx || proof !== signed || signed !== String(hash || "").toUpperCase() || !/^[0-9A-F]{64}$/.test(signed)) return false;
+  if (mission.proof_result !== "tesSUCCESS" || !Number.isInteger(mission.validated_ledger)) return false;
   if (mission.status !== "rlusd_resting" && mission.status !== "rlusd_proved") return false;
   if (tx.TransactionType !== "OfferCreate" || tx.Account !== bounds.ACCOUNT || tx.Sequence !== mission.sequence) return false;
+  if (!tx.TakerPays || tx.TakerPays.currency !== CURRENCY || tx.TakerPays.issuer !== ISSUER) return false;
   return Boolean(exactOf(tx.TakerPays) && marketXrp(tx.TakerGets) != null);
 }
 
@@ -718,18 +718,19 @@ function laterRlusd(state, resting) {
   });
 }
 
-function storedTrustBalance(trust) {
-  if (!trust) return null;
-  if (typeof trust.proof_balance === "string") return market.exactIou(trust.proof_balance);
-  if (typeof trust.rlusd_baseline === "string") return market.exactIou(trust.rlusd_baseline);
-  return null;
+function reconciledTrust(trust) {
+  if (!trust || trust.proof_result !== "tesSUCCESS" || !Number.isInteger(trust.validated_ledger)) return null;
+  const signed = String(trust.signed_hash || "").toUpperCase();
+  const proof = String(trust.proof_hash || "").toUpperCase();
+  if (proof !== signed || !/^[0-9A-F]{64}$/.test(signed)) return null;
+  const tx = trust.unsigned_tx;
+  if (!tx || tx.TransactionType !== "TrustSet" || tx.Account !== bounds.ACCOUNT || tx.Sequence !== trust.sequence) return null;
+  if (!tx.LimitAmount || tx.LimitAmount.currency !== CURRENCY || tx.LimitAmount.issuer !== ISSUER) return null;
+  if (typeof trust.proof_balance !== "string") return null;
+  return market.exactIou(trust.proof_balance);
 }
 
 async function provedBaseline(dir, resting, now, clients, ranges) {
-  if (typeof resting.rlusd_baseline === "string") {
-    const recorded = market.exactIou(resting.rlusd_baseline);
-    if (recorded) return recorded;
-  }
   const trust = rowsOf(view(dir, now)).find((mission) => mission.action === "trust" && mission.signed_hash && Number.isInteger(mission.sequence) && mission.sequence + 1 === resting.sequence);
   if (!trust) return null;
   const seen = await inspectTx(clients, trust.signed_hash, trust, ranges);
@@ -740,7 +741,7 @@ async function provedBaseline(dir, resting, now, clients, ranges) {
     if (!tx.LimitAmount || tx.LimitAmount.currency !== CURRENCY || tx.LimitAmount.issuer !== ISSUER) return null;
     return rippleBaseline(seen.meta);
   }
-  if (seen.pruned) return storedTrustBalance(trust);
+  if (seen.pruned) return reconciledTrust(trust);
   return null;
 }
 
@@ -1107,4 +1108,5 @@ module.exports = {
   markInventory,
   load,
   tick,
+  historyDropped,
 };
