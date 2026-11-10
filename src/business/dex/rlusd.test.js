@@ -900,6 +900,137 @@ describe("rlusd trading", () => {
     assert.notEqual(cancelled.inventory_drops, "0");
   });
 
+  it("refuses an offer node that is not W1 and revalues a smaller remainder still on the book", async () => {
+    const shape = JSON.parse(fs.readFileSync(path.join(RLUSDFIX, "fill-21093748.json"), "utf8"));
+    const hash = "4A95A4E767C53A957DB232AF1548DED51023D021088F9D2F76237BCB2FF45AF2";
+    const sequence = 21093749;
+    const gets = { currency: shape.currency, issuer: shape.issuer, value: shape.balance };
+    const pays = "1014158";
+    const tx = {
+      TransactionType: "OfferCreate",
+      Account: anchors.WALLETS.W1.address,
+      Flags: bounds.TF_PASSIVE,
+      Sequence: sequence,
+      Fee: "10",
+      LastLedgerSequence: 22225421,
+      TakerGets: gets,
+      TakerPays: pays,
+    };
+    function seed(ledger, status) {
+      fs.appendFileSync(path.join(ledger, "events.jsonl"), `${JSON.stringify({
+        type: "mission.upsert",
+        at: TODAY,
+        mission: {
+          id: "msnnode21093749",
+          idempotency_key: "w1-rlusd-sell-2026-11-10",
+          kind: "w1-rlusd",
+          status,
+          action: "sell",
+          hold: "uncertain",
+          signed: true,
+          submitted: true,
+          submit_attempted: true,
+          role: "W1",
+          account: anchors.WALLETS.W1.address,
+          chicago_day: "2026-11-10",
+          sequence,
+          outstanding_drops: "200010",
+          signed_hash: hash,
+          cost_basis: "state_only_mark",
+          cost_basis_drops: "907690",
+          updated_at: TODAY,
+          unsigned_tx: tx,
+        },
+      })}\n`);
+    }
+    const foreign = home();
+    const foreignJournal = fs.mkdtempSync(path.join(os.tmpdir(), "rlusd-foreign-node-"));
+    seed(foreign, "rlusd_unknown");
+    const foreignState = {
+      signs: 0,
+      submits: 0,
+      types: [],
+      fillBalance: shape.balance,
+      sellHash: hash,
+      sellProof: {
+        result: {
+          validated: true,
+          hash,
+          ledger_index: 22225401,
+          tx_json: tx,
+          meta: {
+            TransactionResult: "tesSUCCESS",
+            AffectedNodes: [{
+              CreatedNode: {
+                LedgerEntryType: "Offer",
+                NewFields: {
+                  Account: "rNv54ueuxFt5a3TgqYA4QqmN2hJX2q2TGv",
+                  Sequence: sequence,
+                  TakerGets: gets,
+                  TakerPays: pays,
+                },
+              },
+            }],
+          },
+        },
+      },
+    };
+    const refused = await decide(env(), { now: TODAY, ledger: foreign, journal: foreignJournal }, client(foreignState));
+    assert.equal(refused.proof_reason, "bind");
+    assert.equal(refused.status, "rlusd_unknown");
+    assert.equal(Object.values(view(foreign, TODAY).missions).find((row) => row.sequence === sequence).outstanding_drops, "200010");
+    const ledger = home();
+    const journal = fs.mkdtempSync(path.join(os.tmpdir(), "rlusd-remainder-"));
+    seed(ledger, "rlusd_resting");
+    const state = {
+      signs: 0,
+      submits: 0,
+      types: [],
+      fillBalance: shape.balance,
+      bookedRlusd: {
+        Account: anchors.WALLETS.W1.address,
+        seq: sequence,
+        Sequence: sequence,
+        TakerGets: { currency: shape.currency, issuer: shape.issuer, value: "0.03" },
+        TakerPays: "400000",
+      },
+    };
+    const reduced = await decide(env(), { now: TODAY, ledger, journal }, client(state));
+    assert.equal(reduced.status, "rlusd_partial-resting");
+    assert.equal(reduced.realized_pnl_drops, "0");
+    assert.equal(reduced.outside_fill, false);
+    assert.equal(reduced.signed, false);
+    assert.equal(state.signs, 0);
+    const mission = Object.values(view(ledger, TODAY).missions).find((row) => row.sequence === sequence);
+    assert.equal(mission.outstanding_drops, (200000n + BigInt(mission.inventory_drops)).toString());
+    assert.equal(BigInt(mission.inventory_drops) > 0n, true);
+    assert.notEqual(mission.outstanding_drops, "200010");
+    const again = await decide(env(), { now: TODAY, ledger, journal }, client(state));
+    assert.equal(again.status, "rlusd_partial-resting");
+    assert.equal(again.realized_pnl_drops, "0");
+    assert.equal(state.signs, 0);
+    const rounded = home();
+    const roundedJournal = fs.mkdtempSync(path.join(os.tmpdir(), "rlusd-rounded-rest-"));
+    seed(rounded, "rlusd_resting");
+    const roundedState = {
+      signs: 0,
+      submits: 0,
+      types: [],
+      fillBalance: shape.balance,
+      bookedRlusd: {
+        Account: anchors.WALLETS.W1.address,
+        seq: sequence,
+        Sequence: sequence,
+        TakerGets: { currency: shape.currency, issuer: shape.issuer, value: "0.077783351127146" },
+        TakerPays: pays,
+      },
+    };
+    const held = await decide(env(), { now: TODAY, ledger: rounded, journal: roundedJournal }, client(roundedState));
+    assert.notEqual(held.status, "rlusd_partial-resting");
+    assert.equal(Object.values(view(rounded, TODAY).missions).find((row) => row.sequence === sequence).outstanding_drops, "200010");
+    assert.equal(roundedState.signs, 0);
+  });
+
   it("does not sell RLUSD when the outside ask is missing", async () => {
     const shape = JSON.parse(fs.readFileSync(path.join(RLUSDFIX, "fill-21093748.json"), "utf8"));
     const ledger = home();
