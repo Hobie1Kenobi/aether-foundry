@@ -54,7 +54,11 @@ function item(id, resource, payTo, now, amount) {
 }
 
 function childEnv(extra) {
-  return Object.assign({}, process.env, extra, { CI: "", GITHUB_ACTIONS: "" });
+  const env = Object.assign({}, process.env);
+  for (const key of ["FOUNDRY_MISSION_HOME", "FOUNDRY_MISSION_LEDGER", "FOUNDRY_MISSION_DISCOVERY", "FOUNDRY_MISSION_ALLOWLIST", "FOUNDRY_W1_DEX_ACCOUNT_FILE"]) {
+    delete env[key];
+  }
+  return Object.assign(env, extra || {}, { CI: "", GITHUB_ACTIONS: "" });
 }
 
 function runNode(args, env) {

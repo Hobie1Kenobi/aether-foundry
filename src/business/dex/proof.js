@@ -11,6 +11,7 @@ const { coded } = require("../../missions/ledger");
 const { proveSignedAbsence } = require("../../missions/absence-proof");
 const { LABS } = require("../../missions/reconcile-endpoint");
 const bounds = require("./bounds");
+const live = require("./live");
 
 function uncertain(message) {
   throw coded(message, "UNCERTAIN");
@@ -287,7 +288,7 @@ async function proveAbsence(clients, offer) {
       firstTx = false;
     }
     const params = (body.params && body.params[0]) || {};
-    const response = await clients.ledger.request(Object.assign({ command: body.method }, params));
+    const response = await live.settledRequest((payload) => clients.ledger.request(payload), Object.assign({ command: body.method }, params));
     return { ok: true, json: async () => response };
   };
   return proveSignedAbsence(fetchImpl, {

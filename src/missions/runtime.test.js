@@ -775,7 +775,10 @@ describe("dedicated port release", () => {
 describe("release pack", () => {
   it("packs runtime files and leaves out git, env, lab data, and seeds", async () => {
     const out = tmp();
-    const result = pack({ outDir: out });
+    const probed = spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" });
+    const gitSha = probed.status === 0 && probed.stdout.trim() ? probed.stdout.trim() : "unknown";
+    const result = pack({ outDir: out, gitSha });
+    assert.equal(result.gitSha, gitSha);
     const listed = spawnSync("tar", ["-tf", result.tarPath], { encoding: "utf8" });
     assert.equal(listed.status, 0);
     const names = listed.stdout.split("\n").filter(Boolean);
