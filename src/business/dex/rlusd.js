@@ -404,9 +404,8 @@ async function tick(env, dir, now, clients, position) {
   const inventory = findInventory(state);
   if (inventory) {
     const sold = await sellInventory(dir, inventory, now, clients, observed, room, gate);
-    if (sold.book === "no_ask" || inventory.status !== "rlusd_vanished_unattributed" || sold.decision === "place" || sold.signed === true) {
-      return Object.assign(fields, sold);
-    }
+    const tryBuy = inventory.status === "rlusd_vanished_unattributed" && sold.book === "no_bid" && sold.decision !== "place" && sold.signed !== true;
+    if (!tryBuy) return Object.assign(fields, sold);
   }
   const shot = await shotOf(clients.ledger);
   if (!observed.trustline) return Object.assign(fields, await trust(dir, now, clients, shot, room, day, gate));
@@ -570,8 +569,9 @@ async function buy(dir, now, clients, shot, observed, room, day, gate) {
 }
 
 function findInventory(state) {
-  if (rowsOf(state).some((mission) => mission.action === "sell" && mission.hold !== "released")) return null;
-  return rowsOf(state).find((mission) => (mission.status === "rlusd_filled" || mission.status === "rlusd_vanished_unattributed") && mission.hold !== "released") || null;
+  const blocking = rowsOf(state).some((mission) => mission.action === "sell" && mission.hold !== "released" && (mission.status === "rlusd_resting" || mission.status === "rlusd_proved" || mission.status === "rlusd_partial" || mission.status === "rlusd_reserved" || mission.status === "rlusd_unknown"));
+  if (blocking) return null;
+  return rowsOf(state).find((mission) => mission.hold !== "released" && BigInt(mission.outstanding_drops || "0") > 0n && (mission.status === "rlusd_filled" || mission.status === "rlusd_vanished_unattributed" || mission.status === "rlusd_cancelled" || mission.status === "rlusd_expired")) || null;
 }
 
 function offerTouch(meta, sequence) {
@@ -852,7 +852,85 @@ async function noteAbsence(dir, resting, now, clients, observed) {
   };
 }
 
-async function proveSell(dir, resting, now, clients) {
+function sellPartial(touch) {
+  const beforeIou = amountExact(touch.previous && touch.previous.TakerGets);
+  const afterIou = amountExact(touch.final && touch.final.TakerGets);
+  const beforeXrp = marketXrp(touch.previous && touch.previous.TakerPays);
+  const afterXrp = marketXrp(touch.final && touch.final.TakerPays);
+  if (beforeXrp == null || afterXrp == null || afterXrp >= beforeXrp || !beforeIou || !afterIou) return null;
+  const consumed = subExact(beforeIou, afterIou);
+  if (!consumed || consumed.coeff <= 0n) return null;
+  const text = formatCoeff(afterIou.coeff, afterIou.exp);
+  if (!text) return null;
+  return { consumed, remaining: text, receivedXrp: beforeXrp - afterXrp };
+}
+
+function parkInventory(dir, resting, now, observed, status, proof) {
+  const marked = !observed.balance || observed.balance.coeff === 0n ? { proved: true, xrp: 0n } : markInventory(observed.pool, observed.bids, observed.balance);
+  if (!marked.proved) {
+    return { decision: "research", traded: false, signed: false, rationale: "The RLUSD sell ended, and the balance cannot be marked. Exposure stays open." };
+  }
+  const text = !observed.balance || observed.balance.coeff === 0n ? "0" : formatCoeff(observed.balance.coeff, observed.balance.exp);
+  const source = rowsOf(view(dir, now)).find((mission) => mission.id !== resting.id && mission.hold !== "released" && (mission.status === "rlusd_vanished_unattributed" || mission.status === "rlusd_filled"));
+  if (source) {
+    save(dir, Object.assign({}, source, {
+      inventory_rlusd: text,
+      inventory_drops: marked.xrp.toString(),
+      outstanding_drops: marked.xrp.toString(),
+      updated_at: now,
+    }));
+    save(dir, Object.assign({}, resting, {
+      hold: "released",
+      status,
+      outstanding_drops: "0",
+      proof_type: proof.type,
+      proof_hash: proof.hash,
+      outside_fill: false,
+      counterparty: null,
+      realized_pnl_drops: "0",
+      updated_at: now,
+    }));
+  } else {
+    save(dir, Object.assign({}, resting, {
+      status,
+      proof_type: proof.type,
+      proof_hash: proof.hash,
+      outside_fill: false,
+      counterparty: null,
+      realized_pnl_drops: "0",
+      inventory_rlusd: text,
+      inventory_drops: marked.xrp.toString(),
+      outstanding_drops: marked.xrp.toString(),
+      updated_at: now,
+    }));
+  }
+  return {
+    decision: "reconcile",
+    traded: false,
+    signed: false,
+    learning: false,
+    status,
+    fill_class: proof.klass,
+    proof_type: proof.type,
+    fill_hash: proof.hash,
+    outside_fill: false,
+    counterparty: null,
+    realized_pnl_drops: "0",
+    inventory_drops: marked.xrp.toString(),
+    inventory_rlusd: text,
+  };
+}
+
+async function offerReserveNow(clients) {
+  try {
+    const server = await clients.ledger.request({ command: "server_info" });
+    return reserveIncrement(server && server.result && server.result.info);
+  } catch (error) {
+    return null;
+  }
+}
+
+async function proveSell(dir, resting, now, clients, observed) {
   const reserved = resting.unsigned_tx || {};
   const received = marketXrp(reserved.TakerPays);
   const sold = exactOf(reserved.TakerGets);
@@ -866,46 +944,105 @@ async function proveSell(dir, resting, now, clients) {
   const hits = [];
   for (const entry of history.transactions) {
     const tx = entry.tx_json || entry.tx || entry;
-    const meta = entry.meta || entry.metaData;
+    const meta = entry.meta || entry.metaData || (entry.result && entry.result.meta);
     const touch = offerTouch(meta, resting.sequence);
-    if (!touch || !touch.deleted) continue;
+    if (!touch) continue;
     const hash = String(entry.hash || tx.hash || "").toUpperCase();
     if (!/^[0-9A-F]{64}$/.test(hash)) continue;
-    hits.push({ tx, hash, klass: classifyTouch(tx, touch) });
+    hits.push({ tx, meta, hash, touch, klass: classifyTouch(tx, touch) });
   }
-  if (hits.length !== 1 || (hits[0].klass.klass !== "filled" && hits[0].klass.klass !== "self")) {
-    return { decision: "research", traded: false, signed: false, rationale: "The RLUSD sell is not yet attributed. Exposure stays open." };
+  const held = { decision: "research", traded: false, signed: false, rationale: "The RLUSD sell is not yet attributed. Exposure stays open." };
+  if (hits.length > 1) {
+    return { decision: "research", traded: false, signed: false, proof_reason: "uncertain", rationale: "More than one validated trade touches the RLUSD sell. Exposure stays open." };
   }
-  const hit = hits[0];
-  const outsideFill = hit.klass.outside === true && hit.klass.klass === "filled";
-  const basis = resting.cost_basis === "state_only_mark" ? BigInt(resting.cost_basis_drops || "0") : null;
-  const pnl = outsideFill && basis != null ? received - basis : 0n;
-  const next = Object.assign({}, resting, {
-    status: "rlusd_filled",
-    proof_type: "consuming_tx",
-    proof_hash: hit.hash,
-    outside_fill: outsideFill,
-    counterparty: outsideFill ? hit.tx.Account : null,
-    cost_basis: resting.cost_basis || null,
-    realized_pnl_drops: pnl.toString(),
-    outstanding_drops: "0",
-    updated_at: now,
-  });
-  save(dir, next);
-  return {
-    decision: "reconcile",
-    traded: outsideFill,
-    signed: false,
-    learning: false,
-    status: "rlusd_filled",
-    proof_type: "consuming_tx",
-    outside_fill: outsideFill,
-    counterparty: next.counterparty,
-    cost_basis: next.cost_basis,
-    realized_pnl_drops: pnl.toString(),
-    fill_xrp_drops: received.toString(),
-    fill_hash: hit.hash,
-  };
+  if (hits.length === 1 && resting.proof_hash === hits[0].hash && resting.status === "rlusd_partial") {
+    return { decision: "research", traded: false, signed: false, status: "rlusd_partial", outstanding_drops: resting.outstanding_drops, rationale: "The partial RLUSD sell is already booked." };
+  }
+  if (hits.length === 1 && hits[0].klass.klass === "partial") {
+    const hit = hits[0];
+    const delta = sellPartial(hit.touch);
+    const reserve = await offerReserveNow(clients);
+    if (!delta || reserve == null) return held;
+    const next = Object.assign({}, resting, {
+      status: "rlusd_partial",
+      fill_class: "partial",
+      proof_type: "consuming_tx",
+      proof_hash: hit.hash,
+      counterparty: hit.klass.outside ? hit.tx.Account : null,
+      outside_fill: hit.klass.outside === true,
+      remaining_rlusd: delta.remaining,
+      outstanding_drops: reserve.toString(),
+      realized_pnl_drops: "0",
+      updated_at: now,
+    });
+    save(dir, next);
+    return {
+      decision: "reconcile",
+      traded: false,
+      signed: false,
+      learning: false,
+      status: "rlusd_partial",
+      fill_class: "partial",
+      proof_type: "consuming_tx",
+      fill_hash: hit.hash,
+      outside_fill: next.outside_fill,
+      counterparty: next.counterparty,
+      remaining_rlusd: delta.remaining,
+      outstanding_drops: reserve.toString(),
+      realized_pnl_drops: "0",
+      rationale: "A validated trade consumed part of the RLUSD sell. The remainder stays open with its owner reserve.",
+    };
+  }
+  if (hits.length === 1 && (hits[0].klass.klass === "cancelled" || hits[0].klass.klass === "expired")) {
+    const hit = hits[0];
+    const status = hit.klass.klass === "cancelled" ? "rlusd_cancelled" : "rlusd_expired";
+    return parkInventory(dir, resting, now, observed, status, { klass: hit.klass.klass, type: "consuming_tx", hash: hit.hash });
+  }
+  if (hits.length === 1 && (hits[0].klass.klass === "filled" || hits[0].klass.klass === "self")) {
+    const hit = hits[0];
+    const outsideFill = hit.klass.outside === true && hit.klass.klass === "filled";
+    const basis = resting.cost_basis === "state_only_mark" ? BigInt(resting.cost_basis_drops || "0") : null;
+    const pnl = outsideFill && basis != null ? received - basis : 0n;
+    const next = Object.assign({}, resting, {
+      status: "rlusd_filled",
+      fill_class: hit.klass.klass,
+      proof_type: "consuming_tx",
+      proof_hash: hit.hash,
+      outside_fill: outsideFill,
+      counterparty: outsideFill ? hit.tx.Account : null,
+      cost_basis: resting.cost_basis || null,
+      realized_pnl_drops: pnl.toString(),
+      outstanding_drops: "0",
+      updated_at: now,
+    });
+    save(dir, next);
+    return {
+      decision: "reconcile",
+      traded: outsideFill,
+      signed: false,
+      learning: false,
+      status: "rlusd_filled",
+      fill_class: hit.klass.klass,
+      proof_type: "consuming_tx",
+      outside_fill: outsideFill,
+      counterparty: next.counterparty,
+      cost_basis: next.cost_basis,
+      realized_pnl_drops: pnl.toString(),
+      fill_xrp_drops: received.toString(),
+      fill_hash: hit.hash,
+    };
+  }
+  if (hits.length === 0) {
+    const ranges = await readRanges(clients);
+    const dropped = historyDropped(ranges, provedLedger(resting));
+    let seen = { unproved: true };
+    if (!history.threw && !history.incomplete) seen = await inspectTx(clients, resting.signed_hash, resting, ranges);
+    const emptyOrPrunedUntouched = history.missing || dropped;
+    if (!seen.unknown && seen.notFound === true && emptyOrPrunedUntouched) {
+      return noteAbsence(dir, resting, now, clients, observed);
+    }
+  }
+  return held;
 }
 
 async function proveFill(dir, resting, now, clients, observed) {
@@ -1123,10 +1260,14 @@ async function sellInventory(dir, mission, now, clients, observed, room, gate) {
   if (exposure > room.headroom) {
     return { decision: "research", traded: false, rationale: "The RLUSD exit reserve does not fit the bankroll headroom." };
   }
+  const marked = markInventory(observed.pool, observed.bids, observed.balance);
+  if (!marked.proved || marked.xrp < offerReserve) {
+    return { decision: "research", traded: false, signed: false, book: "dust", rationale: "The RLUSD inventory mark is below the offer reserve. It is not sold." };
+  }
   const previous = openExposure(state);
   const nextOpen = previous - BigInt(mission.outstanding_drops || "0") + exposure;
-  if (nextOpen > MAX_TRADE_DROPS && nextOpen >= previous) {
-    return { decision: "research", traded: false, rationale: "The RLUSD exit does not fit the 2 XRP open cap." };
+  if (nextOpen > previous && nextOpen > MAX_TRADE_DROPS) {
+    return { decision: "research", traded: false, signed: false, rationale: "The RLUSD exit does not fit the 2 XRP open cap." };
   }
   const tx = {
     TransactionType: "OfferCreate",
@@ -1171,10 +1312,14 @@ async function sellInventory(dir, mission, now, clients, observed, room, gate) {
 async function manageRest(dir, resting, now, clients, observed, room, day, gate) {
   const sequence = resting.sequence;
   if (!stillResting(observed, sequence)) {
-    const cancelled = rowsOf(view(dir, now)).find((mission) => mission.action === "cancel" && mission.status === "rlusd_proved" && mission.unsigned_tx && mission.unsigned_tx.OfferSequence === sequence);
-    if (!cancelled) return proveFill(dir, resting, now, clients, observed);
-    save(dir, Object.assign({}, resting, { hold: "released", status: "rlusd_cancelled", outstanding_drops: "0", updated_at: now }));
-    return { decision: "reconcile", traded: false, status: "rlusd_cancelled" };
+    if (resting.action !== "sell") {
+      const cancelled = rowsOf(view(dir, now)).find((mission) => mission.action === "cancel" && mission.status === "rlusd_proved" && mission.unsigned_tx && mission.unsigned_tx.OfferSequence === sequence);
+      if (cancelled) {
+        save(dir, Object.assign({}, resting, { hold: "released", status: "rlusd_cancelled", outstanding_drops: "0", updated_at: now }));
+        return { decision: "reconcile", traded: false, status: "rlusd_cancelled" };
+      }
+    }
+    return proveFill(dir, resting, now, clients, observed);
   }
   if (Array.isArray(resting.absence_ledgers) && resting.absence_ledgers.length) {
     resting = Object.assign({}, resting, { absence_ledgers: [], updated_at: now });
