@@ -8,6 +8,7 @@ const path = require("path");
 const xrpl = require("xrpl");
 const anchors = require("../../director/anchors");
 const missionConfig = require("../../missions/config");
+const { chicagoDay } = require("../../missions/clock");
 const { control, view } = require("../../missions/engine");
 const bounds = require("./bounds");
 const { decide } = require("./director");
@@ -20,6 +21,7 @@ const signer = require("./signer");
 
 const TOKEN = "mission-internal-16";
 const NOW = "2026-11-09T04:00:00.000Z";
+const TODAY = "2026-11-10T18:00:00.000Z";
 const W1FIX = path.join(__dirname, "fixtures/w1-2026-11-09");
 const RLUSDFIX = path.join(__dirname, "fixtures/rlusd-2026-11-09");
 
@@ -65,9 +67,10 @@ function client(state) {
     ledger: {
       request: async (req) => {
         if (req.command === "server_info") {
-          if (!state.completeLedgers) return w1("server_info.json");
+          if (!state.completeLedgers && !state.validatedSeq) return w1("server_info.json");
           const info = JSON.parse(JSON.stringify(w1("server_info.json")));
-          info.result.info.complete_ledgers = state.completeLedgers;
+          if (state.completeLedgers) info.result.info.complete_ledgers = state.completeLedgers;
+          if (state.validatedSeq) info.result.info.validated_ledger.seq = state.validatedSeq;
           return info;
         }
         if (req.command === "account_info") {
@@ -104,6 +107,7 @@ function client(state) {
         }
         if (req.command === "fee") return w1("fee.json");
         if (req.command === "tx") {
+          if (state.txError) return { result: { error: state.txError } };
           if (state.notFound) return { result: { validated: false, error: "txnNotFound" } };
           if (state.trustProof && req.transaction === state.trustHash) return state.trustProof;
           if (!state.echo || !state.lastTx) return { result: { validated: false, error: "txnNotFound" } };
@@ -116,7 +120,11 @@ function client(state) {
         if (req.command === "book_offers") {
           const issuer = (req.taker_pays && req.taker_pays.issuer) || (req.taker_gets && req.taker_gets.issuer);
           if (issuer === rlusd.ISSUER) {
-            if (req.taker_gets && req.taker_gets.currency === "XRP") return rl("bids.json");
+            if (req.taker_gets && req.taker_gets.currency === "XRP") {
+              if (state.noBids) return { result: { validated: true, ledger_index: 1, marker: null, offers: [] } };
+              return rl("bids.json");
+            }
+            if (state.noAsks) return { result: { validated: true, ledger_index: 1, marker: null, offers: [] } };
             if (!state.cross) return rl("asks.json");
             const asks = JSON.parse(JSON.stringify(rl("asks.json")));
             asks.result.offers[0].TakerPays = "1";
@@ -424,6 +432,560 @@ describe("rlusd trading", () => {
     assert.equal(rlusd.historyDropped([[22224000, 22225000]], 22223170), true);
   });
 
+  it("releases a legacy vanished offer from the validated book without calling it a fill", async () => {
+    const shape = JSON.parse(fs.readFileSync(path.join(RLUSDFIX, "fill-21093748.json"), "utf8"));
+    assert.equal(shape.labs_window, "22222753-22224013");
+    const ledger = home();
+    const journal = fs.mkdtempSync(path.join(os.tmpdir(), "rlusd-vanished-"));
+    const tx = seedFill(ledger, shape, shape.create_hash, { legacy: true });
+    const state = {
+      signs: 0,
+      submits: 0,
+      types: [],
+      fillBalance: shape.balance,
+      history: { result: { validated: true, marker: null, transactions: [] } },
+      notFound: true,
+      completeLedgers: shape.labs_window,
+      echo: "prove",
+      lastTx: tx,
+      lastHash: shape.create_hash,
+    };
+    for (const seq of [22223900, 22223900, 22223901]) {
+      state.validatedSeq = seq;
+      const row = await decide(env(), { now: NOW, ledger, journal }, client(state));
+      assert.equal(state.signs, 0);
+      assert.equal(row.proof_type, undefined);
+    }
+    let open = Object.values(view(ledger, NOW).missions).find((mission) => mission.sequence === shape.sequence);
+    assert.equal(open.status, "rlusd_resting");
+    assert.equal(open.outstanding_drops, "1200010");
+    state.validatedSeq = 22223902;
+    const closed = await decide(env(), { now: NOW, ledger, journal }, client(state));
+    assert.equal(state.signs, 0);
+    assert.equal(closed.status, "rlusd_vanished_unattributed");
+    assert.equal(closed.proof_type, "state_only");
+    assert.equal(closed.outside_fill, false);
+    assert.equal(closed.counterparty, null);
+    assert.equal(closed.traded, false);
+    assert.equal(closed.realized_pnl_drops, "0");
+    assert.equal(closed.fill_rlusd, shape.balance);
+    open = Object.values(view(ledger, NOW).missions).find((mission) => mission.sequence === shape.sequence);
+    assert.equal(open.idempotency_key, "w1-rlusd-rest");
+    assert.equal(open.outstanding_drops, closed.inventory_drops);
+    assert.equal(BigInt(open.outstanding_drops) < 1200010n, true);
+    assert.equal(BigInt(open.outstanding_drops) <= 2000000n, true);
+    state.validatedSeq = 22223903;
+    await decide(env(), { now: NOW, ledger, journal }, client(state));
+    const exposure = Object.values(view(ledger, NOW).missions).filter((mission) => mission.kind === "w1-rlusd" && mission.hold !== "released").reduce((sum, mission) => sum + BigInt(mission.outstanding_drops || "0"), 0n);
+    assert.equal(state.signs <= 1, true);
+    assert.equal(exposure <= 2000000n, true);
+  });
+
+  it("resets absence when the offer is back on the book", async () => {
+    const shape = JSON.parse(fs.readFileSync(path.join(RLUSDFIX, "fill-21093748.json"), "utf8"));
+    const ledger = home();
+    const journal = fs.mkdtempSync(path.join(os.tmpdir(), "rlusd-back-"));
+    const tx = seedFill(ledger, shape, shape.create_hash, { legacy: true });
+    const state = {
+      signs: 0,
+      submits: 0,
+      types: [],
+      fillBalance: shape.balance,
+      history: { result: { validated: true, marker: null, transactions: [] } },
+      notFound: true,
+      completeLedgers: shape.labs_window,
+      lastTx: tx,
+      lastHash: shape.create_hash,
+    };
+    for (const seq of [22223900, 22223901]) {
+      state.validatedSeq = seq;
+      state.resting = null;
+      await decide(env(), { now: NOW, ledger, journal }, client(state));
+    }
+    state.validatedSeq = 22223902;
+    state.resting = { seq: shape.sequence, gets: shape.taker_gets_drops, pays: { currency: shape.currency, issuer: shape.issuer, value: shape.taker_pays_value } };
+    await decide(env(), { now: NOW, ledger, journal }, client(state));
+    let mission = Object.values(view(ledger, NOW).missions).find((row) => row.sequence === shape.sequence);
+    assert.deepEqual(mission.absence_ledgers, []);
+    state.validatedSeq = 22223903;
+    state.resting = null;
+    await decide(env(), { now: NOW, ledger, journal }, client(state));
+    mission = Object.values(view(ledger, NOW).missions).find((row) => row.sequence === shape.sequence);
+    assert.equal(mission.status, "rlusd_resting");
+    assert.equal(mission.outstanding_drops, "1200010");
+    assert.equal(state.signs, 0);
+  });
+
+  it("does not count an absence when the tx lookup is not txnNotFound", async () => {
+    const shape = JSON.parse(fs.readFileSync(path.join(RLUSDFIX, "fill-21093748.json"), "utf8"));
+    const ledger = home();
+    const journal = fs.mkdtempSync(path.join(os.tmpdir(), "rlusd-internal-"));
+    const tx = seedFill(ledger, shape, shape.create_hash, {});
+    const state = {
+      signs: 0,
+      submits: 0,
+      types: [],
+      fillBalance: shape.balance,
+      history: {
+        result: {
+          validated: true,
+          marker: null,
+          transactions: [{ hash: "AB".repeat(32), tx_json: { TransactionType: "Payment", Account: "rNv54ueuxFt5a3TgqYA4QqmN2hJX2q2TGv" }, meta: { TransactionResult: "tesSUCCESS", AffectedNodes: [] } }],
+        },
+      },
+      txError: "internal",
+      completeLedgers: shape.complete_ledgers_after_create,
+      validatedSeq: 22224100,
+      lastTx: tx,
+      lastHash: shape.create_hash,
+    };
+    await decide(env(), { now: NOW, ledger, journal }, client(state));
+    const mission = Object.values(view(ledger, NOW).missions).find((row) => row.sequence === shape.sequence);
+    assert.equal(mission.absence_ledgers, undefined);
+    assert.equal(mission.outstanding_drops, "1200010");
+    assert.equal(mission.status, "rlusd_resting");
+    assert.equal(state.signs, 0);
+  });
+
+  it("does not sell RLUSD when the outside ask is missing", async () => {
+    const shape = JSON.parse(fs.readFileSync(path.join(RLUSDFIX, "fill-21093748.json"), "utf8"));
+    const ledger = home();
+    const journal = fs.mkdtempSync(path.join(os.tmpdir(), "rlusd-noask-"));
+    fs.appendFileSync(path.join(ledger, "events.jsonl"), `${JSON.stringify({
+      type: "mission.upsert",
+      at: NOW,
+      mission: {
+        id: "msnnoask21093748",
+        idempotency_key: "w1-rlusd-rest",
+        kind: "w1-rlusd",
+        status: "rlusd_vanished_unattributed",
+        proof_type: "state_only",
+        role: "W1",
+        account: anchors.WALLETS.W1.address,
+        hold: "uncertain",
+        signed: true,
+        submitted: true,
+        action: "rest",
+        chicago_day: "2026-11-08",
+        sequence: shape.sequence,
+        submit_attempted: true,
+        inventory_rlusd: shape.balance,
+        inventory_drops: "885833",
+        outstanding_drops: "885833",
+        updated_at: NOW,
+      },
+    })}\n`);
+    const state = { signs: 0, submits: 0, types: [], fillBalance: shape.balance, noAsks: true };
+    const row = await decide(env(), { now: TODAY, ledger, journal }, client(state));
+    assert.equal(row.decision, "research");
+    assert.equal(state.signs, 0);
+    assert.equal(Object.values(view(ledger, TODAY).missions).some((mission) => mission.action === "sell"), false);
+  });
+
+  it("does not sell 0.001 RLUSD when that would raise 1000 drops to the offer reserve", async () => {
+    const shape = JSON.parse(fs.readFileSync(path.join(RLUSDFIX, "fill-21093748.json"), "utf8"));
+    const ledger = home();
+    const journal = fs.mkdtempSync(path.join(os.tmpdir(), "rlusd-dust-"));
+    fs.appendFileSync(path.join(ledger, "events.jsonl"), `${JSON.stringify({
+      type: "mission.upsert",
+      at: NOW,
+      mission: {
+        id: "msndust21093748",
+        idempotency_key: "w1-rlusd-rest",
+        kind: "w1-rlusd",
+        status: "rlusd_vanished_unattributed",
+        proof_type: "state_only",
+        role: "W1",
+        account: anchors.WALLETS.W1.address,
+        hold: "uncertain",
+        signed: true,
+        submitted: true,
+        action: "rest",
+        chicago_day: "2026-11-08",
+        sequence: shape.sequence,
+        submit_attempted: true,
+        inventory_rlusd: "0.001",
+        inventory_drops: "1000",
+        outstanding_drops: "1000",
+        updated_at: NOW,
+      },
+    })}\n`);
+    const state = { signs: 0, submits: 0, types: [], fillBalance: "0.001" };
+    const row = await decide(env(), { now: TODAY, ledger, journal }, client(state));
+    assert.equal(row.decision, "research");
+    assert.equal(state.signs, 0);
+    const mission = Object.values(view(ledger, TODAY).missions).find((item) => item.id === "msndust21093748");
+    assert.equal(mission.outstanding_drops, "1000");
+    assert.equal(Object.values(view(ledger, TODAY).missions).some((item) => item.action === "sell"), false);
+  });
+
+  it("does not sell inventory whose mark is below the offer reserve", async () => {
+    const shape = JSON.parse(fs.readFileSync(path.join(RLUSDFIX, "fill-21093748.json"), "utf8"));
+    const ledger = home();
+    const journal = fs.mkdtempSync(path.join(os.tmpdir(), "rlusd-below-reserve-"));
+    fs.appendFileSync(path.join(ledger, "events.jsonl"), `${JSON.stringify({
+      type: "mission.upsert",
+      at: NOW,
+      mission: {
+        id: "msnbelow21093748",
+        idempotency_key: "w1-rlusd-rest",
+        kind: "w1-rlusd",
+        status: "rlusd_vanished_unattributed",
+        proof_type: "state_only",
+        role: "W1",
+        account: anchors.WALLETS.W1.address,
+        hold: "uncertain",
+        signed: true,
+        submitted: true,
+        action: "rest",
+        chicago_day: "2026-11-08",
+        sequence: shape.sequence,
+        submit_attempted: true,
+        inventory_rlusd: "0.01",
+        inventory_drops: "150000",
+        outstanding_drops: "150000",
+        updated_at: NOW,
+      },
+    })}\n`);
+    const state = { signs: 0, submits: 0, types: [], fillBalance: "0.01" };
+    const row = await decide(env(), { now: TODAY, ledger, journal }, client(state));
+    assert.equal(row.decision, "research");
+    assert.equal(state.signs, 0);
+    const mission = Object.values(view(ledger, TODAY).missions).find((item) => item.id === "msnbelow21093748");
+    assert.equal(mission.outstanding_drops, "150000");
+    assert.equal(Object.values(view(ledger, TODAY).missions).some((item) => item.action === "sell"), false);
+  });
+
+  it("returns a cancelled or expired RLUSD sell to the line mark and releases its reserve", async () => {
+    const shape = JSON.parse(fs.readFileSync(path.join(RLUSDFIX, "fill-21093748.json"), "utf8"));
+    const ends = [
+      ["cancel", "rlusd_cancelled", "C1" + "AB".repeat(31)],
+      ["expire", "rlusd_expired", "E1" + "CD".repeat(31)],
+    ];
+    for (const [kind, status, hash] of ends) {
+      const ledger = home();
+      const journal = fs.mkdtempSync(path.join(os.tmpdir(), `rlusd-sell-${kind}-`));
+      const sequence = 21093800;
+      const previous = {
+        Account: anchors.WALLETS.W1.address,
+        Sequence: sequence,
+        TakerGets: { currency: shape.currency, issuer: shape.issuer, value: shape.balance },
+        TakerPays: "1000000",
+      };
+      if (kind === "expire") previous.Expiration = 800000000;
+      fs.appendFileSync(path.join(ledger, "events.jsonl"), `${JSON.stringify({
+        type: "mission.upsert",
+        at: TODAY,
+        mission: {
+          id: `msnsellend${sequence}`,
+          idempotency_key: "w1-rlusd-sell-2026-11-10",
+          kind: "w1-rlusd",
+          status: "rlusd_resting",
+          action: "sell",
+          hold: "uncertain",
+          signed: true,
+          submitted: true,
+          submit_attempted: true,
+          role: "W1",
+          account: anchors.WALLETS.W1.address,
+          chicago_day: "2026-11-10",
+          sequence,
+          outstanding_drops: "200010",
+          cost_basis: "state_only_mark",
+          cost_basis_drops: "885833",
+          inventory_rlusd: shape.balance,
+          inventory_drops: "885833",
+          signed_hash: "AB".repeat(32),
+          updated_at: TODAY,
+          unsigned_tx: {
+            TransactionType: "OfferCreate",
+            Account: anchors.WALLETS.W1.address,
+            Sequence: sequence,
+            Fee: "10",
+            TakerGets: previous.TakerGets,
+            TakerPays: previous.TakerPays,
+          },
+        },
+      })}\n`);
+      const tx = kind === "cancel"
+        ? { TransactionType: "OfferCancel", Account: anchors.WALLETS.W1.address, OfferSequence: sequence }
+        : { TransactionType: "AccountSet", Account: anchors.WALLETS.W1.address };
+      const state = {
+        signs: 0,
+        submits: 0,
+        types: [],
+        fillBalance: shape.balance,
+        history: {
+          result: {
+            validated: true,
+            marker: null,
+            transactions: [{
+              hash,
+              tx_json: tx,
+              meta: {
+                TransactionResult: "tesSUCCESS",
+                AffectedNodes: [{ DeletedNode: { LedgerEntryType: "Offer", FinalFields: previous, PreviousFields: previous } }],
+              },
+            }],
+          },
+        },
+      };
+      const row = await decide(env(), { now: TODAY, ledger, journal }, client(state));
+      assert.equal(row.status, status);
+      assert.equal(row.outside_fill, false);
+      assert.equal(row.realized_pnl_drops, "0");
+      assert.equal(state.signs, 0);
+      const sell = Object.values(view(ledger, TODAY).missions).find((mission) => mission.action === "sell");
+      assert.equal(sell.status, status);
+      assert.equal(sell.outstanding_drops, "885833");
+      assert.notEqual(sell.outstanding_drops, "200010");
+      if (kind === "cancel") {
+        const again = await decide(env(), { now: TODAY, ledger, journal }, client(state));
+        const exposure = Object.values(view(ledger, TODAY).missions).filter((mission) => mission.kind === "w1-rlusd" && mission.hold !== "released").reduce((sum, mission) => sum + BigInt(mission.outstanding_drops || "0"), 0n);
+        assert.notEqual(again.replay, true);
+        assert.notEqual(exposure, 0n);
+        if (again.signed === true) {
+          assert.equal(state.signs, 1);
+          assert.equal(exposure, 200010n);
+          const next = Object.values(view(ledger, TODAY).missions).find((mission) => mission.action === "sell" && mission.status !== "rlusd_cancelled");
+          assert.equal(next.outstanding_drops, "200010");
+          assert.equal(next.idempotency_key.startsWith("w1-rlusd-sell-2026-11-10-"), true);
+        } else {
+          assert.equal(state.signs, 0);
+          assert.equal(exposure, 885833n);
+        }
+      }
+    }
+  });
+
+  it("keeps the unsold RLUSD mark inside a partial sell's exposure", async () => {
+    const shape = JSON.parse(fs.readFileSync(path.join(RLUSDFIX, "fill-21093748.json"), "utf8"));
+    const ledger = home();
+    const journal = fs.mkdtempSync(path.join(os.tmpdir(), "rlusd-partial-sell-"));
+    const sequence = 21093810;
+    const previous = {
+      Account: anchors.WALLETS.W1.address,
+      Sequence: sequence,
+      TakerGets: { currency: shape.currency, issuer: shape.issuer, value: "0.1" },
+      TakerPays: "1000000",
+    };
+    const finalFields = {
+      Account: anchors.WALLETS.W1.address,
+      Sequence: sequence,
+      TakerGets: { currency: shape.currency, issuer: shape.issuer, value: shape.balance },
+      TakerPays: "400000",
+    };
+    fs.appendFileSync(path.join(ledger, "events.jsonl"), `${JSON.stringify({
+      type: "mission.upsert",
+      at: TODAY,
+      mission: {
+        id: "msnsellpartial21093810",
+        idempotency_key: "w1-rlusd-sell-2026-11-10",
+        kind: "w1-rlusd",
+        status: "rlusd_resting",
+        action: "sell",
+        hold: "uncertain",
+        signed: true,
+        submitted: true,
+        submit_attempted: true,
+        role: "W1",
+        account: anchors.WALLETS.W1.address,
+        chicago_day: "2026-11-10",
+        sequence,
+        outstanding_drops: "200010",
+        cost_basis: "state_only_mark",
+        cost_basis_drops: "885833",
+        signed_hash: "AB".repeat(32),
+        updated_at: TODAY,
+        unsigned_tx: {
+          TransactionType: "OfferCreate",
+          Account: anchors.WALLETS.W1.address,
+          Sequence: sequence,
+          Fee: "10",
+          TakerGets: previous.TakerGets,
+          TakerPays: previous.TakerPays,
+        },
+      },
+    })}\n`);
+    const state = {
+      signs: 0,
+      submits: 0,
+      types: [],
+      fillBalance: shape.balance,
+      history: {
+        result: {
+          validated: true,
+          marker: null,
+          transactions: [{
+            hash: "F1" + "AB".repeat(31),
+            tx_json: { TransactionType: "OfferCreate", Account: "rNv54ueuxFt5a3TgqYA4QqmN2hJX2q2TGv", Sequence: 22049388 },
+            meta: {
+              TransactionResult: "tesSUCCESS",
+              AffectedNodes: [{ ModifiedNode: { LedgerEntryType: "Offer", PreviousFields: previous, FinalFields: finalFields } }],
+            },
+          }],
+        },
+      },
+    };
+    const row = await decide(env(), { now: TODAY, ledger, journal }, client(state));
+    assert.equal(row.status, "rlusd_partial");
+    assert.equal(row.remaining_rlusd, shape.balance);
+    assert.equal(row.outstanding_drops, (200000n + 885833n).toString());
+    assert.notEqual(row.outstanding_drops, "200000");
+    const exposure = Object.values(view(ledger, TODAY).missions).filter((mission) => mission.kind === "w1-rlusd" && mission.hold !== "released").reduce((sum, mission) => sum + BigInt(mission.outstanding_drops || "0"), 0n);
+    assert.equal(exposure, 200000n + 885833n);
+    assert.equal(state.signs, 0);
+  });
+
+  it("sells state-only RLUSD inside the live headroom and can buy what remains", async () => {
+    const shape = JSON.parse(fs.readFileSync(path.join(RLUSDFIX, "fill-21093748.json"), "utf8"));
+    const ledger = home();
+    const journal = fs.mkdtempSync(path.join(os.tmpdir(), "rlusd-exit-"));
+    fs.appendFileSync(path.join(ledger, "events.jsonl"), `${JSON.stringify({
+      type: "mission.upsert",
+      at: NOW,
+      mission: {
+        id: "msnvanished21093748",
+        idempotency_key: "w1-rlusd-rest",
+        kind: "w1-rlusd",
+        status: "rlusd_vanished_unattributed",
+        proof_type: "state_only",
+        role: "W1",
+        account: anchors.WALLETS.W1.address,
+        hold: "uncertain",
+        signed: true,
+        submitted: true,
+        action: "rest",
+        chicago_day: "2026-11-08",
+        sequence: shape.sequence,
+        submit_attempted: true,
+        outside_fill: false,
+        counterparty: null,
+        realized_pnl_drops: "0",
+        inventory_rlusd: shape.balance,
+        inventory_drops: "885833",
+        outstanding_drops: "885833",
+        updated_at: NOW,
+      },
+    })}\n`);
+    const state = { signs: 0, submits: 0, types: [], fillBalance: shape.balance, noBids: true };
+    const bought = await decide(env(), { now: TODAY, ledger, journal }, client(state));
+    assert.equal(bought.decision, "place");
+    assert.equal(state.signs, 1);
+    const spend = BigInt(state.lastTx.TakerGets);
+    assert.equal(spend >= 100000n, true);
+    assert.equal(spend < 1000000n, true);
+    const order = Object.values(view(ledger, TODAY).missions).find((row) => row.idempotency_key && row.idempotency_key.startsWith("w1-rlusd-rest-"));
+    assert.equal(order.outstanding_drops, (spend + 10n + 200000n).toString());
+    const exposure = Object.values(view(ledger, TODAY).missions).filter((row) => row.kind === "w1-rlusd" && row.hold !== "released").reduce((sum, row) => sum + BigInt(row.outstanding_drops || "0"), 0n);
+    assert.equal(exposure <= 2000000n, true);
+    assert.equal(885833n + 1000000n + 10n + 200000n > 2000000n, true);
+    assert.equal(chicagoDay(TODAY), "2026-11-10");
+    assert.equal(chicagoDay(NOW), "2026-11-08");
+    const sellLedger = home();
+    const sellJournal = fs.mkdtempSync(path.join(os.tmpdir(), "rlusd-sell-"));
+    for (const prior of ["w1-rlusd-swap-a", "w1-rlusd-swap-b"]) {
+      fs.appendFileSync(path.join(sellLedger, "events.jsonl"), `${JSON.stringify({
+        type: "mission.upsert",
+        at: NOW,
+        mission: {
+          id: `msn${prior}`,
+          idempotency_key: prior,
+          kind: "w1-rlusd",
+          status: "rlusd_filled",
+          action: "swap",
+          hold: "released",
+          signed: true,
+          submitted: true,
+          submit_attempted: true,
+          chicago_day: "2026-11-08",
+          outstanding_drops: "0",
+          role: "W1",
+          account: anchors.WALLETS.W1.address,
+          updated_at: NOW,
+        },
+      })}\n`);
+    }
+    fs.appendFileSync(path.join(sellLedger, "events.jsonl"), `${JSON.stringify({
+      type: "mission.upsert",
+      at: NOW,
+      mission: {
+        id: "msnsell21093748",
+        idempotency_key: "w1-rlusd-rest",
+        kind: "w1-rlusd",
+        status: "rlusd_vanished_unattributed",
+        proof_type: "state_only",
+        role: "W1",
+        account: anchors.WALLETS.W1.address,
+        hold: "uncertain",
+        signed: true,
+        submitted: true,
+        action: "rest",
+        chicago_day: "2026-11-08",
+        sequence: shape.sequence,
+        submit_attempted: true,
+        outside_fill: false,
+        counterparty: null,
+        realized_pnl_drops: "0",
+        inventory_rlusd: shape.balance,
+        inventory_drops: "885833",
+        outstanding_drops: "885833",
+        updated_at: NOW,
+      },
+    })}\n`);
+    const selling = { signs: 0, submits: 0, types: [], fillBalance: shape.balance };
+    const placed = await decide(env(), { now: TODAY, ledger: sellLedger, journal: sellJournal }, client(selling));
+    assert.equal(placed.decision, "place");
+    assert.equal(selling.signs, 1);
+    assert.equal(selling.lastTx.TakerGets.currency, shape.currency);
+    assert.equal(selling.lastTx.TakerGets.value, shape.balance);
+    const sold = Object.values(view(sellLedger, TODAY).missions).find((row) => row.action === "sell");
+    assert.equal(sold.idempotency_key, "w1-rlusd-sell-2026-11-10");
+    assert.equal(sold.chicago_day, "2026-11-10");
+    assert.equal(sold.outstanding_drops, (10n + 200000n).toString());
+    assert.equal(sold.cost_basis, "state_only_mark");
+    assert.equal(sold.cost_basis_drops, "885833");
+    const after = Object.values(view(sellLedger, TODAY).missions).filter((row) => row.kind === "w1-rlusd" && row.hold !== "released").reduce((sum, row) => sum + BigInt(row.outstanding_drops || "0"), 0n);
+    assert.equal(after <= 885833n, true);
+    assert.equal(after <= 2000000n, true);
+    const sellSeq = selling.lastTx.Sequence;
+    const taker = "rNv54ueuxFt5a3TgqYA4QqmN2hJX2q2TGv";
+    selling.hideRest = true;
+    selling.notFound = false;
+    selling.echo = "prove";
+    await decide(env(), { now: TODAY, ledger: sellLedger, journal: sellJournal }, client(selling));
+    selling.history = {
+      result: {
+        validated: true,
+        marker: null,
+        transactions: [{
+          hash: "22".repeat(32),
+          tx_json: { TransactionType: "OfferCreate", Account: taker, Sequence: 22049388 },
+          meta: {
+            TransactionResult: "tesSUCCESS",
+            AffectedNodes: [{
+              DeletedNode: {
+                LedgerEntryType: "Offer",
+                FinalFields: {
+                  Account: anchors.WALLETS.W1.address,
+                  Sequence: sellSeq,
+                  TakerGets: selling.lastTx.TakerGets,
+                  TakerPays: selling.lastTx.TakerPays,
+                },
+              },
+            }],
+          },
+        }],
+      },
+    };
+    const filled = await decide(env(), { now: TODAY, ledger: sellLedger, journal: sellJournal }, client(selling));
+    assert.equal(filled.outside_fill, true);
+    assert.equal(filled.cost_basis, "state_only_mark");
+    assert.equal(filled.counterparty, taker);
+    assert.equal(filled.realized_pnl_drops, (BigInt(selling.lastTx.TakerPays) - 885833n).toString());
+    assert.equal(selling.signs, 1);
+  });
+
   it("does not convert a line that is merely larger than the offer", async () => {
     const thrown = await runFill({ historyThrows: true, fillBalance: "1.5", trust: true });
     assert.equal(thrown.row.decision, "research");
@@ -459,7 +1021,7 @@ describe("rlusd trading", () => {
     assert.equal(BigInt(partial.row.inventory_drops) < 600000n, true);
     const mission = Object.values(view(partial.ledger, NOW).missions).find((row) => row.sequence === shape.sequence);
     assert.equal(mission.status, "rlusd_partial");
-    assert.equal(mission.outstanding_drops, (400000n + BigInt(partial.row.inventory_drops)).toString());
+    assert.equal(mission.outstanding_drops, (400000n + BigInt(partial.row.inventory_drops) + 200000n).toString());
     assert.equal(BigInt(mission.outstanding_drops) <= 2000000n, true);
     assert.equal(partial.state.signs, 0);
   });
@@ -554,9 +1116,9 @@ function seedFill(ledger, shape, hash, extra) {
     submit_attempted: true,
     signed_hash: hash,
     proof_hash: extra.bare ? undefined : hash,
-    proof_result: extra.bare ? undefined : "tesSUCCESS",
-    rlusd_baseline: "1.5",
-    validated_ledger: extra.bare ? undefined : shape.stored_ledger,
+    proof_result: extra.bare || extra.legacy ? undefined : "tesSUCCESS",
+    rlusd_baseline: extra.legacy ? undefined : "1.5",
+    validated_ledger: extra.bare || extra.legacy ? undefined : shape.stored_ledger,
     updated_at: NOW,
     unsigned_tx: tx,
   };

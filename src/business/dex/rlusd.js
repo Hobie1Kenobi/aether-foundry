@@ -30,6 +30,8 @@ const HAIRCUT_DEN = 100n;
 const KIND = "w1-rlusd";
 
 const MAX_TRADES_PER_TICK = 1;
+const VANISH_TICKS = 3;
+const MIN_TRADE_DROPS = 100000n;
 const MAX_TRADES_PER_DAY = 2;
 const TRUST_KEY = "w1-rlusd-trust";
 const REST_KEY = "w1-rlusd-rest";
@@ -271,11 +273,11 @@ function rowsOf(state) {
 }
 
 function findPending(state) {
-  return rowsOf(state).find((mission) => mission.hold !== "released" && mission.status !== "rlusd_resting" && mission.status !== "rlusd_proved" && mission.status !== "rlusd_filled") || null;
+  return rowsOf(state).find((mission) => mission.hold !== "released" && mission.status !== "rlusd_resting" && mission.status !== "rlusd_proved" && mission.status !== "rlusd_filled" && mission.status !== "rlusd_partial" && mission.status !== "rlusd_vanished_unattributed" && mission.status !== "rlusd_cancelled" && mission.status !== "rlusd_expired") || null;
 }
 
 function findResting(state) {
-  return rowsOf(state).find((mission) => mission.hold !== "released" && (mission.action === "rest" || mission.action === "replace") && (mission.status === "rlusd_resting" || mission.status === "rlusd_proved" || mission.status === "rlusd_partial")) || null;
+  return rowsOf(state).find((mission) => mission.hold !== "released" && (mission.action === "rest" || mission.action === "replace" || mission.action === "sell") && (mission.status === "rlusd_resting" || mission.status === "rlusd_proved" || mission.status === "rlusd_partial")) || null;
 }
 
 function openExposure(state) {
@@ -314,7 +316,7 @@ function reserve(dir, order, shot, now) {
       api.append({ type: "mission.upsert", at: now, mission });
       return { mission, created: false };
     }
-    if (existing) return { mission: existing, created: false };
+    if (existing) return { mission: existing, created: false, terminal: existing.status === "rlusd_cancelled" || existing.status === "rlusd_expired" || existing.status === "rlusd_filled" };
     const mission = {
       id: `msn${crypto.createHash("sha256").update(`rlusd|${order.key}`).digest("hex").slice(0, 16)}`,
       idempotency_key: order.key,
@@ -334,6 +336,8 @@ function reserve(dir, order, shot, now) {
       realized_loss_drops: "0",
       realized_pnl_drops: "0",
       rlusd_baseline: order.baseline || null,
+      cost_basis: order.cost_basis || null,
+      cost_basis_drops: order.cost_basis_drops || null,
       submit_attempted: false,
       updated_at: now,
       unsigned_tx: order.tx,
@@ -398,7 +402,11 @@ async function tick(env, dir, now, clients, position) {
   const resting = findResting(state);
   if (resting) return Object.assign(fields, await manageRest(dir, resting, now, clients, observed, room, day, gate));
   const inventory = findInventory(state);
-  if (inventory) return Object.assign(fields, await sellInventory(dir, inventory, now, clients, observed, room, day, gate));
+  if (inventory) {
+    const sold = await sellInventory(dir, inventory, now, clients, observed, room, gate);
+    const tryBuy = inventory.status === "rlusd_vanished_unattributed" && sold.book === "no_bid" && sold.decision !== "place" && sold.signed !== true;
+    if (!tryBuy) return Object.assign(fields, sold);
+  }
   const shot = await shotOf(clients.ledger);
   if (!observed.trustline) return Object.assign(fields, await trust(dir, now, clients, shot, room, day, gate));
   return Object.assign(fields, await buy(dir, now, clients, shot, observed, room, day, gate));
@@ -475,11 +483,24 @@ function withinCaps(state, day, exposure, room) {
   return true;
 }
 
+function affordableSpend(state, room, shot) {
+  const reserve = shot.reserveInc;
+  const open = openExposure(state);
+  const capRoom = MAX_TRADE_DROPS > open ? MAX_TRADE_DROPS - open : 0n;
+  const bank = typeof room.headroom === "bigint" && room.headroom > 0n ? room.headroom : 0n;
+  let budget = capRoom < bank ? capRoom : bank;
+  if (budget <= reserve + shot.fee) return 0n;
+  let spend = budget - reserve - shot.fee;
+  if (spend > DEFAULT_TRADE_DROPS) spend = DEFAULT_TRADE_DROPS;
+  if (spend < MIN_TRADE_DROPS) return 0n;
+  return spend;
+}
+
 async function buy(dir, now, clients, shot, observed, room, day, gate) {
   const state = view(dir, now);
   if (findResting(state)) return { decision: "research", traded: false, rationale: "A RLUSD offer is still open." };
-  const spend = DEFAULT_TRADE_DROPS;
-  if (spend > MAX_TRADE_DROPS || room.headroom < spend) {
+  const spend = affordableSpend(state, room, shot);
+  if (spend < MIN_TRADE_DROPS) {
     return { decision: "research", rationale: "The next RLUSD trade would exceed the 2 XRP cap or the headroom." };
   }
   const bid = observed.asks.length ? passiveBid(observed, spend) : null;
@@ -510,7 +531,8 @@ async function buy(dir, now, clients, shot, observed, room, day, gate) {
   };
   const action = bid ? "rest" : "swap";
   const key = bid ? (rowsOf(state).some((mission) => mission.idempotency_key === REST_KEY) ? `w1-rlusd-rest-${day}` : REST_KEY) : `w1-rlusd-swap-${day}`;
-  const exposure = (bid ? BigInt(bid.taker_gets) : priced.sendMax) + shot.fee + (bid ? shot.reserveInc : 0n);
+  const offerReserve = shot.reserveInc;
+  const exposure = (bid ? BigInt(bid.taker_gets) : priced.sendMax) + shot.fee + (bid ? offerReserve : 0n);
   if (!withinCaps(state, day, exposure, room)) {
     return { decision: "research", aeth_exit_proposal: room.headroom < spend ? "w1-exit-sole-lp" : null, rationale: "Open RLUSD exposure is already at the 2 XRP cap." };
   }
@@ -547,8 +569,9 @@ async function buy(dir, now, clients, shot, observed, room, day, gate) {
 }
 
 function findInventory(state) {
-  if (rowsOf(state).some((mission) => mission.action === "sell" && mission.hold !== "released")) return null;
-  return rowsOf(state).find((mission) => mission.status === "rlusd_filled" && mission.hold !== "released") || null;
+  const blocking = rowsOf(state).some((mission) => mission.action === "sell" && mission.hold !== "released" && (mission.status === "rlusd_resting" || mission.status === "rlusd_proved" || mission.status === "rlusd_partial" || mission.status === "rlusd_reserved" || mission.status === "rlusd_unknown"));
+  if (blocking) return null;
+  return rowsOf(state).find((mission) => mission.hold !== "released" && BigInt(mission.outstanding_drops || "0") > 0n && (mission.status === "rlusd_filled" || mission.status === "rlusd_vanished_unattributed" || mission.status === "rlusd_cancelled" || mission.status === "rlusd_expired")) || null;
 }
 
 function offerTouch(meta, sequence) {
@@ -695,7 +718,10 @@ async function inspectTx(clients, hash, mission, ranges) {
   if (result && result.validated === true && meta && meta.TransactionResult === "tesSUCCESS") {
     return { live: true, result, meta, tx: result.tx_json || result };
   }
-  if (result && result.error === "txnNotFound" && historyDropped(ranges, provedLedger(mission))) return { pruned: true };
+  if (result && result.error === "txnNotFound") {
+    if (historyDropped(ranges, provedLedger(mission))) return { notFound: true, pruned: true };
+    return { notFound: true, unproved: true };
+  }
   return { unproved: true };
 }
 
@@ -756,7 +782,276 @@ function partialDelta(touch) {
   return { consumedXrp: beforeXrp - afterXrp, remainingXrp: afterXrp, consumed };
 }
 
+function reserveIncrement(info) {
+  const text = info && info.validated_ledger && info.validated_ledger.reserve_inc_xrp;
+  const raw = typeof text === "number" ? text.toString() : text;
+  if (typeof raw !== "string" || !/^\d+(\.\d{1,6})?$/.test(raw)) return null;
+  const [whole, frac = ""] = raw.split(".");
+  const drops = BigInt(whole) * 1000000n + BigInt((frac + "000000").slice(0, 6));
+  return drops > 0n ? drops : null;
+}
+
+function absenceLedgers(prior, seq) {
+  const list = Array.isArray(prior) ? prior.filter((item) => Number.isInteger(item)) : [];
+  if (!list.length || seq < list[list.length - 1]) return [seq];
+  if (seq === list[list.length - 1]) return list;
+  return list.concat(seq);
+}
+
+async function noteAbsence(dir, resting, now, clients, observed) {
+  let server;
+  try {
+    server = await clients.ledger.request({ command: "server_info" });
+  } catch (error) {
+    return { decision: "research", traded: false, signed: false, rationale: "The validated ledger is missing. The offer exposure stays open." };
+  }
+  const info = server && server.result && server.result.info;
+  const seq = info && info.validated_ledger && info.validated_ledger.seq;
+  const reserve = reserveIncrement(info);
+  if (!Number.isInteger(seq) || seq <= 0 || reserve == null) {
+    return { decision: "research", traded: false, signed: false, rationale: "The validated ledger is missing. The offer exposure stays open." };
+  }
+  const ledgers = absenceLedgers(resting.absence_ledgers, seq);
+  if (ledgers.length < VANISH_TICKS) {
+    save(dir, Object.assign({}, resting, { absence_ledgers: ledgers, updated_at: now }));
+    return { decision: "research", traded: false, signed: false, learning: false, absence_ledgers: ledgers.length, rationale: "The offer is absent from this validated ledger. History cannot attribute it yet, so the exposure stays open." };
+  }
+  const marked = markInventory(observed.pool, observed.bids, observed.balance);
+  if (!marked.proved) {
+    save(dir, Object.assign({}, resting, { absence_ledgers: ledgers, updated_at: now }));
+    return { decision: "research", traded: false, signed: false, learning: false, rationale: "The offer is absent, and the current RLUSD balance cannot be marked. Exposure stays open." };
+  }
+  const text = observed.balance.coeff === 0n ? "0" : formatCoeff(observed.balance.coeff, observed.balance.exp);
+  const open = marked.xrp;
+  const next = Object.assign({}, resting, {
+    status: "rlusd_vanished_unattributed",
+    proof_type: "state_only",
+    outside_fill: false,
+    counterparty: null,
+    realized_pnl_drops: "0",
+    inventory_rlusd: text,
+    inventory_drops: marked.xrp.toString(),
+    outstanding_drops: open.toString(),
+    absence_ledgers: ledgers,
+    updated_at: now,
+  });
+  save(dir, next);
+  return {
+    decision: "reconcile",
+    traded: false,
+    signed: false,
+    learning: false,
+    status: "rlusd_vanished_unattributed",
+    proof_type: "state_only",
+    outside_fill: false,
+    counterparty: null,
+    realized_pnl_drops: "0",
+    fill_rlusd: text,
+    inventory_drops: marked.xrp.toString(),
+    rationale: "The offer is absent from three validated ledgers and history cannot attribute it. Exposure is the current RLUSD balance mark. The existing trust line is not reserved again.",
+  };
+}
+
+function sellPartial(touch) {
+  const beforeIou = amountExact(touch.previous && touch.previous.TakerGets);
+  const afterIou = amountExact(touch.final && touch.final.TakerGets);
+  const beforeXrp = marketXrp(touch.previous && touch.previous.TakerPays);
+  const afterXrp = marketXrp(touch.final && touch.final.TakerPays);
+  if (beforeXrp == null || afterXrp == null || afterXrp >= beforeXrp || !beforeIou || !afterIou) return null;
+  const consumed = subExact(beforeIou, afterIou);
+  if (!consumed || consumed.coeff <= 0n) return null;
+  const raw = touch.final && touch.final.TakerGets && typeof touch.final.TakerGets === "object" ? touch.final.TakerGets.value : null;
+  const text = formatCoeff(afterIou.coeff, afterIou.exp) || raw;
+  if (!text) return null;
+  return { consumed, remaining: text, remainingExact: afterIou, receivedXrp: beforeXrp - afterXrp };
+}
+
+function parkInventory(dir, resting, now, observed, status, proof) {
+  const marked = !observed.balance || observed.balance.coeff === 0n ? { proved: true, xrp: 0n } : markInventory(observed.pool, observed.bids, observed.balance);
+  if (!marked.proved) {
+    return { decision: "research", traded: false, signed: false, rationale: "The RLUSD sell ended, and the balance cannot be marked. Exposure stays open." };
+  }
+  const text = !observed.balance || observed.balance.coeff === 0n ? "0" : formatCoeff(observed.balance.coeff, observed.balance.exp);
+  const source = rowsOf(view(dir, now)).find((mission) => mission.id !== resting.id && mission.hold !== "released" && (mission.status === "rlusd_vanished_unattributed" || mission.status === "rlusd_filled"));
+  if (source) {
+    save(dir, Object.assign({}, source, {
+      inventory_rlusd: text,
+      inventory_drops: marked.xrp.toString(),
+      outstanding_drops: marked.xrp.toString(),
+      updated_at: now,
+    }));
+    save(dir, Object.assign({}, resting, {
+      hold: "released",
+      status,
+      outstanding_drops: "0",
+      proof_type: proof.type,
+      proof_hash: proof.hash,
+      outside_fill: false,
+      counterparty: null,
+      realized_pnl_drops: "0",
+      updated_at: now,
+    }));
+  } else {
+    save(dir, Object.assign({}, resting, {
+      status,
+      proof_type: proof.type,
+      proof_hash: proof.hash,
+      outside_fill: false,
+      counterparty: null,
+      realized_pnl_drops: "0",
+      inventory_rlusd: text,
+      inventory_drops: marked.xrp.toString(),
+      outstanding_drops: marked.xrp.toString(),
+      updated_at: now,
+    }));
+  }
+  return {
+    decision: "reconcile",
+    traded: false,
+    signed: false,
+    learning: false,
+    status,
+    fill_class: proof.klass,
+    proof_type: proof.type,
+    fill_hash: proof.hash,
+    outside_fill: false,
+    counterparty: null,
+    realized_pnl_drops: "0",
+    inventory_drops: marked.xrp.toString(),
+    inventory_rlusd: text,
+  };
+}
+
+async function offerReserveNow(clients) {
+  try {
+    const server = await clients.ledger.request({ command: "server_info" });
+    return reserveIncrement(server && server.result && server.result.info);
+  } catch (error) {
+    return null;
+  }
+}
+
+async function proveSell(dir, resting, now, clients, observed) {
+  const reserved = resting.unsigned_tx || {};
+  const received = marketXrp(reserved.TakerPays);
+  const sold = exactOf(reserved.TakerGets);
+  if (received == null || !sold) {
+    return { decision: "research", traded: false, signed: false, rationale: "The RLUSD sell amounts are not proved." };
+  }
+  const history = await historyOf(clients, resting);
+  if (history.threw || history.incomplete) {
+    return { decision: "research", traded: false, signed: false, rationale: "RLUSD history is not a validated page. Exposure stays open." };
+  }
+  const hits = [];
+  for (const entry of history.transactions) {
+    const tx = entry.tx_json || entry.tx || entry;
+    const meta = entry.meta || entry.metaData || (entry.result && entry.result.meta);
+    const touch = offerTouch(meta, resting.sequence);
+    if (!touch) continue;
+    const hash = String(entry.hash || tx.hash || "").toUpperCase();
+    if (!/^[0-9A-F]{64}$/.test(hash)) continue;
+    hits.push({ tx, meta, hash, touch, klass: classifyTouch(tx, touch) });
+  }
+  const held = { decision: "research", traded: false, signed: false, rationale: "The RLUSD sell is not yet attributed. Exposure stays open." };
+  if (hits.length > 1) {
+    return { decision: "research", traded: false, signed: false, proof_reason: "uncertain", rationale: "More than one validated trade touches the RLUSD sell. Exposure stays open." };
+  }
+  if (hits.length === 1 && resting.proof_hash === hits[0].hash && resting.status === "rlusd_partial") {
+    return { decision: "research", traded: false, signed: false, status: "rlusd_partial", outstanding_drops: resting.outstanding_drops, rationale: "The partial RLUSD sell is already booked." };
+  }
+  if (hits.length === 1 && hits[0].klass.klass === "partial") {
+    const hit = hits[0];
+    const delta = sellPartial(hit.touch);
+    const reserve = await offerReserveNow(clients);
+    const marked = delta ? markInventory(observed.pool, observed.bids, delta.remainingExact) : null;
+    if (!delta || reserve == null || !marked || !marked.proved) return held;
+    const open = reserve + marked.xrp;
+    const next = Object.assign({}, resting, {
+      status: "rlusd_partial",
+      fill_class: "partial",
+      proof_type: "consuming_tx",
+      proof_hash: hit.hash,
+      counterparty: hit.klass.outside ? hit.tx.Account : null,
+      outside_fill: hit.klass.outside === true,
+      remaining_rlusd: delta.remaining,
+      inventory_drops: marked.xrp.toString(),
+      outstanding_drops: open.toString(),
+      realized_pnl_drops: "0",
+      updated_at: now,
+    });
+    save(dir, next);
+    return {
+      decision: "reconcile",
+      traded: false,
+      signed: false,
+      learning: false,
+      status: "rlusd_partial",
+      fill_class: "partial",
+      proof_type: "consuming_tx",
+      fill_hash: hit.hash,
+      outside_fill: next.outside_fill,
+      counterparty: next.counterparty,
+      remaining_rlusd: delta.remaining,
+      inventory_drops: marked.xrp.toString(),
+      outstanding_drops: open.toString(),
+      realized_pnl_drops: "0",
+      rationale: "A validated trade consumed part of the RLUSD sell. The remainder stays open at its mark plus the owner reserve.",
+    };
+  }
+  if (hits.length === 1 && (hits[0].klass.klass === "cancelled" || hits[0].klass.klass === "expired")) {
+    const hit = hits[0];
+    const status = hit.klass.klass === "cancelled" ? "rlusd_cancelled" : "rlusd_expired";
+    return parkInventory(dir, resting, now, observed, status, { klass: hit.klass.klass, type: "consuming_tx", hash: hit.hash });
+  }
+  if (hits.length === 1 && (hits[0].klass.klass === "filled" || hits[0].klass.klass === "self")) {
+    const hit = hits[0];
+    const outsideFill = hit.klass.outside === true && hit.klass.klass === "filled";
+    const basis = resting.cost_basis === "state_only_mark" ? BigInt(resting.cost_basis_drops || "0") : null;
+    const pnl = outsideFill && basis != null ? received - basis : 0n;
+    const next = Object.assign({}, resting, {
+      status: "rlusd_filled",
+      fill_class: hit.klass.klass,
+      proof_type: "consuming_tx",
+      proof_hash: hit.hash,
+      outside_fill: outsideFill,
+      counterparty: outsideFill ? hit.tx.Account : null,
+      cost_basis: resting.cost_basis || null,
+      realized_pnl_drops: pnl.toString(),
+      outstanding_drops: "0",
+      updated_at: now,
+    });
+    save(dir, next);
+    return {
+      decision: "reconcile",
+      traded: outsideFill,
+      signed: false,
+      learning: false,
+      status: "rlusd_filled",
+      fill_class: hit.klass.klass,
+      proof_type: "consuming_tx",
+      outside_fill: outsideFill,
+      counterparty: next.counterparty,
+      cost_basis: next.cost_basis,
+      realized_pnl_drops: pnl.toString(),
+      fill_xrp_drops: received.toString(),
+      fill_hash: hit.hash,
+    };
+  }
+  if (hits.length === 0) {
+    const ranges = await readRanges(clients);
+    const dropped = historyDropped(ranges, provedLedger(resting));
+    let seen = { unproved: true };
+    if (!history.threw && !history.incomplete) seen = await inspectTx(clients, resting.signed_hash, resting, ranges);
+    const emptyOrPrunedUntouched = history.missing || dropped;
+    if (!seen.unknown && seen.notFound === true && emptyOrPrunedUntouched) {
+      return noteAbsence(dir, resting, now, clients, observed);
+    }
+  }
+  return held;
+}
+
 async function proveFill(dir, resting, now, clients, observed) {
+  if (resting.action === "sell") return proveSell(dir, resting, now, clients, observed);
   const reserved = resting.unsigned_tx || {};
   const pays = exactOf(reserved.TakerPays);
   const spent = marketXrp(reserved.TakerGets);
@@ -790,7 +1085,15 @@ async function proveFill(dir, resting, now, clients, observed) {
     if (!delta || !atLeast(observed.balance, delta.consumed)) return held;
     const marked = markInventory(observed.pool, observed.bids, delta.consumed);
     const inventory = marked.proved ? marked.xrp : delta.consumedXrp;
-    const open = delta.remainingXrp + inventory;
+    let reserve = null;
+    try {
+      const server = await clients.ledger.request({ command: "server_info" });
+      reserve = reserveIncrement(server && server.result && server.result.info);
+    } catch (error) {
+      reserve = null;
+    }
+    if (reserve == null) return held;
+    const open = delta.remainingXrp + inventory + reserve;
     if (open > MAX_TRADE_DROPS) return held;
     const text = formatCoeff(delta.consumed.coeff, delta.consumed.exp);
     const next = Object.assign({}, resting, {
@@ -838,19 +1141,25 @@ async function proveFill(dir, resting, now, clients, observed) {
       counterparty: hit.tx.Account === bounds.ACCOUNT ? null : hit.tx.Account,
       type: "consuming_tx",
     };
-  } else if (history.missing) {
+  } else if (hits.length === 0) {
     const ranges = await readRanges(clients);
-    if (!historyDropped(ranges, provedLedger(resting))) return held;
-    if (laterRlusd(view(dir, now), resting)) return held;
-    const baseline = await provedBaseline(dir, resting, now, clients, ranges);
-    const delta = baseline ? subExact(observed.balance, baseline) : null;
-    if (!baseline || !delta || !sameExact(delta, pays)) return held;
-    const seen = await inspectTx(clients, resting.signed_hash, resting, ranges);
-    if (seen.unknown || seen.unproved) return held;
-    if (seen.live && binds(resting, seen.tx, seen.meta)) {
-      proof = { klass: "filled", outside: false, hash: null, counterparty: null, type: "balance_delta" };
-    } else if (seen.pruned && storedCreate(resting, resting.signed_hash)) {
-      proof = { klass: "filled", outside: false, hash: null, counterparty: null, type: "stored_journal" };
+    const dropped = historyDropped(ranges, provedLedger(resting));
+    let seen = { unproved: true };
+    if (!history.threw && !history.incomplete) seen = await inspectTx(clients, resting.signed_hash, resting, ranges);
+    if (history.missing && dropped && !laterRlusd(view(dir, now), resting) && !seen.unknown) {
+      const baseline = await provedBaseline(dir, resting, now, clients, ranges);
+      const delta = baseline ? subExact(observed.balance, baseline) : null;
+      if (baseline && delta && sameExact(delta, pays)) {
+        if (seen.live && binds(resting, seen.tx, seen.meta)) {
+          proof = { klass: "filled", outside: false, hash: null, counterparty: null, type: "balance_delta" };
+        } else if (seen.pruned && storedCreate(resting, resting.signed_hash)) {
+          proof = { klass: "filled", outside: false, hash: null, counterparty: null, type: "stored_journal" };
+        }
+      }
+    }
+    const emptyOrPrunedUntouched = history.missing || (hits.length === 0 && dropped);
+    if (!proof && !seen.unknown && seen.notFound === true && emptyOrPrunedUntouched) {
+      return noteAbsence(dir, resting, now, clients, observed);
     }
   }
   if (!proof) return held;
@@ -899,37 +1208,71 @@ async function proveFill(dir, resting, now, clients, observed) {
   };
 }
 
+function xrpFor(balance, exact, xrp, numerator, denominator) {
+  const shift = balance.exp - exact.exp;
+  const num = balance.coeff * xrp * numerator;
+  const den = exact.coeff * denominator;
+  if (den <= 0n) return 0n;
+  return shift >= 0 ? (num * (10n ** BigInt(shift))) / den : num / (den * (10n ** BigInt(-shift)));
+}
+
 function passiveSell(observed, balance) {
   const bids = (observed.bids || []).filter((bid) => bid && outside(bid.account));
-  if (!bids.length || !balance || balance.coeff <= 0n) return null;
-  let best = bids[0];
+  const asks = (observed.asks || []).filter((ask) => ask && outside(ask.account));
+  if (!bids.length || !asks.length || !balance || balance.coeff <= 0n) return null;
+  let bestBid = bids[0];
   for (const bid of bids) {
-    if (rateLess(best.xrp, best.exact, bid.xrp, bid.exact)) best = bid;
+    if (rateLess(bestBid.xrp, bestBid.exact, bid.xrp, bid.exact)) bestBid = bid;
   }
-  const shift = balance.exp - best.exact.exp;
-  const num = balance.coeff * best.xrp * 101n;
-  const den = best.exact.coeff * 100n;
-  const drops = shift >= 0 ? (num * (10n ** BigInt(shift))) / den : num / (den * (10n ** BigInt(-shift)));
+  let bestAsk = asks[0];
+  for (const ask of asks) {
+    if (rateLess(ask.xrp, ask.exact, bestAsk.xrp, bestAsk.exact)) bestAsk = ask;
+  }
+  let drops = xrpFor(balance, bestBid.exact, bestBid.xrp, 101n, 100n);
+  if (!rateLess(drops, balance, bestAsk.xrp, bestAsk.exact)) {
+    drops = xrpFor(balance, bestAsk.exact, bestAsk.xrp, 99n, 100n);
+  }
   if (drops <= 0n || drops > MAX_TRADE_DROPS) return null;
-  if (!rateLess(best.xrp, best.exact, drops, balance)) return null;
-  if (rateLess(drops, balance, observed.pool.xrp, observed.pool.exact)) return null;
+  if (!rateLess(bestBid.xrp, bestBid.exact, drops, balance)) return null;
+  if (!rateLess(drops, balance, bestAsk.xrp, bestAsk.exact)) return null;
   const text = formatCoeff(balance.coeff, balance.exp);
   if (!text) return null;
   return { taker_gets: { currency: CURRENCY, issuer: ISSUER, value: text }, taker_pays: drops.toString() };
 }
 
-async function sellInventory(dir, mission, now, clients, observed, room, day, gate) {
+async function sellInventory(dir, mission, now, clients, observed, room, gate) {
+  const today = policy.chicagoDay(now);
   const state = view(dir, now);
-  if (dayTrades(state, day) >= MAX_TRADES_PER_DAY) {
+  if (dayTrades(state, today) >= MAX_TRADES_PER_DAY) {
     return { decision: "research", traded: false, rationale: "The Chicago day already has its RLUSD orders. The inventory is not sold." };
   }
+  const outsideBids = (observed.bids || []).filter((bid) => bid && outside(bid.account));
+  const outsideAsks = (observed.asks || []).filter((ask) => ask && outside(ask.account));
+  if (!outsideBids.length || !outsideAsks.length) {
+    return {
+      decision: "research",
+      traded: false,
+      signed: false,
+      book: outsideAsks.length ? "no_bid" : "no_ask",
+      rationale: "No passive RLUSD exit sits between the outside bid and the outside ask.",
+    };
+  }
   const offer = passiveSell(observed, observed.balance);
-  if (!offer) return { decision: "research", traded: false, rationale: "No passive RLUSD exit sits above the outside bid." };
+  if (!offer) return { decision: "research", traded: false, signed: false, rationale: "No passive RLUSD exit sits between the outside bid and the outside ask." };
   const shot = await shotOf(clients.ledger);
-  const exposure = BigInt(offer.taker_pays) + shot.fee + shot.reserveInc;
-  const open = openExposure(state) - BigInt(mission.outstanding_drops || "0");
-  if (open + exposure > MAX_TRADE_DROPS || exposure > room.headroom + BigInt(mission.outstanding_drops || "0")) {
-    return { decision: "research", traded: false, rationale: "The RLUSD exit does not fit the 2 XRP open cap." };
+  const offerReserve = shot.reserveInc;
+  const exposure = shot.fee + offerReserve;
+  if (exposure > room.headroom) {
+    return { decision: "research", traded: false, rationale: "The RLUSD exit reserve does not fit the bankroll headroom." };
+  }
+  const marked = markInventory(observed.pool, observed.bids, observed.balance);
+  if (!marked.proved || marked.xrp < offerReserve) {
+    return { decision: "research", traded: false, signed: false, book: "dust", rationale: "The RLUSD inventory mark is below the offer reserve. It is not sold." };
+  }
+  const previous = openExposure(state);
+  const nextOpen = previous - BigInt(mission.outstanding_drops || "0") + exposure;
+  if (nextOpen > previous && nextOpen > MAX_TRADE_DROPS) {
+    return { decision: "research", traded: false, signed: false, rationale: "The RLUSD exit does not fit the 2 XRP open cap." };
   }
   const tx = {
     TransactionType: "OfferCreate",
@@ -941,8 +1284,28 @@ async function sellInventory(dir, mission, now, clients, observed, room, day, ga
     Sequence: shot.sequence,
     LastLedgerSequence: shot.validatedLedger + bounds.LEDGER_WINDOW,
   };
+  const finished = (row) => row && (row.status === "rlusd_cancelled" || row.status === "rlusd_expired" || row.status === "rlusd_filled" || row.submit_attempted === true);
+  const baseKey = `w1-rlusd-sell-${today}`;
+  const baseRow = rowsOf(state).find((row) => row.idempotency_key === baseKey);
+  const key = !finished(baseRow) ? baseKey : `${baseKey}-${shot.sequence}`;
+  const prior = rowsOf(state).find((row) => row.idempotency_key === key);
+  if (finished(prior)) {
+    return { decision: "research", traded: false, signed: false, replay: false, rationale: "A finished RLUSD sell already uses this Chicago day key. Exposure is unchanged." };
+  }
+  const basis = mission.proof_type === "state_only" || mission.status === "rlusd_vanished_unattributed" || mission.status === "rlusd_cancelled" || mission.status === "rlusd_expired" ? "state_only_mark" : null;
+  const reserved = reserve(dir, {
+    key,
+    action: "sell",
+    day: today,
+    exposure,
+    tx,
+    cost_basis: basis,
+    cost_basis_drops: mission.inventory_drops || mission.outstanding_drops || null,
+  }, shot, now);
+  if (reserved.terminal || reserved.mission.submit_attempted === true) {
+    return { decision: "research", traded: false, signed: false, replay: true, rationale: "The RLUSD sell key already finished. Exposure is unchanged." };
+  }
   save(dir, Object.assign({}, mission, { outstanding_drops: "0", updated_at: now }));
-  const reserved = reserve(dir, { key: `w1-rlusd-sell-${day}`, action: "sell", day, exposure, tx }, shot, now);
   let sent;
   try {
     sent = await submitSigned(dir, reserved, tx, {
@@ -958,17 +1321,28 @@ async function sellInventory(dir, mission, now, clients, observed, room, day, ga
     save(dir, Object.assign({}, mission, { outstanding_drops: mission.outstanding_drops, updated_at: now }));
     throw error;
   }
-  if (sent.replay) return { decision: "place", replay: true, traded: false };
-  return { decision: "place", signed: true, submitted: sent.mission.submitted === true, traded: false, send_max_drops: tx.TakerPays, deliver_min: tx.TakerGets.value };
+  if (sent.replay) {
+    save(dir, Object.assign({}, mission, { outstanding_drops: mission.outstanding_drops, updated_at: now }));
+    return { decision: "research", traded: false, signed: false, replay: true, rationale: "The RLUSD sell key already finished. Exposure is unchanged." };
+  }
+  return { decision: "place", signed: true, submitted: sent.mission.submitted === true, traded: false, replay: false, send_max_drops: tx.TakerPays, deliver_min: tx.TakerGets.value };
 }
 
 async function manageRest(dir, resting, now, clients, observed, room, day, gate) {
   const sequence = resting.sequence;
   if (!stillResting(observed, sequence)) {
-    const cancelled = rowsOf(view(dir, now)).find((mission) => mission.action === "cancel" && mission.status === "rlusd_proved" && mission.unsigned_tx && mission.unsigned_tx.OfferSequence === sequence);
-    if (!cancelled) return proveFill(dir, resting, now, clients, observed);
-    save(dir, Object.assign({}, resting, { hold: "released", status: "rlusd_cancelled", outstanding_drops: "0", updated_at: now }));
-    return { decision: "reconcile", traded: false, status: "rlusd_cancelled" };
+    if (resting.action !== "sell") {
+      const cancelled = rowsOf(view(dir, now)).find((mission) => mission.action === "cancel" && mission.status === "rlusd_proved" && mission.unsigned_tx && mission.unsigned_tx.OfferSequence === sequence);
+      if (cancelled) {
+        save(dir, Object.assign({}, resting, { hold: "released", status: "rlusd_cancelled", outstanding_drops: "0", updated_at: now }));
+        return { decision: "reconcile", traded: false, status: "rlusd_cancelled" };
+      }
+    }
+    return proveFill(dir, resting, now, clients, observed);
+  }
+  if (Array.isArray(resting.absence_ledgers) && resting.absence_ledgers.length) {
+    resting = Object.assign({}, resting, { absence_ledgers: [], updated_at: now });
+    save(dir, resting);
   }
   const exact = exactOf(resting.unsigned_tx.TakerPays);
   const spend = BigInt(resting.unsigned_tx.TakerGets);
