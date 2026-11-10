@@ -1418,6 +1418,28 @@ function sameAmount(left, right) {
   return Boolean(left && right && left.currency === right.currency && left.issuer === right.issuer && left.value === right.value);
 }
 
+function iouNear(left, right) {
+  const a = market.exactIou(left);
+  const b = market.exactIou(right);
+  if (!a || !b) return false;
+  if (a.coeff === b.coeff && a.exp === b.exp) return true;
+  if (a.coeff === 0n || b.coeff === 0n) return false;
+  const span = Math.max(-a.exp, -b.exp, 0);
+  const width = (exact) => exact.coeff * (10n ** BigInt(span + exact.exp));
+  const av = width(a);
+  const bv = width(b);
+  const diff = av > bv ? av - bv : bv - av;
+  const base = av > bv ? av : bv;
+  return diff * 1000000n <= base;
+}
+
+function sameOfferAmount(left, right) {
+  if (sameAmount(left, right)) return true;
+  if (!left || !right || typeof left === "string" || typeof right === "string") return false;
+  if (left.currency !== right.currency || left.issuer !== right.issuer) return false;
+  return iouNear(left.value, right.value);
+}
+
 function nodeFields(node) {
   const body = node && (node.CreatedNode || node.ModifiedNode || node.DeletedNode);
   return body && (body.NewFields || body.FinalFields || {});
@@ -1439,7 +1461,7 @@ function binds(mission, tx, meta) {
     if (tx.Flags !== reserved.Flags || !sameAmount(tx.TakerGets, reserved.TakerGets) || !sameAmount(tx.TakerPays, reserved.TakerPays)) return false;
     return nodes.some((node) => {
       const fields = nodeFields(node);
-      return fields && fields.Sequence === tx.Sequence && sameAmount(fields.TakerGets, reserved.TakerGets) && sameAmount(fields.TakerPays, reserved.TakerPays);
+      return fields && fields.Sequence === tx.Sequence && sameOfferAmount(fields.TakerGets, reserved.TakerGets) && sameOfferAmount(fields.TakerPays, reserved.TakerPays);
     });
   }
   if (tx.TransactionType === "TrustSet") {

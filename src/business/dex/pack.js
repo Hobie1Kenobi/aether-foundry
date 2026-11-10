@@ -52,7 +52,7 @@ function packDex(options) {
   }
   files.sort((left, right) => left.path.localeCompare(right.path));
   const git = spawnSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" });
-  const gitSha = git.status === 0 ? git.stdout.trim() : "unknown";
+  const gitSha = (typeof options.gitSha === "string" && options.gitSha.trim()) || (git.status === 0 && git.stdout.trim()) || "unknown";
   const attestation = {
     schema: "aether.business.dex.attestation",
     git_sha: gitSha,

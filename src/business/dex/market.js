@@ -53,6 +53,13 @@ function isAeth(value) {
   return scaled(value.value) != null;
 }
 
+const RLUSD_CURRENCY = "524C555344000000000000000000000000000000";
+const RLUSD_ISSUER = "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV";
+
+function isRlusd(value) {
+  return Boolean(value && typeof value === "object" && value.currency === RLUSD_CURRENCY && value.issuer === RLUSD_ISSUER && exactIou(value.value));
+}
+
 function pair(amm) {
   const firstXrp = xrpDrops(amm.amount);
   const secondXrp = xrpDrops(amm.amount2);
@@ -116,16 +123,34 @@ function parseOffers(response) {
   if (!result || result.validated !== true || result.account !== bounds.ACCOUNT || result.marker != null || !Array.isArray(result.offers)) {
     throw coded("validated account offers are missing", "UNCERTAIN");
   }
-  return result.offers.map((row) => {
+  const aeth = [];
+  const rlusd = [];
+  for (const row of result.offers) {
     const gets = row && (row.taker_gets != null ? row.taker_gets : row.TakerGets);
     const pays = row && (row.taker_pays != null ? row.taker_pays : row.TakerPays);
     const seq = row && (row.seq != null ? row.seq : row.Sequence);
-    const locked = xrpDrops(gets);
-    if (locked != null) return { seq, locked, aeth: 0n };
-    const aeth = isAeth(gets) ? scaled(gets.value) : null;
-    if (aeth != null && aeth > 0n && xrpDrops(pays) != null) return { seq, locked: 0n, aeth };
+    const getsXrp = xrpDrops(gets);
+    const paysXrp = xrpDrops(pays);
+    if (isRlusd(gets) && paysXrp != null) {
+      rlusd.push({ seq, locked: 0n, aeth: 0n, gets, pays });
+      continue;
+    }
+    if (isRlusd(pays) && getsXrp != null) {
+      rlusd.push({ seq, locked: getsXrp, aeth: 0n, gets, pays });
+      continue;
+    }
+    if (getsXrp != null && (pays == null || isAeth(pays) || paysXrp != null)) {
+      aeth.push({ seq, locked: getsXrp, aeth: 0n });
+      continue;
+    }
+    const sold = isAeth(gets) ? scaled(gets.value) : null;
+    if (sold != null && sold > 0n && paysXrp != null) {
+      aeth.push({ seq, locked: 0n, aeth: sold });
+      continue;
+    }
     throw coded("offer lock is not XRP or AETH issued by W0", "OFFER");
-  });
+  }
+  return { aeth, rlusd };
 }
 
 function sideDrops(value) {
@@ -204,6 +229,7 @@ async function load(ledger) {
     limit: 50,
   });
   const pool = parsePool(amm, lines);
+  const book = parseOffers(offers);
   const incomplete = !bidsPage.result || bidsPage.result.marker != null || !asksPage.result || asksPage.result.marker != null;
   const parsedBids = incomplete ? { quotes: [], bids: [], unbounded: 0 } : parseBook(bidsPage);
   const parsedAsks = incomplete ? { quotes: [], bids: [], unbounded: 0 } : parseBook(asksPage);
@@ -211,7 +237,8 @@ async function load(ledger) {
     proved: true,
     book_complete: !incomplete,
     pool,
-    offers: parseOffers(offers),
+    offers: book.aeth,
+    rlusdOffers: book.rlusd,
     foreign: parsedBids.quotes.concat(parsedAsks.quotes),
     bids: incomplete ? [] : parsedBids.bids,
     asks: incomplete ? [] : parsedAsks.quotes,
@@ -270,6 +297,8 @@ module.exports = {
   XRP,
   exactIou,
   scaled,
+  RLUSD_CURRENCY,
+  RLUSD_ISSUER,
   load,
   parsePool,
   parseBook,
