@@ -273,7 +273,7 @@ function rowsOf(state) {
 }
 
 function findPending(state) {
-  return rowsOf(state).find((mission) => mission.hold !== "released" && mission.status !== "rlusd_resting" && mission.status !== "rlusd_proved" && mission.status !== "rlusd_filled" && mission.status !== "rlusd_partial" && mission.status !== "rlusd_vanished_unattributed") || null;
+  return rowsOf(state).find((mission) => mission.hold !== "released" && mission.status !== "rlusd_resting" && mission.status !== "rlusd_proved" && mission.status !== "rlusd_filled" && mission.status !== "rlusd_partial" && mission.status !== "rlusd_vanished_unattributed" && mission.status !== "rlusd_cancelled" && mission.status !== "rlusd_expired") || null;
 }
 
 function findResting(state) {
@@ -316,7 +316,7 @@ function reserve(dir, order, shot, now) {
       api.append({ type: "mission.upsert", at: now, mission });
       return { mission, created: false };
     }
-    if (existing) return { mission: existing, created: false };
+    if (existing) return { mission: existing, created: false, terminal: existing.status === "rlusd_cancelled" || existing.status === "rlusd_expired" || existing.status === "rlusd_filled" };
     const mission = {
       id: `msn${crypto.createHash("sha256").update(`rlusd|${order.key}`).digest("hex").slice(0, 16)}`,
       idempotency_key: order.key,
@@ -860,9 +860,10 @@ function sellPartial(touch) {
   if (beforeXrp == null || afterXrp == null || afterXrp >= beforeXrp || !beforeIou || !afterIou) return null;
   const consumed = subExact(beforeIou, afterIou);
   if (!consumed || consumed.coeff <= 0n) return null;
-  const text = formatCoeff(afterIou.coeff, afterIou.exp);
+  const raw = touch.final && touch.final.TakerGets && typeof touch.final.TakerGets === "object" ? touch.final.TakerGets.value : null;
+  const text = formatCoeff(afterIou.coeff, afterIou.exp) || raw;
   if (!text) return null;
-  return { consumed, remaining: text, receivedXrp: beforeXrp - afterXrp };
+  return { consumed, remaining: text, remainingExact: afterIou, receivedXrp: beforeXrp - afterXrp };
 }
 
 function parkInventory(dir, resting, now, observed, status, proof) {
@@ -962,7 +963,9 @@ async function proveSell(dir, resting, now, clients, observed) {
     const hit = hits[0];
     const delta = sellPartial(hit.touch);
     const reserve = await offerReserveNow(clients);
-    if (!delta || reserve == null) return held;
+    const marked = delta ? markInventory(observed.pool, observed.bids, delta.remainingExact) : null;
+    if (!delta || reserve == null || !marked || !marked.proved) return held;
+    const open = reserve + marked.xrp;
     const next = Object.assign({}, resting, {
       status: "rlusd_partial",
       fill_class: "partial",
@@ -971,7 +974,8 @@ async function proveSell(dir, resting, now, clients, observed) {
       counterparty: hit.klass.outside ? hit.tx.Account : null,
       outside_fill: hit.klass.outside === true,
       remaining_rlusd: delta.remaining,
-      outstanding_drops: reserve.toString(),
+      inventory_drops: marked.xrp.toString(),
+      outstanding_drops: open.toString(),
       realized_pnl_drops: "0",
       updated_at: now,
     });
@@ -988,9 +992,10 @@ async function proveSell(dir, resting, now, clients, observed) {
       outside_fill: next.outside_fill,
       counterparty: next.counterparty,
       remaining_rlusd: delta.remaining,
-      outstanding_drops: reserve.toString(),
+      inventory_drops: marked.xrp.toString(),
+      outstanding_drops: open.toString(),
       realized_pnl_drops: "0",
-      rationale: "A validated trade consumed part of the RLUSD sell. The remainder stays open with its owner reserve.",
+      rationale: "A validated trade consumed part of the RLUSD sell. The remainder stays open at its mark plus the owner reserve.",
     };
   }
   if (hits.length === 1 && (hits[0].klass.klass === "cancelled" || hits[0].klass.klass === "expired")) {
@@ -1279,17 +1284,28 @@ async function sellInventory(dir, mission, now, clients, observed, room, gate) {
     Sequence: shot.sequence,
     LastLedgerSequence: shot.validatedLedger + bounds.LEDGER_WINDOW,
   };
-  save(dir, Object.assign({}, mission, { outstanding_drops: "0", updated_at: now }));
-  const basis = mission.proof_type === "state_only" || mission.status === "rlusd_vanished_unattributed" ? "state_only_mark" : null;
+  const finished = (row) => row && (row.status === "rlusd_cancelled" || row.status === "rlusd_expired" || row.status === "rlusd_filled" || row.submit_attempted === true);
+  const baseKey = `w1-rlusd-sell-${today}`;
+  const baseRow = rowsOf(state).find((row) => row.idempotency_key === baseKey);
+  const key = !finished(baseRow) ? baseKey : `${baseKey}-${shot.sequence}`;
+  const prior = rowsOf(state).find((row) => row.idempotency_key === key);
+  if (finished(prior)) {
+    return { decision: "research", traded: false, signed: false, replay: false, rationale: "A finished RLUSD sell already uses this Chicago day key. Exposure is unchanged." };
+  }
+  const basis = mission.proof_type === "state_only" || mission.status === "rlusd_vanished_unattributed" || mission.status === "rlusd_cancelled" || mission.status === "rlusd_expired" ? "state_only_mark" : null;
   const reserved = reserve(dir, {
-    key: `w1-rlusd-sell-${today}`,
+    key,
     action: "sell",
     day: today,
     exposure,
     tx,
     cost_basis: basis,
-    cost_basis_drops: mission.inventory_drops || null,
+    cost_basis_drops: mission.inventory_drops || mission.outstanding_drops || null,
   }, shot, now);
+  if (reserved.terminal || reserved.mission.submit_attempted === true) {
+    return { decision: "research", traded: false, signed: false, replay: true, rationale: "The RLUSD sell key already finished. Exposure is unchanged." };
+  }
+  save(dir, Object.assign({}, mission, { outstanding_drops: "0", updated_at: now }));
   let sent;
   try {
     sent = await submitSigned(dir, reserved, tx, {
@@ -1305,8 +1321,11 @@ async function sellInventory(dir, mission, now, clients, observed, room, gate) {
     save(dir, Object.assign({}, mission, { outstanding_drops: mission.outstanding_drops, updated_at: now }));
     throw error;
   }
-  if (sent.replay) return { decision: "place", replay: true, traded: false };
-  return { decision: "place", signed: true, submitted: sent.mission.submitted === true, traded: false, send_max_drops: tx.TakerPays, deliver_min: tx.TakerGets.value };
+  if (sent.replay) {
+    save(dir, Object.assign({}, mission, { outstanding_drops: mission.outstanding_drops, updated_at: now }));
+    return { decision: "research", traded: false, signed: false, replay: true, rationale: "The RLUSD sell key already finished. Exposure is unchanged." };
+  }
+  return { decision: "place", signed: true, submitted: sent.mission.submitted === true, traded: false, replay: false, send_max_drops: tx.TakerPays, deliver_min: tx.TakerGets.value };
 }
 
 async function manageRest(dir, resting, now, clients, observed, room, day, gate) {

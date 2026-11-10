@@ -739,7 +739,102 @@ describe("rlusd trading", () => {
       assert.equal(sell.status, status);
       assert.equal(sell.outstanding_drops, "885833");
       assert.notEqual(sell.outstanding_drops, "200010");
+      if (kind === "cancel") {
+        const again = await decide(env(), { now: TODAY, ledger, journal }, client(state));
+        const exposure = Object.values(view(ledger, TODAY).missions).filter((mission) => mission.kind === "w1-rlusd" && mission.hold !== "released").reduce((sum, mission) => sum + BigInt(mission.outstanding_drops || "0"), 0n);
+        assert.notEqual(again.replay, true);
+        assert.notEqual(exposure, 0n);
+        if (again.signed === true) {
+          assert.equal(state.signs, 1);
+          assert.equal(exposure, 200010n);
+          const next = Object.values(view(ledger, TODAY).missions).find((mission) => mission.action === "sell" && mission.status !== "rlusd_cancelled");
+          assert.equal(next.outstanding_drops, "200010");
+          assert.equal(next.idempotency_key.startsWith("w1-rlusd-sell-2026-11-10-"), true);
+        } else {
+          assert.equal(state.signs, 0);
+          assert.equal(exposure, 885833n);
+        }
+      }
     }
+  });
+
+  it("keeps the unsold RLUSD mark inside a partial sell's exposure", async () => {
+    const shape = JSON.parse(fs.readFileSync(path.join(RLUSDFIX, "fill-21093748.json"), "utf8"));
+    const ledger = home();
+    const journal = fs.mkdtempSync(path.join(os.tmpdir(), "rlusd-partial-sell-"));
+    const sequence = 21093810;
+    const previous = {
+      Account: anchors.WALLETS.W1.address,
+      Sequence: sequence,
+      TakerGets: { currency: shape.currency, issuer: shape.issuer, value: "0.1" },
+      TakerPays: "1000000",
+    };
+    const finalFields = {
+      Account: anchors.WALLETS.W1.address,
+      Sequence: sequence,
+      TakerGets: { currency: shape.currency, issuer: shape.issuer, value: shape.balance },
+      TakerPays: "400000",
+    };
+    fs.appendFileSync(path.join(ledger, "events.jsonl"), `${JSON.stringify({
+      type: "mission.upsert",
+      at: TODAY,
+      mission: {
+        id: "msnsellpartial21093810",
+        idempotency_key: "w1-rlusd-sell-2026-11-10",
+        kind: "w1-rlusd",
+        status: "rlusd_resting",
+        action: "sell",
+        hold: "uncertain",
+        signed: true,
+        submitted: true,
+        submit_attempted: true,
+        role: "W1",
+        account: anchors.WALLETS.W1.address,
+        chicago_day: "2026-11-10",
+        sequence,
+        outstanding_drops: "200010",
+        cost_basis: "state_only_mark",
+        cost_basis_drops: "885833",
+        signed_hash: "AB".repeat(32),
+        updated_at: TODAY,
+        unsigned_tx: {
+          TransactionType: "OfferCreate",
+          Account: anchors.WALLETS.W1.address,
+          Sequence: sequence,
+          Fee: "10",
+          TakerGets: previous.TakerGets,
+          TakerPays: previous.TakerPays,
+        },
+      },
+    })}\n`);
+    const state = {
+      signs: 0,
+      submits: 0,
+      types: [],
+      fillBalance: shape.balance,
+      history: {
+        result: {
+          validated: true,
+          marker: null,
+          transactions: [{
+            hash: "F1" + "AB".repeat(31),
+            tx_json: { TransactionType: "OfferCreate", Account: "rNv54ueuxFt5a3TgqYA4QqmN2hJX2q2TGv", Sequence: 22049388 },
+            meta: {
+              TransactionResult: "tesSUCCESS",
+              AffectedNodes: [{ ModifiedNode: { LedgerEntryType: "Offer", PreviousFields: previous, FinalFields: finalFields } }],
+            },
+          }],
+        },
+      },
+    };
+    const row = await decide(env(), { now: TODAY, ledger, journal }, client(state));
+    assert.equal(row.status, "rlusd_partial");
+    assert.equal(row.remaining_rlusd, shape.balance);
+    assert.equal(row.outstanding_drops, (200000n + 885833n).toString());
+    assert.notEqual(row.outstanding_drops, "200000");
+    const exposure = Object.values(view(ledger, TODAY).missions).filter((mission) => mission.kind === "w1-rlusd" && mission.hold !== "released").reduce((sum, mission) => sum + BigInt(mission.outstanding_drops || "0"), 0n);
+    assert.equal(exposure, 200000n + 885833n);
+    assert.equal(state.signs, 0);
   });
 
   it("sells state-only RLUSD inside the live headroom and can buy what remains", async () => {
