@@ -16,5 +16,6 @@
   "trustset_hash": "DD19FBD953682B294EAFC82FD4C6A711AB204C9D7DA96F0E4436F99A8E9D616B",
   "stored_ledger": 22223170,
   "complete_ledgers_after_create": "22224000-22225000",
+  "labs_window": "22222753-22224013",
   "note": "Public account_tx on wss://testnet.xrpl-labs.com did not return this trade. The prefix and suffix are the reported create hash. The replay uses these amounts, this sequence, this balance, and this ledger."
 }

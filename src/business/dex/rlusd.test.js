@@ -65,9 +65,10 @@ function client(state) {
     ledger: {
       request: async (req) => {
         if (req.command === "server_info") {
-          if (!state.completeLedgers) return w1("server_info.json");
+          if (!state.completeLedgers && !state.validatedSeq) return w1("server_info.json");
           const info = JSON.parse(JSON.stringify(w1("server_info.json")));
-          info.result.info.complete_ledgers = state.completeLedgers;
+          if (state.completeLedgers) info.result.info.complete_ledgers = state.completeLedgers;
+          if (state.validatedSeq) info.result.info.validated_ledger.seq = state.validatedSeq;
           return info;
         }
         if (req.command === "account_info") {
@@ -424,6 +425,55 @@ describe("rlusd trading", () => {
     assert.equal(rlusd.historyDropped([[22224000, 22225000]], 22223170), true);
   });
 
+  it("releases a legacy vanished offer from the validated book without calling it a fill", async () => {
+    const shape = JSON.parse(fs.readFileSync(path.join(RLUSDFIX, "fill-21093748.json"), "utf8"));
+    assert.equal(shape.labs_window, "22222753-22224013");
+    const ledger = home();
+    const journal = fs.mkdtempSync(path.join(os.tmpdir(), "rlusd-vanished-"));
+    const tx = seedFill(ledger, shape, shape.create_hash, { legacy: true });
+    const state = {
+      signs: 0,
+      submits: 0,
+      types: [],
+      fillBalance: shape.balance,
+      history: { result: { validated: true, marker: null, transactions: [] } },
+      notFound: true,
+      completeLedgers: shape.labs_window,
+      echo: "prove",
+      lastTx: tx,
+      lastHash: shape.create_hash,
+    };
+    for (const seq of [22223900, 22223900, 22223901]) {
+      state.validatedSeq = seq;
+      const row = await decide(env(), { now: NOW, ledger, journal }, client(state));
+      assert.equal(state.signs, 0);
+      assert.equal(row.proof_type, undefined);
+    }
+    let open = Object.values(view(ledger, NOW).missions).find((mission) => mission.sequence === shape.sequence);
+    assert.equal(open.status, "rlusd_resting");
+    assert.equal(open.outstanding_drops, "1200010");
+    state.validatedSeq = 22223902;
+    const closed = await decide(env(), { now: NOW, ledger, journal }, client(state));
+    assert.equal(state.signs, 0);
+    assert.equal(closed.status, "rlusd_vanished_unattributed");
+    assert.equal(closed.proof_type, "state_only");
+    assert.equal(closed.outside_fill, false);
+    assert.equal(closed.counterparty, null);
+    assert.equal(closed.traded, false);
+    assert.equal(closed.realized_pnl_drops, "0");
+    assert.equal(closed.fill_rlusd, shape.balance);
+    open = Object.values(view(ledger, NOW).missions).find((mission) => mission.sequence === shape.sequence);
+    assert.equal(open.idempotency_key, "w1-rlusd-rest");
+    assert.equal(open.outstanding_drops, (BigInt(closed.inventory_drops) + 200000n).toString());
+    assert.equal(BigInt(open.outstanding_drops) < 1200010n, true);
+    assert.equal(BigInt(open.outstanding_drops) <= 2000000n, true);
+    state.validatedSeq = 22223903;
+    await decide(env(), { now: NOW, ledger, journal }, client(state));
+    const exposure = Object.values(view(ledger, NOW).missions).filter((mission) => mission.kind === "w1-rlusd" && mission.hold !== "released").reduce((sum, mission) => sum + BigInt(mission.outstanding_drops || "0"), 0n);
+    assert.equal(state.signs <= 1, true);
+    assert.equal(exposure <= 2000000n, true);
+  });
+
   it("does not convert a line that is merely larger than the offer", async () => {
     const thrown = await runFill({ historyThrows: true, fillBalance: "1.5", trust: true });
     assert.equal(thrown.row.decision, "research");
@@ -554,9 +604,9 @@ function seedFill(ledger, shape, hash, extra) {
     submit_attempted: true,
     signed_hash: hash,
     proof_hash: extra.bare ? undefined : hash,
-    proof_result: extra.bare ? undefined : "tesSUCCESS",
-    rlusd_baseline: "1.5",
-    validated_ledger: extra.bare ? undefined : shape.stored_ledger,
+    proof_result: extra.bare || extra.legacy ? undefined : "tesSUCCESS",
+    rlusd_baseline: extra.legacy ? undefined : "1.5",
+    validated_ledger: extra.bare || extra.legacy ? undefined : shape.stored_ledger,
     updated_at: NOW,
     unsigned_tx: tx,
   };

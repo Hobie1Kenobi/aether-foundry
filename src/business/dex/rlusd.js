@@ -30,6 +30,7 @@ const HAIRCUT_DEN = 100n;
 const KIND = "w1-rlusd";
 
 const MAX_TRADES_PER_TICK = 1;
+const VANISH_TICKS = 3;
 const MAX_TRADES_PER_DAY = 2;
 const TRUST_KEY = "w1-rlusd-trust";
 const REST_KEY = "w1-rlusd-rest";
@@ -271,7 +272,7 @@ function rowsOf(state) {
 }
 
 function findPending(state) {
-  return rowsOf(state).find((mission) => mission.hold !== "released" && mission.status !== "rlusd_resting" && mission.status !== "rlusd_proved" && mission.status !== "rlusd_filled") || null;
+  return rowsOf(state).find((mission) => mission.hold !== "released" && mission.status !== "rlusd_resting" && mission.status !== "rlusd_proved" && mission.status !== "rlusd_filled" && mission.status !== "rlusd_partial" && mission.status !== "rlusd_vanished_unattributed") || null;
 }
 
 function findResting(state) {
@@ -398,7 +399,12 @@ async function tick(env, dir, now, clients, position) {
   const resting = findResting(state);
   if (resting) return Object.assign(fields, await manageRest(dir, resting, now, clients, observed, room, day, gate));
   const inventory = findInventory(state);
-  if (inventory) return Object.assign(fields, await sellInventory(dir, inventory, now, clients, observed, room, day, gate));
+  if (inventory) {
+    const sold = await sellInventory(dir, inventory, now, clients, observed, room, day, gate);
+    if (inventory.status !== "rlusd_vanished_unattributed" || sold.decision === "place" || sold.signed === true) {
+      return Object.assign(fields, sold);
+    }
+  }
   const shot = await shotOf(clients.ledger);
   if (!observed.trustline) return Object.assign(fields, await trust(dir, now, clients, shot, room, day, gate));
   return Object.assign(fields, await buy(dir, now, clients, shot, observed, room, day, gate));
@@ -548,7 +554,7 @@ async function buy(dir, now, clients, shot, observed, room, day, gate) {
 
 function findInventory(state) {
   if (rowsOf(state).some((mission) => mission.action === "sell" && mission.hold !== "released")) return null;
-  return rowsOf(state).find((mission) => mission.status === "rlusd_filled" && mission.hold !== "released") || null;
+  return rowsOf(state).find((mission) => (mission.status === "rlusd_filled" || mission.status === "rlusd_vanished_unattributed") && mission.hold !== "released") || null;
 }
 
 function offerTouch(meta, sequence) {
@@ -695,7 +701,10 @@ async function inspectTx(clients, hash, mission, ranges) {
   if (result && result.validated === true && meta && meta.TransactionResult === "tesSUCCESS") {
     return { live: true, result, meta, tx: result.tx_json || result };
   }
-  if (result && result.error === "txnNotFound" && historyDropped(ranges, provedLedger(mission))) return { pruned: true };
+  if (result && result.error === "txnNotFound") {
+    if (historyDropped(ranges, provedLedger(mission))) return { notFound: true, pruned: true };
+    return { notFound: true, unproved: true };
+  }
   return { unproved: true };
 }
 
@@ -754,6 +763,76 @@ function partialDelta(touch) {
   const consumed = subExact(beforeIou, afterIou);
   if (!consumed || consumed.coeff <= 0n) return null;
   return { consumedXrp: beforeXrp - afterXrp, remainingXrp: afterXrp, consumed };
+}
+
+function reserveIncrement(info) {
+  const text = info && info.validated_ledger && info.validated_ledger.reserve_inc_xrp;
+  const raw = typeof text === "number" ? text.toString() : text;
+  if (typeof raw !== "string" || !/^\d+(\.\d{1,6})?$/.test(raw)) return null;
+  const [whole, frac = ""] = raw.split(".");
+  const drops = BigInt(whole) * 1000000n + BigInt((frac + "000000").slice(0, 6));
+  return drops > 0n ? drops : null;
+}
+
+function absenceLedgers(prior, seq) {
+  const list = Array.isArray(prior) ? prior.filter((item) => Number.isInteger(item)) : [];
+  if (!list.length || seq < list[list.length - 1]) return [seq];
+  if (seq === list[list.length - 1]) return list;
+  return list.concat(seq);
+}
+
+async function noteAbsence(dir, resting, now, clients, observed) {
+  let server;
+  try {
+    server = await clients.ledger.request({ command: "server_info" });
+  } catch (error) {
+    return { decision: "research", traded: false, signed: false, rationale: "The validated ledger is missing. The offer exposure stays open." };
+  }
+  const info = server && server.result && server.result.info;
+  const seq = info && info.validated_ledger && info.validated_ledger.seq;
+  const reserve = reserveIncrement(info);
+  if (!Number.isInteger(seq) || seq <= 0 || reserve == null) {
+    return { decision: "research", traded: false, signed: false, rationale: "The validated ledger is missing. The offer exposure stays open." };
+  }
+  const ledgers = absenceLedgers(resting.absence_ledgers, seq);
+  if (ledgers.length < VANISH_TICKS) {
+    save(dir, Object.assign({}, resting, { absence_ledgers: ledgers, updated_at: now }));
+    return { decision: "research", traded: false, signed: false, learning: false, absence_ledgers: ledgers.length, rationale: "The offer is absent from this validated ledger. History cannot attribute it yet, so the exposure stays open." };
+  }
+  const marked = markInventory(observed.pool, observed.bids, observed.balance);
+  if (!marked.proved) {
+    save(dir, Object.assign({}, resting, { absence_ledgers: ledgers, updated_at: now }));
+    return { decision: "research", traded: false, signed: false, learning: false, rationale: "The offer is absent, and the current RLUSD balance cannot be marked. Exposure stays open." };
+  }
+  const text = observed.balance.coeff === 0n ? "0" : formatCoeff(observed.balance.coeff, observed.balance.exp);
+  const open = marked.xrp + reserve;
+  const next = Object.assign({}, resting, {
+    status: "rlusd_vanished_unattributed",
+    proof_type: "state_only",
+    outside_fill: false,
+    counterparty: null,
+    realized_pnl_drops: "0",
+    inventory_rlusd: text,
+    inventory_drops: marked.xrp.toString(),
+    outstanding_drops: open.toString(),
+    absence_ledgers: ledgers,
+    updated_at: now,
+  });
+  save(dir, next);
+  return {
+    decision: "reconcile",
+    traded: false,
+    signed: false,
+    learning: false,
+    status: "rlusd_vanished_unattributed",
+    proof_type: "state_only",
+    outside_fill: false,
+    counterparty: null,
+    realized_pnl_drops: "0",
+    fill_rlusd: text,
+    inventory_drops: marked.xrp.toString(),
+    rationale: "The offer is absent from three validated ledgers and history cannot attribute it. Exposure is the current RLUSD balance mark plus the trust reserve.",
+  };
 }
 
 async function proveFill(dir, resting, now, clients, observed) {
@@ -838,20 +917,23 @@ async function proveFill(dir, resting, now, clients, observed) {
       counterparty: hit.tx.Account === bounds.ACCOUNT ? null : hit.tx.Account,
       type: "consuming_tx",
     };
-  } else if (history.missing) {
+  } else if (hits.length === 0) {
     const ranges = await readRanges(clients);
-    if (!historyDropped(ranges, provedLedger(resting))) return held;
-    if (laterRlusd(view(dir, now), resting)) return held;
-    const baseline = await provedBaseline(dir, resting, now, clients, ranges);
-    const delta = baseline ? subExact(observed.balance, baseline) : null;
-    if (!baseline || !delta || !sameExact(delta, pays)) return held;
-    const seen = await inspectTx(clients, resting.signed_hash, resting, ranges);
-    if (seen.unknown || seen.unproved) return held;
-    if (seen.live && binds(resting, seen.tx, seen.meta)) {
-      proof = { klass: "filled", outside: false, hash: null, counterparty: null, type: "balance_delta" };
-    } else if (seen.pruned && storedCreate(resting, resting.signed_hash)) {
-      proof = { klass: "filled", outside: false, hash: null, counterparty: null, type: "stored_journal" };
+    const dropped = historyDropped(ranges, provedLedger(resting));
+    let seen = { unproved: true };
+    if (!history.threw && !history.incomplete) seen = await inspectTx(clients, resting.signed_hash, resting, ranges);
+    if (history.missing && dropped && !laterRlusd(view(dir, now), resting) && !seen.unknown) {
+      const baseline = await provedBaseline(dir, resting, now, clients, ranges);
+      const delta = baseline ? subExact(observed.balance, baseline) : null;
+      if (baseline && delta && sameExact(delta, pays)) {
+        if (seen.live && binds(resting, seen.tx, seen.meta)) {
+          proof = { klass: "filled", outside: false, hash: null, counterparty: null, type: "balance_delta" };
+        } else if (seen.pruned && storedCreate(resting, resting.signed_hash)) {
+          proof = { klass: "filled", outside: false, hash: null, counterparty: null, type: "stored_journal" };
+        }
+      }
     }
+    if (!proof && !seen.unknown && (history.missing || seen.notFound || dropped)) return noteAbsence(dir, resting, now, clients, observed);
   }
   if (!proof) return held;
   if (proof.klass === "cancelled" || proof.klass === "expired") {
