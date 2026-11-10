@@ -18,6 +18,7 @@ const signer = require("./signer");
 
 const ROOT = path.resolve(__dirname, "../../..");
 const WS = "wss://testnet.xrpl-labs.com";
+const CONNECTION_TIMEOUT_MS = 20000;
 const HOUSE_ENVS = ["W0_SEED", "W1_SEED", "W2_SEED", "W3_SEED", "W4_SEED", "W5_SEED", "W6_SEED", "W7_SEED"];
 
 function assertWs(value) {
@@ -139,7 +140,8 @@ async function connectLive(env, deps) {
   const open = options.openWallet || ((seed) => require("xrpl").Wallet.fromSeed(seed));
   const connect = options.connect || (async (url) => {
     const xrpl = require("xrpl");
-    const client = new xrpl.Client(url);
+    const client = new xrpl.Client(url, { connectionTimeout: CONNECTION_TIMEOUT_MS });
+    if (typeof client.on === "function") client.on("error", () => {});
     await client.connect();
     return client;
   });
@@ -233,6 +235,7 @@ function liveExpected(tx) {
 
 module.exports = {
   WS,
+  CONNECTION_TIMEOUT_MS,
   health,
   preflight,
   readPrivateW1,

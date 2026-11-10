@@ -6,10 +6,24 @@
  * Tests call tick() and do not enter the interval.
  */
 
-const { decide, readJournal } = require("./director");
+const { decide, readJournal, journalDegraded } = require("./director");
 
 const MIN_INTERVAL_MS = 15000;
 const DEFAULT_INTERVAL_MS = 60000;
+const MAX_BACKOFF_MS = 300000;
+
+function isConnectionFailure(error) {
+  if (!error || error.code === "MAINNET" || error.code === "W0" || error.code === "MASTER_KEY" || error.code === "SECRET") return false;
+  if (error.name === "NotConnectedError") return true;
+  return /connect\(\) timed out|not connected|websocket is not open|ECONNREFUSED|ENOTFOUND|ETIMEDOUT/i.test(String(error.message || ""));
+}
+
+function nextWait(current, interval, degraded) {
+  const base = Math.max(MIN_INTERVAL_MS, Number(interval) || DEFAULT_INTERVAL_MS);
+  if (!degraded) return base;
+  const previous = Number(current) > 0 ? Number(current) : base;
+  return Math.min(previous * 2, MAX_BACKOFF_MS);
+}
 
 function health(env, journal) {
   const source = env || {};
@@ -28,7 +42,12 @@ function health(env, journal) {
 }
 
 async function tick(env, input, clients) {
-  return decide(env, input, clients);
+  try {
+    return await decide(env, input, clients);
+  } catch (error) {
+    if (!isConnectionFailure(error)) throw error;
+    return journalDegraded(input, error);
+  }
 }
 
 function main(argv, deps) {
@@ -53,32 +72,38 @@ function main(argv, deps) {
   const run = () => tick(env, input, options.clients);
   if (once) return run().then(() => 0);
   const interval = Math.max(MIN_INTERVAL_MS, Number(options.intervalMs || DEFAULT_INTERVAL_MS));
-  return run().then(() => new Promise((resolve, reject) => {
-    let running = false;
-    const timer = setInterval(() => {
-      if (running) return;
-      running = true;
-      run().then(() => {
-        running = false;
-      }).catch((error) => {
-        clearInterval(timer);
-        reject(error);
-      });
-    }, interval);
+  return run().then((row) => new Promise((resolve, reject) => {
+    let timer = null;
+    let wait = nextWait(interval, interval, row && row.market === "degraded");
+    const schedule = () => {
+      timer = setTimeout(() => {
+        run().then((next) => {
+          wait = nextWait(wait, interval, next && next.market === "degraded");
+          schedule();
+        }).catch((error) => {
+          if (timer) clearTimeout(timer);
+          reject(error);
+        });
+      }, wait);
+    };
+    schedule();
     if (options.stop) options.stop(() => {
-      clearInterval(timer);
+      if (timer) clearTimeout(timer);
       resolve(0);
     });
   }));
 }
 
 if (require.main === module) {
-  main(process.argv.slice(2), { env: process.env }).then((code) => process.exit(code));
+  main(process.argv.slice(2), { env: process.env }).then((code) => process.exit(code)).catch(() => process.exit(1));
 }
 
 module.exports = {
   health,
   tick,
   main,
+  nextWait,
+  isConnectionFailure,
   MIN_INTERVAL_MS,
+  MAX_BACKOFF_MS,
 };
