@@ -9,5 +9,8 @@
   "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
   "currency": "524C555344000000000000000000000000000000",
   "balance": "0.07778336573477218",
+  "baseline": "0",
+  "trustset_sequence": 21093747,
+  "trustset_hash_prefix": "DD19FBD9",
   "note": "Public account_tx on wss://testnet.xrpl-labs.com did not return this trade. The prefix and suffix are the reported create hash. The replay uses these amounts, this sequence, this balance, and this ledger."
 }

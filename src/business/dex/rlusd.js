@@ -275,7 +275,7 @@ function findPending(state) {
 }
 
 function findResting(state) {
-  return rowsOf(state).find((mission) => mission.hold !== "released" && (mission.action === "rest" || mission.action === "replace") && (mission.status === "rlusd_resting" || mission.status === "rlusd_proved")) || null;
+  return rowsOf(state).find((mission) => mission.hold !== "released" && (mission.action === "rest" || mission.action === "replace") && (mission.status === "rlusd_resting" || mission.status === "rlusd_proved" || mission.status === "rlusd_partial")) || null;
 }
 
 function openExposure(state) {
@@ -333,6 +333,7 @@ function reserve(dir, order, shot, now) {
       outstanding_drops: order.exposure.toString(),
       realized_loss_drops: "0",
       realized_pnl_drops: "0",
+      rlusd_baseline: order.baseline || null,
       submit_attempted: false,
       updated_at: now,
       unsigned_tx: order.tx,
@@ -513,7 +514,8 @@ async function buy(dir, now, clients, shot, observed, room, day, gate) {
   if (!withinCaps(state, day, exposure, room)) {
     return { decision: "research", aeth_exit_proposal: room.headroom < spend ? "w1-exit-sole-lp" : null, rationale: "Open RLUSD exposure is already at the 2 XRP cap." };
   }
-  const reserved = reserve(dir, { key, action: key.startsWith("w1-rlusd-rest-") ? "replace" : action, day, exposure, tx }, shot, now);
+  const baseline = !observed.balance || observed.balance.coeff === 0n ? "0" : formatCoeff(observed.balance.coeff, observed.balance.exp);
+  const reserved = reserve(dir, { key, action: key.startsWith("w1-rlusd-rest-") ? "replace" : action, day, exposure, tx, baseline }, shot, now);
   const expected = bid ? {
     type: "OfferCreate",
     account: bounds.ACCOUNT,
@@ -591,13 +593,99 @@ async function historyOf(clients, mission) {
       limit: 20,
     });
   } catch (error) {
-    return { missing: true, transactions: [] };
+    return { threw: true, transactions: [] };
   }
   const result = page && page.result;
   if (!result || result.validated !== true || !Array.isArray(result.transactions) || result.marker != null) {
     return { incomplete: true, transactions: [] };
   }
   return { missing: result.transactions.length === 0, transactions: result.transactions };
+}
+
+function subExact(left, right) {
+  const span = Math.max(-left.exp, -right.exp, 0);
+  const width = (exact) => exact.coeff * (10n ** BigInt(span + exact.exp));
+  const diff = width(left) - width(right);
+  if (diff < 0n) return null;
+  if (diff === 0n) return { coeff: 0n, exp: 0 };
+  let coeff = diff;
+  let exp = -span;
+  while (coeff % 10n === 0n) {
+    coeff /= 10n;
+    exp += 1;
+  }
+  return { coeff, exp };
+}
+
+function sameExact(left, right) {
+  const delta = subExact(left, right);
+  return Boolean(delta && delta.coeff === 0n);
+}
+
+function amountExact(value) {
+  if (typeof value === "string") {
+    if (value.startsWith("-")) return null;
+    return market.exactIou(value);
+  }
+  return exactOf(value);
+}
+
+function rippleBaseline(meta) {
+  const nodes = meta && Array.isArray(meta.AffectedNodes) ? meta.AffectedNodes : [];
+  for (const node of nodes) {
+    const body = node && (node.CreatedNode || node.ModifiedNode || node.DeletedNode);
+    if (!body || body.LedgerEntryType !== "RippleState") continue;
+    const fields = body.NewFields || body.FinalFields || {};
+    const previous = body.PreviousFields || {};
+    const high = fields.HighLimit || previous.HighLimit;
+    const low = fields.LowLimit || previous.LowLimit;
+    const currency = (high && high.currency) || (low && low.currency);
+    const issuers = [high && high.issuer, low && low.issuer];
+    if (currency !== CURRENCY || !issuers.includes(ISSUER)) continue;
+    const raw = fields.Balance != null ? fields.Balance : previous.Balance;
+    return amountExact(raw);
+  }
+  return null;
+}
+
+function laterRlusd(state, resting) {
+  return rowsOf(state).some((mission) => {
+    if (!mission || mission.id === resting.id || mission.action === "trust" || mission.action === "cancel") return false;
+    return mission.action === "swap" || mission.action === "sell" || mission.action === "replace" || mission.status === "rlusd_filled" || mission.status === "rlusd_partial";
+  });
+}
+
+async function provedBaseline(dir, resting, now, clients) {
+  if (typeof resting.rlusd_baseline === "string") {
+    const recorded = market.exactIou(resting.rlusd_baseline);
+    if (recorded) return recorded;
+  }
+  const trust = rowsOf(view(dir, now)).find((mission) => mission.action === "trust" && mission.signed_hash && Number.isInteger(mission.sequence) && mission.sequence + 1 === resting.sequence);
+  if (!trust) return null;
+  let lookup;
+  try {
+    lookup = await clients.ledger.request({ command: "tx", transaction: trust.signed_hash, binary: false });
+  } catch (error) {
+    return null;
+  }
+  const result = lookup && lookup.result;
+  const tx = result && (result.tx_json || result);
+  const meta = result && (result.meta || result.metaData);
+  if (!result || result.validated !== true || !meta || meta.TransactionResult !== "tesSUCCESS" || !tx) return null;
+  if (tx.TransactionType !== "TrustSet" || tx.Sequence !== trust.sequence || tx.Account !== bounds.ACCOUNT) return null;
+  if (!tx.LimitAmount || tx.LimitAmount.currency !== CURRENCY || tx.LimitAmount.issuer !== ISSUER) return null;
+  return rippleBaseline(meta);
+}
+
+function partialDelta(touch) {
+  const beforeXrp = marketXrp(touch.previous && touch.previous.TakerGets);
+  const afterXrp = marketXrp(touch.final && touch.final.TakerGets);
+  const beforeIou = amountExact(touch.previous && touch.previous.TakerPays);
+  const afterIou = amountExact(touch.final && touch.final.TakerPays);
+  if (beforeXrp == null || afterXrp == null || afterXrp >= beforeXrp || !beforeIou || !afterIou) return null;
+  const consumed = subExact(beforeIou, afterIou);
+  if (!consumed || consumed.coeff <= 0n) return null;
+  return { consumedXrp: beforeXrp - afterXrp, remainingXrp: afterXrp, consumed };
 }
 
 async function proveFill(dir, resting, now, clients, observed) {
@@ -608,6 +696,9 @@ async function proveFill(dir, resting, now, clients, observed) {
     return { decision: "research", traded: false, rationale: "The resting RLUSD offer is not on the book and its amounts are not proved." };
   }
   const history = await historyOf(clients, resting);
+  if (history.threw || history.incomplete) {
+    return { decision: "research", traded: false, signed: false, rationale: "RLUSD history is not a validated page. Exposure stays open." };
+  }
   const hits = [];
   for (const entry of history.transactions) {
     const tx = entry.tx_json || entry.tx || entry;
@@ -621,13 +712,57 @@ async function proveFill(dir, resting, now, clients, observed) {
   if (hits.length > 1) {
     return { decision: "research", traded: false, proof_reason: "uncertain", rationale: "More than one validated trade touches the resting RLUSD offer. Exposure stays open." };
   }
+  if (hits.length === 1 && resting.proof_hash === hits[0].hash && resting.status === "rlusd_partial") {
+    return { decision: "research", traded: false, signed: false, status: "rlusd_partial", remaining_drops: resting.remaining_drops, inventory_drops: resting.inventory_drops, rationale: "The partial RLUSD fill is already booked." };
+  }
+  const held = { decision: "research", traded: false, signed: false, rationale: "The resting RLUSD offer is not on the book and has no proved cancel. Its exposure stays open." };
+  if (hits.length === 1 && hits[0].klass.klass === "partial") {
+    const hit = hits[0];
+    const delta = partialDelta(hit.touch);
+    if (!delta || !atLeast(observed.balance, delta.consumed)) return held;
+    const marked = markInventory(observed.pool, observed.bids, delta.consumed);
+    const inventory = marked.proved ? marked.xrp : delta.consumedXrp;
+    const open = delta.remainingXrp + inventory;
+    if (open > MAX_TRADE_DROPS) return held;
+    const text = formatCoeff(delta.consumed.coeff, delta.consumed.exp);
+    const next = Object.assign({}, resting, {
+      status: "rlusd_partial",
+      fill_class: "partial",
+      proof_type: "consuming_tx",
+      proof_hash: hit.hash,
+      counterparty: hit.klass.outside ? hit.tx.Account : null,
+      outside_fill: hit.klass.outside === true,
+      inventory_rlusd: text,
+      inventory_drops: inventory.toString(),
+      remaining_drops: delta.remainingXrp.toString(),
+      outstanding_drops: open.toString(),
+      realized_pnl_drops: "0",
+      updated_at: now,
+    });
+    save(dir, next);
+    return {
+      decision: "reconcile",
+      traded: hit.klass.outside === true,
+      signed: false,
+      learning: false,
+      status: "rlusd_partial",
+      fill_class: "partial",
+      proof_type: "consuming_tx",
+      fill_hash: hit.hash,
+      counterparty: next.counterparty,
+      outside_fill: next.outside_fill,
+      fill_xrp_drops: delta.consumedXrp.toString(),
+      remaining_drops: delta.remainingXrp.toString(),
+      fill_rlusd: text,
+      fill_price: fillPrice(delta.consumedXrp, delta.consumed),
+      inventory_drops: inventory.toString(),
+      rationale: "A validated trade consumed part of the resting RLUSD offer. The remainder stays open.",
+    };
+  }
   let proof = null;
   if (hits.length === 1) {
     const hit = hits[0];
-    const covered = hit.klass.klass === "partial" ? observed.balance.coeff > 0n : atLeast(observed.balance, pays);
-    if (!covered && hit.klass.klass !== "cancelled" && hit.klass.klass !== "expired") {
-      return { decision: "research", traded: false, rationale: "The RLUSD balance does not cover the missing offer. Exposure stays open." };
-    }
+    if (hit.klass.klass !== "cancelled" && hit.klass.klass !== "expired" && !atLeast(observed.balance, pays)) return held;
     proof = {
       klass: hit.klass.klass,
       outside: hit.klass.outside,
@@ -635,8 +770,17 @@ async function proveFill(dir, resting, now, clients, observed) {
       counterparty: hit.tx.Account === bounds.ACCOUNT ? null : hit.tx.Account,
       type: "consuming_tx",
     };
-  } else if (history.missing && atLeast(observed.balance, pays)) {
-    const create = await clients.ledger.request({ command: "tx", transaction: resting.signed_hash, binary: false });
+  } else if (history.missing) {
+    if (laterRlusd(view(dir, now), resting)) return held;
+    const baseline = await provedBaseline(dir, resting, now, clients);
+    const delta = baseline ? subExact(observed.balance, baseline) : null;
+    if (!baseline || !delta || !sameExact(delta, pays)) return held;
+    let create;
+    try {
+      create = await clients.ledger.request({ command: "tx", transaction: resting.signed_hash, binary: false });
+    } catch (error) {
+      return held;
+    }
     const result = create && create.result;
     const tx = result && (result.tx_json || result);
     const meta = result && (result.meta || result.metaData);
@@ -644,15 +788,13 @@ async function proveFill(dir, resting, now, clients, observed) {
       proof = { klass: "filled", outside: false, hash: null, counterparty: null, type: "balance_delta" };
     }
   }
-  if (!proof) {
-    return { decision: "research", traded: false, rationale: "The resting RLUSD offer is not on the book and has no proved cancel. Its exposure stays open." };
-  }
+  if (!proof) return held;
   if (proof.klass === "cancelled" || proof.klass === "expired") {
     const status = proof.klass === "cancelled" ? "rlusd_cancelled" : "rlusd_expired";
     save(dir, Object.assign({}, resting, { hold: "released", status, outstanding_drops: "0", updated_at: now, proof_type: proof.type, proof_hash: proof.hash, outside_fill: false }));
     return { decision: "reconcile", traded: false, signed: false, learning: false, status, fill_class: proof.klass, proof_type: proof.type, fill_hash: proof.hash, outside_fill: false };
   }
-  const marked = proof.klass === "expired" ? { proved: true, xrp: 0n } : markInventory(observed.pool, observed.bids, pays);
+  const marked = markInventory(observed.pool, observed.bids, pays);
   const inventory = marked.proved ? marked.xrp : spent;
   const pnl = proof.outside && marked.proved ? inventory - spent : 0n;
   const next = Object.assign({}, resting, {
@@ -685,7 +827,7 @@ async function proveFill(dir, resting, now, clients, observed) {
     realized_pnl_drops: pnl.toString(),
     inventory_drops: inventory.toString(),
     rationale: proof.type === "balance_delta"
-      ? "The offer is gone, the RLUSD balance covers it, and the creating transaction is validated. History did not return the consuming trade."
+      ? "The RLUSD balance rose from the proved baseline by the offer amount. History returned a validated empty page."
       : "A validated trade consumed the resting RLUSD offer.",
   };
 }
