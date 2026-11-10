@@ -21,6 +21,12 @@ const WS = "wss://testnet.xrpl-labs.com";
 const CONNECTION_TIMEOUT_MS = 20000;
 const HOUSE_ENVS = ["W0_SEED", "W1_SEED", "W2_SEED", "W3_SEED", "W4_SEED", "W5_SEED", "W6_SEED", "W7_SEED"];
 
+const ALLOWED_HOSTS = {
+  "testnet.xrpl-labs.com": new Set([""]),
+  "s.altnet.rippletest.net": new Set(["", "443", "51233"]),
+  "clio.altnet.rippletest.net": new Set(["", "443", "51233"]),
+};
+
 function assertWs(value) {
   let url;
   try {
@@ -28,11 +34,18 @@ function assertWs(value) {
   } catch {
     throw coded("W1 dex websocket is not a URL", "HOST");
   }
-  if (url.username || url.password || url.port || url.protocol !== "wss:" || url.hostname !== "testnet.xrpl-labs.com") {
+  const ports = ALLOWED_HOSTS[url.hostname];
+  if (url.username || url.password || url.protocol !== "wss:" || !ports || !ports.has(url.port)) {
     throw coded("W1 dex refuses that websocket", "HOST");
   }
   if (url.pathname !== "/" && url.pathname !== "") throw coded("W1 dex refuses that websocket", "HOST");
-  return WS;
+  return url.href.replace(/\/$/, "");
+}
+
+function websocketList(value) {
+  const parts = String(value || WS).split(",").map((item) => item.trim()).filter(Boolean);
+  if (!parts.length) throw coded("W1 dex websocket is not a URL", "HOST");
+  return parts.map((item) => assertWs(item));
 }
 
 function assertFile(file) {
@@ -135,7 +148,7 @@ async function connectLive(env, deps) {
     if (source[name]) throw coded(`refusing house environment ${name}`, "HOUSE_SEED");
   }
   if (source.seed || source.secret || source.privateKey) throw coded("refusing a caller seed", "SECRET");
-  const ws = assertWs(source.FOUNDRY_W1_DEX_WS);
+  const sockets = websocketList(source.FOUNDRY_W1_DEX_WS);
   const read = options.readAccount || ((file) => readPrivateW1(file));
   const open = options.openWallet || ((seed) => require("xrpl").Wallet.fromSeed(seed));
   const connect = options.connect || (async (url) => {
@@ -145,20 +158,32 @@ async function connectLive(env, deps) {
     await client.connect();
     return client;
   });
-  const client = await connect(ws);
-  let wallet = null;
-  try {
-    const info = await client.request({ command: "server_info" });
-    const network = info && info.result && info.result.info && info.result.info.network_id;
-    if (Number(network) !== 1) throw coded("socket did not prove xrpl network id 1", "MAINNET");
-  } catch (error) {
+  let client = null;
+  let lastError = null;
+  for (const ws of sockets) {
+    let opened = null;
     try {
-      await client.disconnect();
-    } catch {
-      /* already closed */
+      opened = await connect(ws);
+      const info = await opened.request({ command: "server_info" });
+      const network = info && info.result && info.result.info && info.result.info.network_id;
+      if (Number(network) !== 1) throw coded("socket did not prove xrpl network id 1", "MAINNET");
+      client = opened;
+      break;
+    } catch (error) {
+      if (opened && opened !== client) {
+        try {
+          await opened.disconnect();
+        } catch {
+          /* already closed */
+        }
+      }
+      if (error.code === "MAINNET" || error.code === "HOST") throw error;
+      lastError = error;
+      client = null;
     }
-    throw error;
   }
+  if (!client) throw lastError || coded("W1 dex websocket did not connect", "HOST");
+  let wallet = null;
   async function openKey() {
     if (wallet) return;
     try {
@@ -236,6 +261,7 @@ function liveExpected(tx) {
 module.exports = {
   WS,
   CONNECTION_TIMEOUT_MS,
+  websocketList,
   health,
   preflight,
   readPrivateW1,
