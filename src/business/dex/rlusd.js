@@ -273,12 +273,16 @@ function rowsOf(state) {
   return Object.values((state && state.missions) || {}).filter((mission) => mission && mission.kind === KIND);
 }
 
+function restingStatus(status) {
+  return status === "rlusd_resting" || status === "rlusd_proved" || status === "rlusd_partial" || status === "rlusd_partial-resting";
+}
+
 function findPending(state) {
-  return rowsOf(state).find((mission) => mission.hold !== "released" && mission.status !== "rlusd_resting" && mission.status !== "rlusd_proved" && mission.status !== "rlusd_filled" && mission.status !== "rlusd_partial" && mission.status !== "rlusd_vanished_unattributed" && mission.status !== "rlusd_cancelled" && mission.status !== "rlusd_expired") || null;
+  return rowsOf(state).find((mission) => mission.hold !== "released" && !restingStatus(mission.status) && mission.status !== "rlusd_filled" && mission.status !== "rlusd_vanished_unattributed" && mission.status !== "rlusd_cancelled" && mission.status !== "rlusd_expired") || null;
 }
 
 function findResting(state) {
-  return rowsOf(state).find((mission) => mission.hold !== "released" && (mission.action === "rest" || mission.action === "replace" || mission.action === "sell") && (mission.status === "rlusd_resting" || mission.status === "rlusd_proved" || mission.status === "rlusd_partial")) || null;
+  return rowsOf(state).find((mission) => mission.hold !== "released" && (mission.action === "rest" || mission.action === "replace" || mission.action === "sell") && restingStatus(mission.status)) || null;
 }
 
 function openExposure(state) {
@@ -368,8 +372,16 @@ function offerSequence(row) {
   return Number.isInteger(seq) ? seq : null;
 }
 
+function listedOffer(observed, sequence) {
+  return (observed.own || []).find((row) => {
+    if (offerSequence(row) !== sequence) return false;
+    const account = row.Account || row.account;
+    return !account || account === bounds.ACCOUNT;
+  }) || null;
+}
+
 function stillResting(observed, sequence) {
-  return (observed.own || []).some((row) => offerSequence(row) === sequence);
+  return Boolean(listedOffer(observed, sequence));
 }
 
 function crosses(spend, exact, asks) {
@@ -1350,9 +1362,85 @@ async function sellInventory(dir, mission, now, clients, observed, room, gate) {
   return { decision: "place", signed: true, submitted: sent.mission.submitted === true, traded: false, replay: false, send_max_drops: tx.TakerPays, deliver_min: tx.TakerGets.value };
 }
 
+function offerField(row, side) {
+  if (!row) return null;
+  if (side === "gets") return row.TakerGets != null ? row.TakerGets : row.taker_gets;
+  return row.TakerPays != null ? row.TakerPays : row.taker_pays;
+}
+
+function strictlySmaller(signed, listed) {
+  if (typeof signed === "string" && typeof listed === "string" && /^[0-9]+$/.test(signed) && /^[0-9]+$/.test(listed)) {
+    return BigInt(listed) < BigInt(signed);
+  }
+  if (!signed || !listed || typeof signed !== "object" || typeof listed !== "object") return false;
+  if (signed.currency !== listed.currency || signed.issuer !== listed.issuer) return false;
+  if (sameAmount(signed, listed) || iouNear(signed.value, listed.value)) return false;
+  const left = market.exactIou(signed.value);
+  const right = market.exactIou(listed.value);
+  if (!left || !right || right.coeff === 0n) return false;
+  const span = Math.max(-left.exp, -right.exp, 0);
+  const width = (exact) => exact.coeff * (10n ** BigInt(span + exact.exp));
+  return width(right) < width(left);
+}
+
+async function bookRemainder(dir, resting, now, clients, observed, row) {
+  const signed = resting.unsigned_tx || {};
+  const listedGets = offerField(row, "gets");
+  let remaining = null;
+  let xrpRemainder = null;
+  if (exactOf(signed.TakerGets) && strictlySmaller(signed.TakerGets, listedGets)) remaining = exactOf(listedGets);
+  else if (typeof signed.TakerGets === "string" && typeof listedGets === "string" && strictlySmaller(signed.TakerGets, listedGets)) xrpRemainder = BigInt(listedGets);
+  else return null;
+  const reserve = await offerReserveNow(clients);
+  if (reserve == null) {
+    return { decision: "research", traded: false, signed: false, rationale: "The offer reserve is missing. The partial remainder stays at its last exposure." };
+  }
+  let open;
+  let inventoryText = null;
+  let inventoryDrops = null;
+  if (remaining) {
+    const marked = markInventory(observed.pool, observed.bids, remaining);
+    if (!marked.proved) {
+      return { decision: "research", traded: false, signed: false, rationale: "The resting remainder cannot be marked. Exposure stays at the last proved amount." };
+    }
+    open = reserve + marked.xrp;
+    inventoryText = formatCoeff(remaining.coeff, remaining.exp);
+    inventoryDrops = marked.xrp.toString();
+  } else {
+    open = reserve + xrpRemainder;
+  }
+  const next = Object.assign({}, resting, {
+    status: "rlusd_partial-resting",
+    fill_class: "partial",
+    proof_type: "book_remainder",
+    outside_fill: false,
+    counterparty: null,
+    realized_pnl_drops: "0",
+    remaining_rlusd: inventoryText,
+    inventory_rlusd: inventoryText,
+    inventory_drops: inventoryDrops,
+    outstanding_drops: open.toString(),
+    updated_at: now,
+  });
+  save(dir, next);
+  return {
+    decision: "reconcile",
+    traded: false,
+    signed: false,
+    learning: false,
+    status: "rlusd_partial-resting",
+    outside_fill: false,
+    realized_pnl_drops: "0",
+    outstanding_drops: open.toString(),
+    inventory_drops: inventoryDrops,
+    rationale: "The offer is still on the book for less than it was signed. Exposure is the owner reserve plus the remaining mark. No fill is realized without a validated trade.",
+  };
+}
+
 async function manageRest(dir, resting, now, clients, observed, room, day, gate) {
   const sequence = resting.sequence;
-  if (!stillResting(observed, sequence)) {
+  const listed = listedOffer(observed, sequence);
+  if (!listed) {
     if (resting.action !== "sell") {
       const cancelled = rowsOf(view(dir, now)).find((mission) => mission.action === "cancel" && mission.status === "rlusd_proved" && mission.unsigned_tx && mission.unsigned_tx.OfferSequence === sequence);
       if (cancelled) {
@@ -1362,6 +1450,9 @@ async function manageRest(dir, resting, now, clients, observed, room, day, gate)
     }
     return proveFill(dir, resting, now, clients, observed);
   }
+  const reduced = await bookRemainder(dir, resting, now, clients, observed, listed);
+  if (reduced) return reduced;
+  if (resting.action === "sell") return manageSellRest(dir, resting, now, clients, observed, room, day, gate);
   if (Array.isArray(resting.absence_ledgers) && resting.absence_ledgers.length) {
     resting = Object.assign({}, resting, { absence_ledgers: [], updated_at: now });
     save(dir, resting);
@@ -1395,6 +1486,46 @@ async function manageRest(dir, resting, now, clients, observed, room, day, gate)
     offer_sequence: sequence,
   }, clients, now, gate);
   if (sent.replay) return { decision: "cancel", replay: true, traded: false };
+  return { decision: "cancel", signed: true, submitted: sent.mission.submitted === true, traded: false, status: sent.mission.status };
+}
+
+async function manageSellRest(dir, resting, now, clients, observed, room, day, gate) {
+  const pays = marketXrp(resting.unsigned_tx && resting.unsigned_tx.TakerPays);
+  const gets = exactOf(resting.unsigned_tx && resting.unsigned_tx.TakerGets);
+  if (pays == null || !gets) {
+    return { decision: "research", traded: false, signed: false, rationale: "The resting RLUSD sell amounts are not proved." };
+  }
+  const stale = (observed.bids || []).some((bid) => bid && outside(bid.account) && !rateLess(bid.xrp, bid.exact, pays, gets));
+  if (!stale) {
+    return { decision: "research", traded: false, signed: false, rationale: "The resting RLUSD sell is still above the outside bid." };
+  }
+  const state = view(dir, now);
+  if (dayTrades(state, day) >= MAX_TRADES_PER_DAY) {
+    return { decision: "research", traded: false, signed: false, rationale: "The stale RLUSD sell is through the outside bid. The Chicago day has no order left to cancel it." };
+  }
+  const shot = await shotOf(clients.ledger);
+  const exposure = shot.fee;
+  if (exposure > room.headroom || openExposure(state) + exposure > MAX_TRADE_DROPS) {
+    return { decision: "research", traded: false, signed: false, rationale: "The stale RLUSD sell is through the outside bid. The cancel fee does not fit the cap." };
+  }
+  const tx = {
+    TransactionType: "OfferCancel",
+    Account: bounds.ACCOUNT,
+    OfferSequence: resting.sequence,
+    Fee: shot.fee.toString(),
+    Sequence: shot.sequence,
+    LastLedgerSequence: shot.validatedLedger + bounds.LEDGER_WINDOW,
+  };
+  const reserved = reserve(dir, { key: `w1-rlusd-cancel-${resting.sequence}`, action: "cancel", day, exposure, tx }, shot, now);
+  const sent = await submitSigned(dir, reserved, tx, {
+    type: "OfferCancel",
+    account: bounds.ACCOUNT,
+    sequence: shot.sequence,
+    last: tx.LastLedgerSequence,
+    fee: shot.fee.toString(),
+    offer_sequence: resting.sequence,
+  }, clients, now, gate);
+  if (sent.replay) return { decision: "cancel", replay: true, traded: false, signed: false };
   return { decision: "cancel", signed: true, submitted: sent.mission.submitted === true, traded: false, status: sent.mission.status };
 }
 
@@ -1461,7 +1592,7 @@ function binds(mission, tx, meta) {
     if (tx.Flags !== reserved.Flags || !sameAmount(tx.TakerGets, reserved.TakerGets) || !sameAmount(tx.TakerPays, reserved.TakerPays)) return false;
     return nodes.some((node) => {
       const fields = nodeFields(node);
-      return fields && fields.Sequence === tx.Sequence && sameOfferAmount(fields.TakerGets, reserved.TakerGets) && sameOfferAmount(fields.TakerPays, reserved.TakerPays);
+      return fields && fields.Account === bounds.ACCOUNT && fields.Sequence === tx.Sequence && sameOfferAmount(fields.TakerGets, reserved.TakerGets) && sameOfferAmount(fields.TakerPays, reserved.TakerPays);
     });
   }
   if (tx.TransactionType === "TrustSet") {
