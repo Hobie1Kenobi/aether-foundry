@@ -360,8 +360,28 @@ async function decide(env, input, clients) {
   }
 }
 
+function journalDegraded(input, error) {
+  const now = (input && input.now) || new Date().toISOString();
+  const row = {
+    schema: "aether.business.research",
+    at: now,
+    learning: false,
+    spend_enabled: false,
+    traded: false,
+    signed: false,
+    live_proof: false,
+    decision: "observe",
+    market: "degraded",
+    error_name: error && error.name ? error.name : "Error",
+    rationale: "The testnet socket is not connected. Nothing is signed.",
+  };
+  if (!input || !input.journal) return row;
+  return remember(input.journal, row);
+}
+
 module.exports = {
   decide,
   readJournal,
+  journalDegraded,
   CHOICES,
 };
