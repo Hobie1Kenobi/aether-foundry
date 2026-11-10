@@ -31,6 +31,7 @@ const KIND = "w1-rlusd";
 
 const MAX_TRADES_PER_TICK = 1;
 const VANISH_TICKS = 3;
+const MIN_TRADE_DROPS = 100000n;
 const MAX_TRADES_PER_DAY = 2;
 const TRUST_KEY = "w1-rlusd-trust";
 const REST_KEY = "w1-rlusd-rest";
@@ -276,7 +277,7 @@ function findPending(state) {
 }
 
 function findResting(state) {
-  return rowsOf(state).find((mission) => mission.hold !== "released" && (mission.action === "rest" || mission.action === "replace") && (mission.status === "rlusd_resting" || mission.status === "rlusd_proved" || mission.status === "rlusd_partial")) || null;
+  return rowsOf(state).find((mission) => mission.hold !== "released" && (mission.action === "rest" || mission.action === "replace" || mission.action === "sell") && (mission.status === "rlusd_resting" || mission.status === "rlusd_proved" || mission.status === "rlusd_partial")) || null;
 }
 
 function openExposure(state) {
@@ -335,6 +336,8 @@ function reserve(dir, order, shot, now) {
       realized_loss_drops: "0",
       realized_pnl_drops: "0",
       rlusd_baseline: order.baseline || null,
+      cost_basis: order.cost_basis || null,
+      cost_basis_drops: order.cost_basis_drops || null,
       submit_attempted: false,
       updated_at: now,
       unsigned_tx: order.tx,
@@ -481,11 +484,25 @@ function withinCaps(state, day, exposure, room) {
   return true;
 }
 
+function affordableSpend(state, room, shot, lineExists) {
+  const reserve = lineExists ? 0n : shot.reserveInc;
+  const open = openExposure(state);
+  const capRoom = MAX_TRADE_DROPS > open ? MAX_TRADE_DROPS - open : 0n;
+  const bank = typeof room.headroom === "bigint" && room.headroom > 0n ? room.headroom : 0n;
+  let budget = capRoom < bank ? capRoom : bank;
+  if (budget <= reserve + shot.fee) return 0n;
+  let spend = budget - reserve - shot.fee;
+  if (spend > DEFAULT_TRADE_DROPS) spend = DEFAULT_TRADE_DROPS;
+  if (spend < MIN_TRADE_DROPS) return 0n;
+  return spend;
+}
+
 async function buy(dir, now, clients, shot, observed, room, day, gate) {
   const state = view(dir, now);
   if (findResting(state)) return { decision: "research", traded: false, rationale: "A RLUSD offer is still open." };
-  const spend = DEFAULT_TRADE_DROPS;
-  if (spend > MAX_TRADE_DROPS || room.headroom < spend) {
+  const lineExists = observed.trustline === true;
+  const spend = affordableSpend(state, room, shot, lineExists);
+  if (spend < MIN_TRADE_DROPS) {
     return { decision: "research", rationale: "The next RLUSD trade would exceed the 2 XRP cap or the headroom." };
   }
   const bid = observed.asks.length ? passiveBid(observed, spend) : null;
@@ -516,7 +533,8 @@ async function buy(dir, now, clients, shot, observed, room, day, gate) {
   };
   const action = bid ? "rest" : "swap";
   const key = bid ? (rowsOf(state).some((mission) => mission.idempotency_key === REST_KEY) ? `w1-rlusd-rest-${day}` : REST_KEY) : `w1-rlusd-swap-${day}`;
-  const exposure = (bid ? BigInt(bid.taker_gets) : priced.sendMax) + shot.fee + (bid ? shot.reserveInc : 0n);
+  const offerReserve = lineExists ? 0n : shot.reserveInc;
+  const exposure = (bid ? BigInt(bid.taker_gets) : priced.sendMax) + shot.fee + (bid ? offerReserve : 0n);
   if (!withinCaps(state, day, exposure, room)) {
     return { decision: "research", aeth_exit_proposal: room.headroom < spend ? "w1-exit-sole-lp" : null, rationale: "Open RLUSD exposure is already at the 2 XRP cap." };
   }
@@ -805,7 +823,7 @@ async function noteAbsence(dir, resting, now, clients, observed) {
     return { decision: "research", traded: false, signed: false, learning: false, rationale: "The offer is absent, and the current RLUSD balance cannot be marked. Exposure stays open." };
   }
   const text = observed.balance.coeff === 0n ? "0" : formatCoeff(observed.balance.coeff, observed.balance.exp);
-  const open = marked.xrp + reserve;
+  const open = marked.xrp;
   const next = Object.assign({}, resting, {
     status: "rlusd_vanished_unattributed",
     proof_type: "state_only",
@@ -831,11 +849,68 @@ async function noteAbsence(dir, resting, now, clients, observed) {
     realized_pnl_drops: "0",
     fill_rlusd: text,
     inventory_drops: marked.xrp.toString(),
-    rationale: "The offer is absent from three validated ledgers and history cannot attribute it. Exposure is the current RLUSD balance mark plus the trust reserve.",
+    rationale: "The offer is absent from three validated ledgers and history cannot attribute it. Exposure is the current RLUSD balance mark. The existing trust line is not reserved again.",
+  };
+}
+
+async function proveSell(dir, resting, now, clients) {
+  const reserved = resting.unsigned_tx || {};
+  const received = marketXrp(reserved.TakerPays);
+  const sold = exactOf(reserved.TakerGets);
+  if (received == null || !sold) {
+    return { decision: "research", traded: false, signed: false, rationale: "The RLUSD sell amounts are not proved." };
+  }
+  const history = await historyOf(clients, resting);
+  if (history.threw || history.incomplete) {
+    return { decision: "research", traded: false, signed: false, rationale: "RLUSD history is not a validated page. Exposure stays open." };
+  }
+  const hits = [];
+  for (const entry of history.transactions) {
+    const tx = entry.tx_json || entry.tx || entry;
+    const meta = entry.meta || entry.metaData;
+    const touch = offerTouch(meta, resting.sequence);
+    if (!touch || !touch.deleted) continue;
+    const hash = String(entry.hash || tx.hash || "").toUpperCase();
+    if (!/^[0-9A-F]{64}$/.test(hash)) continue;
+    hits.push({ tx, hash, klass: classifyTouch(tx, touch) });
+  }
+  if (hits.length !== 1 || (hits[0].klass.klass !== "filled" && hits[0].klass.klass !== "self")) {
+    return { decision: "research", traded: false, signed: false, rationale: "The RLUSD sell is not yet attributed. Exposure stays open." };
+  }
+  const hit = hits[0];
+  const outsideFill = hit.klass.outside === true && hit.klass.klass === "filled";
+  const basis = resting.cost_basis === "state_only_mark" ? BigInt(resting.cost_basis_drops || "0") : null;
+  const pnl = outsideFill && basis != null ? received - basis : 0n;
+  const next = Object.assign({}, resting, {
+    status: "rlusd_filled",
+    proof_type: "consuming_tx",
+    proof_hash: hit.hash,
+    outside_fill: outsideFill,
+    counterparty: outsideFill ? hit.tx.Account : null,
+    cost_basis: resting.cost_basis || null,
+    realized_pnl_drops: pnl.toString(),
+    outstanding_drops: "0",
+    updated_at: now,
+  });
+  save(dir, next);
+  return {
+    decision: "reconcile",
+    traded: outsideFill,
+    signed: false,
+    learning: false,
+    status: "rlusd_filled",
+    proof_type: "consuming_tx",
+    outside_fill: outsideFill,
+    counterparty: next.counterparty,
+    cost_basis: next.cost_basis,
+    realized_pnl_drops: pnl.toString(),
+    fill_xrp_drops: received.toString(),
+    fill_hash: hit.hash,
   };
 }
 
 async function proveFill(dir, resting, now, clients, observed) {
+  if (resting.action === "sell") return proveSell(dir, resting, now, clients, observed);
   const reserved = resting.unsigned_tx || {};
   const pays = exactOf(reserved.TakerPays);
   const spent = marketXrp(reserved.TakerGets);
@@ -933,7 +1008,10 @@ async function proveFill(dir, resting, now, clients, observed) {
         }
       }
     }
-    if (!proof && !seen.unknown && (history.missing || seen.notFound || dropped)) return noteAbsence(dir, resting, now, clients, observed);
+    const emptyOrPrunedUntouched = history.missing || (hits.length === 0 && dropped);
+    if (!proof && !seen.unknown && seen.notFound === true && emptyOrPrunedUntouched) {
+      return noteAbsence(dir, resting, now, clients, observed);
+    }
   }
   if (!proof) return held;
   if (proof.klass === "cancelled" || proof.klass === "expired") {
@@ -981,20 +1059,33 @@ async function proveFill(dir, resting, now, clients, observed) {
   };
 }
 
+function xrpFor(balance, exact, xrp, numerator, denominator) {
+  const shift = balance.exp - exact.exp;
+  const num = balance.coeff * xrp * numerator;
+  const den = exact.coeff * denominator;
+  if (den <= 0n) return 0n;
+  return shift >= 0 ? (num * (10n ** BigInt(shift))) / den : num / (den * (10n ** BigInt(-shift)));
+}
+
 function passiveSell(observed, balance) {
   const bids = (observed.bids || []).filter((bid) => bid && outside(bid.account));
+  const asks = (observed.asks || []).filter((ask) => ask && outside(ask.account));
   if (!bids.length || !balance || balance.coeff <= 0n) return null;
-  let best = bids[0];
+  let bestBid = bids[0];
   for (const bid of bids) {
-    if (rateLess(best.xrp, best.exact, bid.xrp, bid.exact)) best = bid;
+    if (rateLess(bestBid.xrp, bestBid.exact, bid.xrp, bid.exact)) bestBid = bid;
   }
-  const shift = balance.exp - best.exact.exp;
-  const num = balance.coeff * best.xrp * 101n;
-  const den = best.exact.coeff * 100n;
-  const drops = shift >= 0 ? (num * (10n ** BigInt(shift))) / den : num / (den * (10n ** BigInt(-shift)));
+  let bestAsk = null;
+  for (const ask of asks) {
+    if (!bestAsk || rateLess(ask.xrp, ask.exact, bestAsk.xrp, bestAsk.exact)) bestAsk = ask;
+  }
+  let drops = xrpFor(balance, bestBid.exact, bestBid.xrp, 101n, 100n);
+  if (bestAsk && !rateLess(drops, balance, bestAsk.xrp, bestAsk.exact)) {
+    drops = xrpFor(balance, bestAsk.exact, bestAsk.xrp, 99n, 100n);
+  }
   if (drops <= 0n || drops > MAX_TRADE_DROPS) return null;
-  if (!rateLess(best.xrp, best.exact, drops, balance)) return null;
-  if (rateLess(drops, balance, observed.pool.xrp, observed.pool.exact)) return null;
+  if (!rateLess(bestBid.xrp, bestBid.exact, drops, balance)) return null;
+  if (bestAsk && !rateLess(drops, balance, bestAsk.xrp, bestAsk.exact)) return null;
   const text = formatCoeff(balance.coeff, balance.exp);
   if (!text) return null;
   return { taker_gets: { currency: CURRENCY, issuer: ISSUER, value: text }, taker_pays: drops.toString() };
@@ -1008,9 +1099,11 @@ async function sellInventory(dir, mission, now, clients, observed, room, day, ga
   const offer = passiveSell(observed, observed.balance);
   if (!offer) return { decision: "research", traded: false, rationale: "No passive RLUSD exit sits above the outside bid." };
   const shot = await shotOf(clients.ledger);
-  const exposure = BigInt(offer.taker_pays) + shot.fee + shot.reserveInc;
-  const open = openExposure(state) - BigInt(mission.outstanding_drops || "0");
-  if (open + exposure > MAX_TRADE_DROPS || exposure > room.headroom + BigInt(mission.outstanding_drops || "0")) {
+  const offerReserve = observed.trustline === true ? 0n : shot.reserveInc;
+  const exposure = shot.fee + offerReserve;
+  const previous = openExposure(state);
+  const nextOpen = previous - BigInt(mission.outstanding_drops || "0") + exposure;
+  if (nextOpen > MAX_TRADE_DROPS && nextOpen >= previous) {
     return { decision: "research", traded: false, rationale: "The RLUSD exit does not fit the 2 XRP open cap." };
   }
   const tx = {
@@ -1024,7 +1117,16 @@ async function sellInventory(dir, mission, now, clients, observed, room, day, ga
     LastLedgerSequence: shot.validatedLedger + bounds.LEDGER_WINDOW,
   };
   save(dir, Object.assign({}, mission, { outstanding_drops: "0", updated_at: now }));
-  const reserved = reserve(dir, { key: `w1-rlusd-sell-${day}`, action: "sell", day, exposure, tx }, shot, now);
+  const basis = mission.proof_type === "state_only" || mission.status === "rlusd_vanished_unattributed" ? "state_only_mark" : null;
+  const reserved = reserve(dir, {
+    key: `w1-rlusd-sell-${day}`,
+    action: "sell",
+    day,
+    exposure,
+    tx,
+    cost_basis: basis,
+    cost_basis_drops: mission.inventory_drops || null,
+  }, shot, now);
   let sent;
   try {
     sent = await submitSigned(dir, reserved, tx, {
@@ -1051,6 +1153,10 @@ async function manageRest(dir, resting, now, clients, observed, room, day, gate)
     if (!cancelled) return proveFill(dir, resting, now, clients, observed);
     save(dir, Object.assign({}, resting, { hold: "released", status: "rlusd_cancelled", outstanding_drops: "0", updated_at: now }));
     return { decision: "reconcile", traded: false, status: "rlusd_cancelled" };
+  }
+  if (Array.isArray(resting.absence_ledgers) && resting.absence_ledgers.length) {
+    resting = Object.assign({}, resting, { absence_ledgers: [], updated_at: now });
+    save(dir, resting);
   }
   const exact = exactOf(resting.unsigned_tx.TakerPays);
   const spend = BigInt(resting.unsigned_tx.TakerGets);
