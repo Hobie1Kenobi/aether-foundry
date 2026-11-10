@@ -843,7 +843,10 @@ describe("dex adapter", () => {
 
   it("packs a checksummed handoff with no secret and no live proof", () => {
     const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "w1-pack-"));
-    const packed = packDex({ root: path.resolve(__dirname, "..", ".."), outDir });
+    const probed = spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" });
+    const gitSha = probed.status === 0 && probed.stdout.trim() ? probed.stdout.trim() : "unknown";
+    const packed = packDex({ root: path.resolve(__dirname, "..", ".."), outDir, gitSha });
+    assert.equal(packed.gitSha, gitSha);
     const extract = fs.mkdtempSync(path.join(os.tmpdir(), "w1-pack-out-"));
     assert.equal(spawnSync("tar", ["-xf", packed.tarPath, "-C", extract]).status, 0);
     assert.equal(spawnSync("sha256sum", ["-c", "SHA256SUMS"], { cwd: extract }).status, 0);

@@ -50,7 +50,12 @@ describe("mission runner", () => {
   it("stays dormant and does not treat signer health as mission spend", () => {
     const { main } = require("./runner");
     const root = dir();
-    const body = main({ FOUNDRY_AGENT_SIGN: "yes", MISSION_XRPL_SEED: "" }, root);
+    const body = main({
+      FOUNDRY_AGENT_SIGN: "yes",
+      MISSION_XRPL_SEED: "",
+      FOUNDRY_MISSION_HOME: root,
+      FOUNDRY_MISSION_LEDGER: root,
+    }, root);
     assert.equal(body.dormant, true);
     assert.equal(body.mission_spend_enabled, false);
     assert.equal(body.signer_health_signing_is_not_mission_enabled, true);
