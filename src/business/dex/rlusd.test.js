@@ -12,7 +12,7 @@ const { control, view } = require("../../missions/engine");
 const bounds = require("./bounds");
 const { decide } = require("./director");
 const { tick: supervise, main, nextWait } = require("./supervisor");
-const { CONNECTION_TIMEOUT_MS } = require("./live");
+const { CONNECTION_TIMEOUT_MS, connectLive, websocketList } = require("./live");
 const { readJournal } = require("./director");
 const market = require("./market");
 const rlusd = require("./rlusd");
@@ -64,7 +64,12 @@ function client(state) {
     },
     ledger: {
       request: async (req) => {
-        if (req.command === "server_info") return w1("server_info.json");
+        if (req.command === "server_info") {
+          if (!state.completeLedgers) return w1("server_info.json");
+          const info = JSON.parse(JSON.stringify(w1("server_info.json")));
+          info.result.info.complete_ledgers = state.completeLedgers;
+          return info;
+        }
         if (req.command === "account_info") {
           const info = w1("account_info.json");
           if (!state.sequence) return info;
@@ -99,6 +104,7 @@ function client(state) {
         }
         if (req.command === "fee") return w1("fee.json");
         if (req.command === "tx") {
+          if (state.notFound) return { result: { validated: false, error: "txnNotFound" } };
           if (state.trustProof && req.transaction === state.trustHash) return state.trustProof;
           if (!state.echo || !state.lastTx) return { result: { validated: false, error: "txnNotFound" } };
           return proofFor(state.lastTx, state.lastHash, state.echo === "alter");
@@ -381,18 +387,26 @@ describe("rlusd trading", () => {
     assert.equal(house.row.counterparty, null);
     const amm = await runFill({ taker: anchors.AMM, history: true });
     assert.equal(amm.row.outside_fill, false);
-    const fallback = await runFill({ history: false, trust: true });
-    assert.equal(fallback.row.proof_type, "balance_delta");
+    const fallback = await runFill({ history: false, trust: true, pruned: true });
+    assert.equal(fallback.row.proof_type, "stored_journal");
     assert.equal(fallback.row.counterparty, null);
     assert.equal(fallback.row.outside_fill, false);
     assert.equal(fallback.row.fill_rlusd, shape.taker_pays_value);
+    assert.equal(fallback.row.rationale.includes("stored placement proof"), true);
     assert.equal(fallback.state.signs <= 1, true);
     const open = Object.values(view(fallback.ledger, NOW).missions).filter((mission) => mission.kind === "w1-rlusd" && mission.hold !== "released").reduce((sum, mission) => sum + BigInt(mission.outstanding_drops || "0"), 0n);
     assert.equal(open <= 2000000n, true);
     assert.equal((fallback.state.types || []).filter((type) => type === "OfferCreate").length <= 1, true);
     assert.equal(shape.trustset_sequence, 21093747);
     assert.equal(shape.baseline, "0");
-    assert.equal(shape.trustset_hash_prefix, "DD19FBD9");
+    assert.equal(shape.trustset_hash, "DD19FBD953682B294EAFC82FD4C6A711AB204C9D7DA96F0E4436F99A8E9D616B");
+    assert.equal(shape.create_hash, "FA581AAA64A5494406D144E859D8C58BFF15D9B93B797B341D87E564E8ED5C29");
+    const inside = await runFill({ history: false, trust: true, pruned: true, completeLedgers: "22220000-22225000" });
+    assert.equal(inside.row.decision, "research");
+    assert.equal(inside.row.proof_type, undefined);
+    const insideMission = Object.values(view(inside.ledger, NOW).missions).find((mission) => mission.sequence === shape.sequence);
+    assert.equal(insideMission.status, "rlusd_resting");
+    assert.equal(insideMission.outstanding_drops, "1200010");
   });
 
   it("does not convert a line that is merely larger than the offer", async () => {
@@ -467,6 +481,26 @@ describe("rlusd trading", () => {
     assert.equal(rows[rows.length - 1].learning, false);
     assert.equal(rows[rows.length - 1].traded, false);
   });
+
+  it("uses the next testnet socket when the first connect times out", async () => {
+    assert.throws(() => websocketList("wss://s1.ripple.com"), (error) => error.code === "HOST");
+    const calls = [];
+    const opened = await connectLive(Object.assign(env(), {
+      FOUNDRY_W1_DEX_WS: "wss://testnet.xrpl-labs.com,wss://s.altnet.rippletest.net:51233",
+    }), {
+      connect: async (url) => {
+        calls.push(url);
+        if (calls.length === 1) throw Object.assign(new Error("connect() timed out after 5000 ms"), { name: "NotConnectedError" });
+        return {
+          request: async () => ({ result: { info: { network_id: 1 } } }),
+          disconnect: async () => {},
+          on() {},
+        };
+      },
+    });
+    assert.deepEqual(calls, ["wss://testnet.xrpl-labs.com", "wss://s.altnet.rippletest.net:51233"]);
+    await opened.close();
+  });
 });
 
 function liveOffer(shape, hash) {
@@ -504,6 +538,10 @@ function seedFill(ledger, shape, hash) {
     realized_pnl_drops: "0",
     submit_attempted: true,
     signed_hash: hash,
+    proof_hash: hash,
+    proof_result: "tesSUCCESS",
+    rlusd_baseline: shape.baseline,
+    validated_ledger: shape.stored_ledger,
     updated_at: NOW,
     unsigned_tx: tx,
   };
@@ -512,7 +550,7 @@ function seedFill(ledger, shape, hash) {
 }
 
 function trustHash(shape) {
-  return `${shape.trustset_hash_prefix}${"CD".repeat(28)}`;
+  return shape.trustset_hash;
 }
 
 function seedTrust(ledger, shape, hash) {
@@ -532,6 +570,10 @@ function seedTrust(ledger, shape, hash) {
     outstanding_drops: "0",
     submit_attempted: true,
     signed_hash: hash,
+    proof_hash: hash,
+    proof_result: "tesSUCCESS",
+    proof_balance: shape.baseline,
+    validated_ledger: shape.stored_ledger,
     updated_at: NOW,
     unsigned_tx: {
       TransactionType: "TrustSet",
@@ -576,7 +618,7 @@ function trustProof(shape, hash) {
 
 async function runFill(options) {
   const shape = JSON.parse(fs.readFileSync(path.join(RLUSDFIX, "fill-21093748.json"), "utf8"));
-  const hash = `${shape.create_hash_prefix}${"AB".repeat(26)}${shape.create_hash_suffix}`;
+  const hash = shape.create_hash;
   assert.equal(hash.startsWith(shape.create_hash_prefix), true);
   assert.equal(hash.endsWith(shape.create_hash_suffix), true);
   assert.equal(hash.length, 64);
@@ -626,6 +668,8 @@ async function runFill(options) {
     fillBalance: options.fillBalance || shape.balance,
     history,
     historyThrows: options.historyThrows === true,
+    notFound: options.pruned === true,
+    completeLedgers: options.completeLedgers || (options.pruned ? shape.complete_ledgers_after_create : null),
     echo: "prove",
     lastTx: tx,
     lastHash: hash,

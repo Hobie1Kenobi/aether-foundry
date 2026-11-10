@@ -648,6 +648,69 @@ function rippleBaseline(meta) {
   return null;
 }
 
+function ledgerRanges(text) {
+  if (typeof text !== "string" || !text.trim()) return null;
+  const ranges = [];
+  for (const part of text.split(",")) {
+    const match = part.trim().match(/^(\d+)-(\d+)$/);
+    if (!match) return null;
+    const start = Number(match[1]);
+    const end = Number(match[2]);
+    if (!Number.isInteger(start) || !Number.isInteger(end) || end < start) return null;
+    ranges.push([start, end]);
+  }
+  return ranges.length ? ranges : null;
+}
+
+function historyDropped(ranges, ledger) {
+  if (!ranges || !Number.isInteger(ledger)) return false;
+  const kept = ranges.some(([start, end]) => ledger >= start && ledger <= end);
+  if (kept) return false;
+  const newest = ranges.reduce((high, range) => Math.max(high, range[1]), 0);
+  return ledger < newest;
+}
+
+function provedLedger(mission) {
+  if (mission && Number.isInteger(mission.validated_ledger)) return mission.validated_ledger;
+  if (mission && Number.isInteger(mission.last_ledger_sequence)) return mission.last_ledger_sequence;
+  return null;
+}
+
+async function readRanges(clients) {
+  try {
+    const server = await clients.ledger.request({ command: "server_info" });
+    const text = server && server.result && server.result.info && server.result.info.complete_ledgers;
+    return ledgerRanges(text);
+  } catch (error) {
+    return null;
+  }
+}
+
+async function inspectTx(clients, hash, mission, ranges) {
+  let lookup;
+  try {
+    lookup = await clients.ledger.request({ command: "tx", transaction: hash, binary: false });
+  } catch (error) {
+    return { unknown: true };
+  }
+  const result = lookup && lookup.result;
+  const meta = result && (result.meta || result.metaData);
+  if (result && result.validated === true && meta && meta.TransactionResult === "tesSUCCESS") {
+    return { live: true, result, meta, tx: result.tx_json || result };
+  }
+  if (result && result.error === "txnNotFound" && historyDropped(ranges, provedLedger(mission))) return { pruned: true };
+  return { unproved: true };
+}
+
+function storedCreate(mission, hash) {
+  const tx = mission && mission.unsigned_tx;
+  const recorded = String(mission && (mission.proof_hash || mission.signed_hash) || "").toUpperCase();
+  if (!tx || recorded !== String(hash || "").toUpperCase() || !/^[0-9A-F]{64}$/.test(recorded)) return false;
+  if (mission.status !== "rlusd_resting" && mission.status !== "rlusd_proved") return false;
+  if (tx.TransactionType !== "OfferCreate" || tx.Account !== bounds.ACCOUNT || tx.Sequence !== mission.sequence) return false;
+  return Boolean(exactOf(tx.TakerPays) && marketXrp(tx.TakerGets) != null);
+}
+
 function laterRlusd(state, resting) {
   return rowsOf(state).some((mission) => {
     if (!mission || mission.id === resting.id || mission.action === "trust" || mission.action === "cancel") return false;
@@ -655,26 +718,30 @@ function laterRlusd(state, resting) {
   });
 }
 
-async function provedBaseline(dir, resting, now, clients) {
+function storedTrustBalance(trust) {
+  if (!trust) return null;
+  if (typeof trust.proof_balance === "string") return market.exactIou(trust.proof_balance);
+  if (typeof trust.rlusd_baseline === "string") return market.exactIou(trust.rlusd_baseline);
+  return null;
+}
+
+async function provedBaseline(dir, resting, now, clients, ranges) {
   if (typeof resting.rlusd_baseline === "string") {
     const recorded = market.exactIou(resting.rlusd_baseline);
     if (recorded) return recorded;
   }
   const trust = rowsOf(view(dir, now)).find((mission) => mission.action === "trust" && mission.signed_hash && Number.isInteger(mission.sequence) && mission.sequence + 1 === resting.sequence);
   if (!trust) return null;
-  let lookup;
-  try {
-    lookup = await clients.ledger.request({ command: "tx", transaction: trust.signed_hash, binary: false });
-  } catch (error) {
-    return null;
+  const seen = await inspectTx(clients, trust.signed_hash, trust, ranges);
+  if (seen.unknown) return null;
+  if (seen.live) {
+    const tx = seen.tx;
+    if (!tx || tx.TransactionType !== "TrustSet" || tx.Sequence !== trust.sequence || tx.Account !== bounds.ACCOUNT) return null;
+    if (!tx.LimitAmount || tx.LimitAmount.currency !== CURRENCY || tx.LimitAmount.issuer !== ISSUER) return null;
+    return rippleBaseline(seen.meta);
   }
-  const result = lookup && lookup.result;
-  const tx = result && (result.tx_json || result);
-  const meta = result && (result.meta || result.metaData);
-  if (!result || result.validated !== true || !meta || meta.TransactionResult !== "tesSUCCESS" || !tx) return null;
-  if (tx.TransactionType !== "TrustSet" || tx.Sequence !== trust.sequence || tx.Account !== bounds.ACCOUNT) return null;
-  if (!tx.LimitAmount || tx.LimitAmount.currency !== CURRENCY || tx.LimitAmount.issuer !== ISSUER) return null;
-  return rippleBaseline(meta);
+  if (seen.pruned) return storedTrustBalance(trust);
+  return null;
 }
 
 function partialDelta(touch) {
@@ -771,21 +838,18 @@ async function proveFill(dir, resting, now, clients, observed) {
       type: "consuming_tx",
     };
   } else if (history.missing) {
+    const ranges = await readRanges(clients);
+    if (!historyDropped(ranges, provedLedger(resting))) return held;
     if (laterRlusd(view(dir, now), resting)) return held;
-    const baseline = await provedBaseline(dir, resting, now, clients);
+    const baseline = await provedBaseline(dir, resting, now, clients, ranges);
     const delta = baseline ? subExact(observed.balance, baseline) : null;
     if (!baseline || !delta || !sameExact(delta, pays)) return held;
-    let create;
-    try {
-      create = await clients.ledger.request({ command: "tx", transaction: resting.signed_hash, binary: false });
-    } catch (error) {
-      return held;
-    }
-    const result = create && create.result;
-    const tx = result && (result.tx_json || result);
-    const meta = result && (result.meta || result.metaData);
-    if (result && result.validated === true && meta && meta.TransactionResult === "tesSUCCESS" && binds(resting, tx, meta)) {
+    const seen = await inspectTx(clients, resting.signed_hash, resting, ranges);
+    if (seen.unknown || seen.unproved) return held;
+    if (seen.live && binds(resting, seen.tx, seen.meta)) {
       proof = { klass: "filled", outside: false, hash: null, counterparty: null, type: "balance_delta" };
+    } else if (seen.pruned && storedCreate(resting, resting.signed_hash)) {
+      proof = { klass: "filled", outside: false, hash: null, counterparty: null, type: "stored_journal" };
     }
   }
   if (!proof) return held;
@@ -826,9 +890,11 @@ async function proveFill(dir, resting, now, clients, observed) {
     fill_price: fillPrice(spent, pays),
     realized_pnl_drops: pnl.toString(),
     inventory_drops: inventory.toString(),
-    rationale: proof.type === "balance_delta"
-      ? "The RLUSD balance rose from the proved baseline by the offer amount. History returned a validated empty page."
-      : "A validated trade consumed the resting RLUSD offer.",
+    rationale: proof.type === "stored_journal"
+      ? "The server no longer keeps the create ledger. The stored placement proof and the exact balance change book the fill."
+      : proof.type === "balance_delta"
+        ? "The RLUSD balance rose from the proved baseline by the offer amount. History returned a validated empty page."
+        : "A validated trade consumed the resting RLUSD offer.",
   };
 }
 
@@ -1010,10 +1076,14 @@ async function reconcile(dir, mission, now, clients) {
   const hash = String(result.hash || "").toUpperCase();
   if (hash !== String(mission.signed_hash).toUpperCase() || !binds(mission, tx, meta)) return keep(dir, mission, now, "bind");
   const offer = tx.TransactionType === "OfferCreate";
+  const balance = tx.TransactionType === "TrustSet" ? rippleBaseline(meta) : null;
   const proved = Object.assign({}, mission, {
     status: offer ? "rlusd_resting" : "rlusd_proved",
     submitted: true,
     proof_hash: hash,
+    proof_result: "tesSUCCESS",
+    validated_ledger: Number.isInteger(result.ledger_index) ? result.ledger_index : mission.validated_ledger,
+    proof_balance: balance ? (balance.coeff === 0n ? "0" : formatCoeff(balance.coeff, balance.exp)) : mission.proof_balance,
     updated_at: now,
   });
   save(dir, proved);
