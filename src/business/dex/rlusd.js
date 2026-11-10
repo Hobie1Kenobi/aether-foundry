@@ -403,8 +403,8 @@ async function tick(env, dir, now, clients, position) {
   if (resting) return Object.assign(fields, await manageRest(dir, resting, now, clients, observed, room, day, gate));
   const inventory = findInventory(state);
   if (inventory) {
-    const sold = await sellInventory(dir, inventory, now, clients, observed, room, day, gate);
-    if (inventory.status !== "rlusd_vanished_unattributed" || sold.decision === "place" || sold.signed === true) {
+    const sold = await sellInventory(dir, inventory, now, clients, observed, room, gate);
+    if (sold.book === "no_ask" || inventory.status !== "rlusd_vanished_unattributed" || sold.decision === "place" || sold.signed === true) {
       return Object.assign(fields, sold);
     }
   }
@@ -484,8 +484,8 @@ function withinCaps(state, day, exposure, room) {
   return true;
 }
 
-function affordableSpend(state, room, shot, lineExists) {
-  const reserve = lineExists ? 0n : shot.reserveInc;
+function affordableSpend(state, room, shot) {
+  const reserve = shot.reserveInc;
   const open = openExposure(state);
   const capRoom = MAX_TRADE_DROPS > open ? MAX_TRADE_DROPS - open : 0n;
   const bank = typeof room.headroom === "bigint" && room.headroom > 0n ? room.headroom : 0n;
@@ -500,8 +500,7 @@ function affordableSpend(state, room, shot, lineExists) {
 async function buy(dir, now, clients, shot, observed, room, day, gate) {
   const state = view(dir, now);
   if (findResting(state)) return { decision: "research", traded: false, rationale: "A RLUSD offer is still open." };
-  const lineExists = observed.trustline === true;
-  const spend = affordableSpend(state, room, shot, lineExists);
+  const spend = affordableSpend(state, room, shot);
   if (spend < MIN_TRADE_DROPS) {
     return { decision: "research", rationale: "The next RLUSD trade would exceed the 2 XRP cap or the headroom." };
   }
@@ -533,7 +532,7 @@ async function buy(dir, now, clients, shot, observed, room, day, gate) {
   };
   const action = bid ? "rest" : "swap";
   const key = bid ? (rowsOf(state).some((mission) => mission.idempotency_key === REST_KEY) ? `w1-rlusd-rest-${day}` : REST_KEY) : `w1-rlusd-swap-${day}`;
-  const offerReserve = lineExists ? 0n : shot.reserveInc;
+  const offerReserve = shot.reserveInc;
   const exposure = (bid ? BigInt(bid.taker_gets) : priced.sendMax) + shot.fee + (bid ? offerReserve : 0n);
   if (!withinCaps(state, day, exposure, room)) {
     return { decision: "research", aeth_exit_proposal: room.headroom < spend ? "w1-exit-sole-lp" : null, rationale: "Open RLUSD exposure is already at the 2 XRP cap." };
@@ -944,7 +943,15 @@ async function proveFill(dir, resting, now, clients, observed) {
     if (!delta || !atLeast(observed.balance, delta.consumed)) return held;
     const marked = markInventory(observed.pool, observed.bids, delta.consumed);
     const inventory = marked.proved ? marked.xrp : delta.consumedXrp;
-    const open = delta.remainingXrp + inventory;
+    let reserve = null;
+    try {
+      const server = await clients.ledger.request({ command: "server_info" });
+      reserve = reserveIncrement(server && server.result && server.result.info);
+    } catch (error) {
+      reserve = null;
+    }
+    if (reserve == null) return held;
+    const open = delta.remainingXrp + inventory + reserve;
     if (open > MAX_TRADE_DROPS) return held;
     const text = formatCoeff(delta.consumed.coeff, delta.consumed.exp);
     const next = Object.assign({}, resting, {
@@ -1070,37 +1077,52 @@ function xrpFor(balance, exact, xrp, numerator, denominator) {
 function passiveSell(observed, balance) {
   const bids = (observed.bids || []).filter((bid) => bid && outside(bid.account));
   const asks = (observed.asks || []).filter((ask) => ask && outside(ask.account));
-  if (!bids.length || !balance || balance.coeff <= 0n) return null;
+  if (!bids.length || !asks.length || !balance || balance.coeff <= 0n) return null;
   let bestBid = bids[0];
   for (const bid of bids) {
     if (rateLess(bestBid.xrp, bestBid.exact, bid.xrp, bid.exact)) bestBid = bid;
   }
-  let bestAsk = null;
+  let bestAsk = asks[0];
   for (const ask of asks) {
-    if (!bestAsk || rateLess(ask.xrp, ask.exact, bestAsk.xrp, bestAsk.exact)) bestAsk = ask;
+    if (rateLess(ask.xrp, ask.exact, bestAsk.xrp, bestAsk.exact)) bestAsk = ask;
   }
   let drops = xrpFor(balance, bestBid.exact, bestBid.xrp, 101n, 100n);
-  if (bestAsk && !rateLess(drops, balance, bestAsk.xrp, bestAsk.exact)) {
+  if (!rateLess(drops, balance, bestAsk.xrp, bestAsk.exact)) {
     drops = xrpFor(balance, bestAsk.exact, bestAsk.xrp, 99n, 100n);
   }
   if (drops <= 0n || drops > MAX_TRADE_DROPS) return null;
   if (!rateLess(bestBid.xrp, bestBid.exact, drops, balance)) return null;
-  if (bestAsk && !rateLess(drops, balance, bestAsk.xrp, bestAsk.exact)) return null;
+  if (!rateLess(drops, balance, bestAsk.xrp, bestAsk.exact)) return null;
   const text = formatCoeff(balance.coeff, balance.exp);
   if (!text) return null;
   return { taker_gets: { currency: CURRENCY, issuer: ISSUER, value: text }, taker_pays: drops.toString() };
 }
 
-async function sellInventory(dir, mission, now, clients, observed, room, day, gate) {
+async function sellInventory(dir, mission, now, clients, observed, room, gate) {
+  const today = policy.chicagoDay(now);
   const state = view(dir, now);
-  if (dayTrades(state, day) >= MAX_TRADES_PER_DAY) {
+  if (dayTrades(state, today) >= MAX_TRADES_PER_DAY) {
     return { decision: "research", traded: false, rationale: "The Chicago day already has its RLUSD orders. The inventory is not sold." };
   }
+  const outsideBids = (observed.bids || []).filter((bid) => bid && outside(bid.account));
+  const outsideAsks = (observed.asks || []).filter((ask) => ask && outside(ask.account));
+  if (!outsideBids.length || !outsideAsks.length) {
+    return {
+      decision: "research",
+      traded: false,
+      signed: false,
+      book: outsideAsks.length ? "no_bid" : "no_ask",
+      rationale: "No passive RLUSD exit sits between the outside bid and the outside ask.",
+    };
+  }
   const offer = passiveSell(observed, observed.balance);
-  if (!offer) return { decision: "research", traded: false, rationale: "No passive RLUSD exit sits above the outside bid." };
+  if (!offer) return { decision: "research", traded: false, signed: false, rationale: "No passive RLUSD exit sits between the outside bid and the outside ask." };
   const shot = await shotOf(clients.ledger);
-  const offerReserve = observed.trustline === true ? 0n : shot.reserveInc;
+  const offerReserve = shot.reserveInc;
   const exposure = shot.fee + offerReserve;
+  if (exposure > room.headroom) {
+    return { decision: "research", traded: false, rationale: "The RLUSD exit reserve does not fit the bankroll headroom." };
+  }
   const previous = openExposure(state);
   const nextOpen = previous - BigInt(mission.outstanding_drops || "0") + exposure;
   if (nextOpen > MAX_TRADE_DROPS && nextOpen >= previous) {
@@ -1119,9 +1141,9 @@ async function sellInventory(dir, mission, now, clients, observed, room, day, ga
   save(dir, Object.assign({}, mission, { outstanding_drops: "0", updated_at: now }));
   const basis = mission.proof_type === "state_only" || mission.status === "rlusd_vanished_unattributed" ? "state_only_mark" : null;
   const reserved = reserve(dir, {
-    key: `w1-rlusd-sell-${day}`,
+    key: `w1-rlusd-sell-${today}`,
     action: "sell",
-    day,
+    day: today,
     exposure,
     tx,
     cost_basis: basis,
