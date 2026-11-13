@@ -1636,6 +1636,40 @@ describe("rlusd trading", () => {
     assert.deepEqual(calls, ["wss://testnet.xrpl-labs.com", "wss://s.altnet.rippletest.net:51233"]);
     await opened.close();
   });
+
+  it("does not count an on-ledger 200000-drop owner reserve twice", () => {
+    assert.equal(rlusd.MAX_TRADE_DROPS.toString(), "2000000");
+    const position = { proved_xrp: 57058389n, reserve_inc: 200000n };
+    const trust = { kind: "w1-rlusd", action: "trust", status: "rlusd_proved", hold: "uncertain", outstanding_drops: "200010", realized_loss_drops: "0" };
+    const bid = { kind: "w1-rlusd", action: "rest", status: "rlusd_resting", sequence: 21093750, hold: "uncertain", outstanding_drops: "1200010", realized_loss_drops: "0" };
+    const state = { missions: { trust, bid } };
+    const listed = {
+      trustline: true,
+      own: [{ seq: 21093750, taker_gets: "1000000", taker_pays: { currency: rlusd.CURRENCY, issuer: rlusd.ISSUER, value: "0.07708670472036428" } }],
+    };
+    const room = rlusd.headroom(position, state, listed);
+    const countedTwice = 57058389n + 200010n + 1200010n;
+    assert.equal((100000000n - countedTwice).toString(), "41541591");
+    assert.equal(room.used.toString(), (countedTwice - 400000n).toString());
+    assert.equal(room.headroom.toString(), "41941591");
+    assert.equal(room.used - position.proved_xrp, 10n + 1000010n);
+    assert.equal(trust.outstanding_drops, "200010");
+    assert.equal(bid.outstanding_drops, "1200010");
+    assert.equal(200010n + 1200010n <= rlusd.MAX_TRADE_DROPS, true);
+    const inflight = rlusd.headroom(position, {
+      missions: {
+        bid: { kind: "w1-rlusd", action: "rest", status: "rlusd_reserved", sequence: 21093750, hold: "uncertain", outstanding_drops: "1200010", realized_loss_drops: "0" },
+      },
+    }, { trustline: false, own: [] });
+    assert.equal(inflight.used.toString(), (57058389n + 1200010n).toString());
+    const marked = rlusd.headroom(position, {
+      missions: {
+        vanished: { kind: "w1-rlusd", action: "rest", status: "rlusd_vanished_unattributed", sequence: 21093748, hold: "uncertain", outstanding_drops: "1000000", realized_loss_drops: "0" },
+      },
+    }, { trustline: true, own: [] });
+    assert.equal(marked.used.toString(), (57058389n + 1000000n).toString());
+    assert.equal(marked.headroom.toString(), (100000000n - 57058389n - 1000000n).toString());
+  });
 });
 
 function liveOffer(shape, hash) {

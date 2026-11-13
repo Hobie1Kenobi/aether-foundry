@@ -109,7 +109,8 @@ describe("w1 live public replay", () => {
     assert.equal(row.base_reserve_drops, "1000000");
     assert.equal(row.reserve_drops, "1600000");
     assert.equal(row.bankroll_used_drops, "56658389");
-    assert.equal(row.bankroll_remaining_drops, "0");
+    assert.equal(row.bankroll_remaining_drops, "43341611");
+    assert.equal(row.cap_blocked, false);
     assert.equal(state.signs, 0);
   });
 

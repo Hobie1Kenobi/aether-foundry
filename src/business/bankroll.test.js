@@ -124,7 +124,8 @@ describe("shared dex lp bankroll", () => {
     assert.equal(position.offer_lock.toString(), "2275000");
     assert.equal(position.reserve.toString(), "1600000");
     assert.equal(position.proved_xrp.toString(), "56658000");
-    assert.equal(position.remaining.toString(), "0");
+    assert.equal(position.remaining.toString(), "43342000");
+    assert.equal(position.cap_blocked, false);
     assert.equal(position.limit.toString(), "100000000");
     assert.equal(bankroll.spendable(operatorShape()).toString(), "44147152");
     const live = {
@@ -153,6 +154,8 @@ describe("shared dex lp bankroll", () => {
     assert.equal(withSell.base_reserve.toString(), "1000000");
     assert.equal(withSell.pending.toString(), "0");
     assert.equal(withSell.proved_xrp.toString(), "57058389");
+    assert.equal(withSell.remaining.toString(), "42941611");
+    assert.equal(withSell.cap_blocked, false);
     const doubled = bankroll.room({
       missions: {
         lp: { kind: "w1-amm-lp", status: "amm_open", outstanding_drops: "51783000", hold: "uncertain", realized_loss_drops: "0" },
@@ -287,5 +290,122 @@ describe("shared dex lp bankroll", () => {
     const again = await decide(env, { now: NOW, ledger, journal }, clients(state));
     assert.equal(again.decision, "reconcile");
     assert.equal(state.signs, 1);
+  });
+
+  it("reports the Nov 11 sole-LP tick as free capital under the shared cap", async () => {
+    const ledger = home();
+    const journal = fs.mkdtempSync(path.join(os.tmpdir(), "bank-sample-"));
+    const state = fresh({
+      balance: "49036270",
+      ownerCount: 10,
+      reserveBase: 1,
+      reserveInc: 0.2,
+      offers: [
+        { seq: 21093737, taker_gets: "475000", taker_pays: AETH },
+        { seq: 21093738, taker_gets: AETH, taker_pays: "525000" },
+        { seq: 21093739, taker_gets: AETH, taker_pays: "2200000" },
+        { seq: 21093740, taker_gets: "1800000", taker_pays: AETH },
+      ],
+      lines: [{ account: anchors.AMM, currency: LP, balance: "100" }],
+      book: [],
+      amm: {
+        account: anchors.AMM,
+        amount: "51783389",
+        amount2: { currency: anchors.AETH_HEX, issuer: anchors.WALLETS.W0.address, value: "1" },
+        lp_token: { currency: LP, issuer: anchors.AMM, value: "100" },
+        trading_fee: 500,
+      },
+    });
+    const env = {
+      FOUNDRY_W1_DEX_LIVE: "yes",
+      FOUNDRY_W1_DEX_WS: "wss://testnet.xrpl-labs.com",
+      FOUNDRY_W1_DEX_ACCOUNT_FILE: "/tmp/w1.json",
+      FOUNDRY_DEX_EXECUTE: "yes",
+      FOUNDRY_DEX_ROLE: "W1",
+      FOUNDRY_DEX_NETWORK: "xrpl:1",
+      FOUNDRY_DEX_ACCOUNT: anchors.WALLETS.W1.address,
+      FOUNDRY_DEX_ACTIVATE: bounds.PHRASE,
+      FOUNDRY_DEX_BANKROLL_DROPS: "100000000",
+      FOUNDRY_DEX_MAX_AETH: bounds.MAX_AETH,
+      FOUNDRY_DEX_AXELAR_DROPS: "0",
+    };
+    const row = await decide(env, { now: NOW, ledger, journal }, clients(state));
+    assert.equal(row.decision, "research");
+    assert.equal(row.learning, false);
+    assert.equal(row.traded, false);
+    assert.equal(row.day_used_drops, "1747");
+    assert.equal(row.lp_xrp_drops, "51783389");
+    assert.equal(row.offer_lock_drops, "2275000");
+    assert.equal(row.reserve_drops, "2000000");
+    assert.equal(row.base_reserve_drops, "1000000");
+    assert.equal(row.bankroll_used_drops, "57058389");
+    assert.equal(row.bankroll_limit_drops, "100000000");
+    assert.equal(row.bankroll_remaining_drops, "42941611");
+    assert.equal(row.cap_blocked, false);
+    assert.equal(row.sole_lp, true);
+    assert.equal(row.foreign_quotes, 0);
+    assert.equal(row.risk_increasing, false);
+    assert.equal(state.signs, 0);
+    const sample = {
+      proved: true,
+      reserveBase: 1000000n,
+      reserveInc: 200000n,
+      ownerCount: 10n,
+      balance: 49036270n,
+      offers: [{ seq: 21093737, locked: 2275000n, aeth: 0n }],
+      rlusdOffers: [{ seq: 21093750, locked: 1000000n, aeth: 0n }],
+      bids: [],
+      walletAeth: 0n,
+      pool: { xrp: 51783389n, aethScaled: 1n, balance: 1n, supply: 1n, sole: true },
+    };
+    const clamped = bankroll.room({ missions: {} }, sample);
+    assert.equal(clamped.used.toString(), "57058389");
+    assert.equal(clamped.offer_lock.toString(), "2275000");
+    assert.equal(clamped.reserve.toString(), "2000000");
+    assert.equal(bankroll.spendable(sample).toString(), "42761270");
+    assert.equal(clamped.remaining.toString(), "42761270");
+    assert.equal(clamped.cap_blocked, false);
+    assert.equal(clamped.risk_increasing, false);
+  });
+
+  it("blocks the shared cap only when the bankroll or the spendable balance is exhausted", () => {
+    const exhausted = bankroll.room({ missions: {} }, {
+      proved: true,
+      reserveBase: 1000000n,
+      reserveInc: 200000n,
+      ownerCount: 0n,
+      balance: 200000000n,
+      offers: [{ seq: 1, locked: 2000000n }],
+      bids: [],
+      walletAeth: 0n,
+      pool: { xrp: 98000000n, aethScaled: 1n, balance: 1n, supply: 1n, sole: true },
+    });
+    assert.equal(exhausted.used.toString(), "101000000");
+    assert.equal(exhausted.remaining.toString(), "0");
+    assert.equal(exhausted.cap_blocked, true);
+    assert.equal(exhausted.risk_increasing, false);
+    assert.equal(exhausted.limit.toString(), "100000000");
+    const dry = bankroll.room({ missions: {} }, {
+      proved: true,
+      reserveBase: 1000000n,
+      reserveInc: 200000n,
+      ownerCount: 10n,
+      balance: 5275000n,
+      offers: [{ seq: 1, locked: 2275000n }],
+      bids: [],
+      walletAeth: 0n,
+      pool: { xrp: 51783389n, aethScaled: 1n, balance: 1n, supply: 1n, sole: true },
+    });
+    assert.equal(dry.used < dry.limit, true);
+    assert.equal(bankroll.spendable({
+      proved: true,
+      balance: 5275000n,
+      reserveBase: 1000000n,
+      reserveInc: 200000n,
+      ownerCount: 10n,
+      offers: [{ locked: 2275000n }],
+    }).toString(), "0");
+    assert.equal(dry.remaining.toString(), "0");
+    assert.equal(dry.cap_blocked, true);
   });
 });

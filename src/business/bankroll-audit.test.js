@@ -143,7 +143,8 @@ describe("bankroll audit", () => {
     assert.equal(bare.aeth_valuation, "unproved");
     assert.equal(bare.aeth_xrp.toString(), "0");
     assert.equal(bare.risk_increasing, false);
-    assert.equal(bare.remaining.toString(), "0");
+    assert.equal(bare.cap_blocked, false);
+    assert.equal(bare.remaining.toString(), "43342000");
     assert.equal(bare.base_reserve.toString(), "1000000");
     assert.equal(bare.proved_xrp.toString(), (51783000n + 2275000n + 1000000n + 1600000n).toString());
     const bid = bankroll.room(null, observed({
@@ -151,7 +152,8 @@ describe("bankroll audit", () => {
     }));
     assert.equal(bid.aeth_valuation, "unproved");
     assert.equal(bid.aeth_xrp.toString(), "0");
-    assert.equal(bid.remaining.toString(), "0");
+    assert.equal(bid.remaining.toString(), bare.remaining.toString());
+    assert.equal(bid.risk_increasing, false);
     const dust = bankroll.room(null, observed({
       bids: [{ account: "rForeignBid1111111111111111111111", xrp: 1n, aeth: 4923540000000000000n }],
     }));
@@ -161,7 +163,8 @@ describe("bankroll audit", () => {
       bids: [{ account: "rForeignBid1111111111111111111111", xrp: 1000n, aeth: 1n }],
     }));
     assert.equal(partial.aeth_valuation, "unproved");
-    assert.equal(partial.remaining.toString(), "0");
+    assert.equal(partial.remaining.toString(), bare.remaining.toString());
+    assert.equal(partial.risk_increasing, false);
     const frozen = bankroll.room(null, observed({ walletAeth: 1n, aethFrozen: true, pool: { xrp: 1000n, aethScaled: 1n, balance: 0n, supply: 100n, sole: false }, offers: [] }));
     assert.equal(frozen.aeth_valuation, "unproved");
     assert.equal(frozen.risk_increasing, false);
@@ -421,7 +424,9 @@ describe("bankroll audit", () => {
     assert.equal(row.base_reserve_drops, "1000000");
     assert.equal(row.reserve_drops, "1600000");
     assert.equal(row.bankroll_used_drops, "56658000");
-    assert.equal(row.bankroll_remaining_drops, "0");
+    assert.equal(row.bankroll_remaining_drops, "43342000");
+    assert.equal(row.cap_blocked, false);
+    assert.equal(row.risk_increasing, false);
     assert.equal(row.traded, false);
     assert.equal(state.signs, 0);
   });
