@@ -708,6 +708,10 @@ describe("W3 taker and W4 quoter", () => {
       hold: "uncertain",
       outstanding_drops: "200012",
       bought_rlusd: "0.05",
+      proof_result: "tesSUCCESS",
+      proof_type: "consuming_tx",
+      proof_hash: "AB".repeat(32),
+      cost_basis_drops: "100000",
       realized_loss_drops: "0",
       submit_attempted: true,
       chicago_day: "2026-11-13",
@@ -960,7 +964,9 @@ describe("W3 fill acquisition", () => {
 
   it("re-proves a zero acquire from the validated buy and sells the smaller official amount", async () => {
     const { row, saved, state } = await replay(provenBuy(), buyResult());
-    assert.equal(saved.bought_rlusd, fixture.acquired);
+    assert.equal(saved.bought_rlusd, "0.01");
+    assert.equal(saved.cost_basis_drops, "81261");
+    assert.notEqual(saved.cost_basis_drops, "200000");
     assert.equal(saved.hold, "uncertain");
     assert.equal(saved.id, "msna9cb1105fdf57c75");
     assert.equal(saved.sequence, 21093764);
@@ -1056,8 +1062,9 @@ describe("W3 fill acquisition", () => {
     };
     const row = await taker.tick(baseEnv("W3"), ledger, NOW, roleLedger("W3", state), { headroom: 100000000n }, null);
     const saved = view(ledger, NOW).missions.msna9cb1105fdf57c75;
-    assert.equal(saved.bought_rlusd, fixture.acquired);
-    assert.equal(saved.outstanding_drops, "200010");
+    assert.equal(saved.bought_rlusd, "0.01");
+    assert.equal(saved.cost_basis_drops, "81261");
+    assert.equal(saved.outstanding_drops, "81261");
     assert.equal(row.signed, false);
     assert.equal(state.box.signs, 0);
     assert.equal(exposure.teamOpen(view(ledger, NOW)) > 3500000n, true);

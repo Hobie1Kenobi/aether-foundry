@@ -90,6 +90,18 @@
             }
           }
         }
+      },
+      {
+        "ModifiedNode": {
+          "LedgerEntryType": "AccountRoot",
+          "FinalFields": {
+            "Account": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+            "Balance": "49880000"
+          },
+          "PreviousFields": {
+            "Balance": "50000000"
+          }
+        }
       }
     ]
   }
