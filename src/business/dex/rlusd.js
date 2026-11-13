@@ -314,12 +314,24 @@ function dayTrades(state, day) {
   return rowsOf(state).filter((mission) => mission.submit_attempted === true && mission.chicago_day === day && (mission.action === "rest" || mission.action === "swap" || mission.action === "replace" || mission.action === "sell")).length;
 }
 
+function admit(state, order) {
+  if (typeof order.cap !== "bigint") return;
+  const add = typeof order.exposure === "bigint" ? order.exposure : 0n;
+  if (exposure.blocksNewRisk(state, "W1")) throw coded("An uncertain RLUSD hold from another role is still open. Nothing is signed.", "HOLD");
+  const economic = order.action === "rest" || order.action === "swap" || order.action === "replace" || order.action === "sell";
+  if (economic && order.day && dayTrades(state, order.day) >= MAX_TRADES_PER_DAY) {
+    throw coded("The Chicago day already has its RLUSD orders.", "DAY");
+  }
+  if (!exposure.allows(state, "W1", add, order.cap)) throw coded("The team RLUSD cap or the W1 2 XRP cap is already full.", "CAP");
+}
+
 function reserve(dir, order, shot, now) {
   return exclusive(dir, (api) => {
     const state = view(dir, now);
     if (state.killed) throw coded("hard stop is on", "killed");
     const existing = Object.values(state.missions || {}).find((mission) => mission && mission.idempotency_key === order.key);
     if (existing && existing.hold === "released" && existing.status === "rlusd_unsent" && existing.submit_attempted !== true) {
+      admit(state, order);
       const mission = Object.assign({}, existing, {
         hold: "uncertain",
         status: "rlusd_reserved",
@@ -334,7 +346,8 @@ function reserve(dir, order, shot, now) {
       api.append({ type: "mission.upsert", at: now, mission });
       return { mission, created: false };
     }
-    if (existing) return { mission: existing, created: false, terminal: existing.status === "rlusd_cancelled" || existing.status === "rlusd_expired" || existing.status === "rlusd_filled" };
+    if (existing) return { mission: existing, created: false, terminal: existing.status === "rlusd_cancelled" || existing.status === "rlusd_expired" || existing.status === "rlusd_filled" || existing.signing === true };
+    admit(state, order);
     const mission = {
       id: `msn${crypto.createHash("sha256").update(`rlusd|${order.key}`).digest("hex").slice(0, 16)}`,
       idempotency_key: order.key,
@@ -345,6 +358,7 @@ function reserve(dir, order, shot, now) {
       hold: "uncertain",
       signed: false,
       submitted: false,
+      signing: true,
       action: order.action,
       chicago_day: order.day,
       sequence: shot.sequence,
@@ -360,6 +374,7 @@ function reserve(dir, order, shot, now) {
       updated_at: now,
       unsigned_tx: order.tx,
     };
+    if (mission.id === exposure.LEGACY_HOLD) throw coded("refusing the legacy mission hold", "HOLD");
     api.append({ type: "mission.upsert", at: now, mission });
     return { mission, created: true };
   });
@@ -510,7 +525,16 @@ async function trust(dir, now, clients, shot, room, day, gate, teamCap) {
     Sequence: shot.sequence,
     LastLedgerSequence: shot.validatedLedger + bounds.LEDGER_WINDOW,
   };
-  const reserved = reserve(dir, { key: TRUST_KEY, action: "trust", day, exposure: need, tx }, shot, now);
+  if (clients && typeof clients.beforeReserve === "function") await clients.beforeReserve();
+  let reserved;
+  try {
+    reserved = reserve(dir, { key: TRUST_KEY, action: "trust", day, exposure: need, tx, cap: teamCap }, shot, now);
+  } catch (error) {
+    if (error && (error.code === "CAP" || error.code === "HOLD" || error.code === "DAY")) {
+      return { decision: "research", traded: false, signed: false, rationale: error.message };
+    }
+    throw error;
+  }
   const sent = await submitSigned(dir, reserved, tx, {
     type: "TrustSet",
     account: bounds.ACCOUNT,
@@ -586,7 +610,16 @@ async function buy(dir, now, clients, shot, observed, room, day, gate, teamCap) 
     return { decision: "research", aeth_exit_proposal: room.headroom < spend ? "w1-exit-sole-lp" : null, rationale: "Open RLUSD exposure is already at the 2 XRP cap." };
   }
   const baseline = !observed.balance || observed.balance.coeff === 0n ? "0" : formatCoeff(observed.balance.coeff, observed.balance.exp);
-  const reserved = reserve(dir, { key, action: key.startsWith("w1-rlusd-rest-") ? "replace" : action, day, exposure, tx, baseline }, shot, now);
+  if (clients && typeof clients.beforeReserve === "function") await clients.beforeReserve();
+  let reserved;
+  try {
+    reserved = reserve(dir, { key, action: key.startsWith("w1-rlusd-rest-") ? "replace" : action, day, exposure, tx, baseline, cap: teamCap }, shot, now);
+  } catch (error) {
+    if (error && (error.code === "CAP" || error.code === "HOLD" || error.code === "DAY")) {
+      return { decision: "research", traded: false, signed: false, rationale: error.message };
+    }
+    throw error;
+  }
   const expected = bid ? {
     type: "OfferCreate",
     account: bounds.ACCOUNT,
@@ -1371,15 +1404,25 @@ async function sellInventory(dir, mission, now, clients, observed, room, gate, t
     return { decision: "research", traded: false, signed: false, replay: false, rationale: "A finished RLUSD sell already uses this Chicago day key. Exposure is unchanged." };
   }
   const basis = mission.proof_type === "state_only" || mission.status === "rlusd_vanished_unattributed" || mission.status === "rlusd_cancelled" || mission.status === "rlusd_expired" ? "state_only_mark" : null;
-  const reserved = reserve(dir, {
-    key,
-    action: "sell",
-    day: today,
-    exposure: exitCost,
-    tx,
-    cost_basis: basis,
-    cost_basis_drops: mission.inventory_drops || mission.outstanding_drops || null,
-  }, shot, now);
+  if (clients && typeof clients.beforeReserve === "function") await clients.beforeReserve();
+  let reserved;
+  try {
+    reserved = reserve(dir, {
+      key,
+      action: "sell",
+      day: today,
+      exposure: exitCost,
+      tx,
+      cost_basis: basis,
+      cost_basis_drops: mission.inventory_drops || mission.outstanding_drops || null,
+      cap: teamCap,
+    }, shot, now);
+  } catch (error) {
+    if (error && (error.code === "CAP" || error.code === "HOLD" || error.code === "DAY")) {
+      return { decision: "research", traded: false, signed: false, rationale: error.message };
+    }
+    throw error;
+  }
   if (reserved.terminal || reserved.mission.submit_attempted === true) {
     return { decision: "research", traded: false, signed: false, replay: true, rationale: "The RLUSD sell key already finished. Exposure is unchanged." };
   }

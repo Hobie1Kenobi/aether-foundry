@@ -14,6 +14,7 @@ const bounds = require("./bounds");
 const rlusd = require("./rlusd");
 const book = require("./book");
 const signer = require("./signer");
+const { connectRole } = require("./live");
 
 const INTERVAL_MS = 30 * 60 * 1000;
 const DOCUMENT_ID = 2;
@@ -94,6 +95,34 @@ function tooSoon(dir, now) {
   return false;
 }
 
+function locked(dir, fn) {
+  if (!dir) return fn();
+  fs.mkdirSync(dir, { recursive: true });
+  const lock = path.join(dir, "lock");
+  const start = Date.now();
+  while (true) {
+    try {
+      fs.mkdirSync(lock);
+      break;
+    } catch (error) {
+      if (!error || error.code !== "EEXIST") throw error;
+      if (Date.now() - start > 8000) throw coded("oracle journal lock timed out", "LOCK");
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    fs.rmSync(lock, { recursive: true, force: true });
+  }
+}
+
+function freshUpdate(now) {
+  const stamped = math.unixSeconds(now);
+  const wall = math.unixSeconds(new Date());
+  return Math.abs(wall - stamped) > 300 ? wall : stamped;
+}
+
 function writePublic(dir, record) {
   if (!dir) return record;
   const text = JSON.stringify(record);
@@ -110,29 +139,39 @@ async function tick(env, input, clients) {
   if (source.FOUNDRY_DEX_AXELAR_DROPS != null && source.FOUNDRY_DEX_AXELAR_DROPS !== "0") {
     throw coded("Axelar budget is not zero", "BRIDGE");
   }
-  if (tooSoon(body.journal, now)) {
+  const dry = !liveGate(source);
+  const paused = locked(body.journal, () => tooSoon(body.journal, now));
+  if (paused) {
     return {
       decision: "research",
       role: "W5",
       learning: false,
       signed: false,
-      dry_run: !liveGate(source),
+      dry_run: dry,
       traded: false,
       fee_only: true,
       rationale: "The RLUSD oracle posted within the last 30 minutes.",
     };
   }
   let pool = body.pool || null;
-  if (!pool && clients && clients.ledger) {
+  let shot = null;
+  if (clients && clients.ledger && (!pool || !dry)) {
     const loaded = await book.load(clients.ledger, anchors.WALLETS.W5.address, book.REGULAR.W5);
-    pool = loaded.pool;
+    shot = loaded.shot;
+    if (!pool) pool = loaded.pool;
     pool.network_id = loaded.shot.networkId;
   }
   if (!pool) throw coded("RLUSD pool is not priced", "VALUATION");
   if (Number(pool.network_id) !== 1) throw coded("refusing network id", "MAINNET");
   const tx = buildTx(pool, now);
+  if (!dry) tx.LastUpdateTime = freshUpdate(now);
   if (tx.Account === anchors.WALLETS.W0.address) throw coded("refusing to sign as W0", "W0");
-  const dry = !liveGate(source);
+  if (!dry) {
+    if (!shot) throw coded("oracle live transaction is not autofilled", "TX");
+    tx.Fee = shot.fee.toString();
+    tx.Sequence = shot.sequence;
+    tx.LastLedgerSequence = shot.validatedLedger + bounds.LEDGER_WINDOW;
+  }
   const row = {
     schema: "aether.business.rlusd-oracle",
     at: now,
@@ -150,7 +189,24 @@ async function tick(env, input, clients) {
     quote_xrp_per_rlusd: xrpPerRlusd(pool),
     tx,
   };
-  if (dry) return writePublic(body.journal, row);
+  const admitted = locked(body.journal, () => {
+    if (tooSoon(body.journal, now)) return false;
+    writePublic(body.journal, row);
+    return true;
+  });
+  if (!admitted) {
+    return {
+      decision: "research",
+      role: "W5",
+      learning: false,
+      signed: false,
+      dry_run: dry,
+      traded: false,
+      fee_only: true,
+      rationale: "The RLUSD oracle posted within the last 30 minutes.",
+    };
+  }
+  if (dry) return row;
   if (tx.Fee == null || tx.Sequence == null || tx.LastLedgerSequence == null) {
     throw coded("oracle live transaction is not autofilled", "TX");
   }
@@ -182,7 +238,17 @@ function main(argv, deps) {
     write(`${JSON.stringify({ role: "w5-rlusd-oracle", dormant: true, learning: false, dry_run: true })}\n`);
     return Promise.resolve(0);
   }
-  const once = () => tick(env, options.input || { journal: env.FOUNDRY_W5_ORACLE_JOURNAL, now: options.now }, options.clients);
+  const once = async () => {
+    const input = options.input || { journal: env.FOUNDRY_W5_ORACLE_JOURNAL, now: options.now };
+    if (options.clients || !liveGate(env)) return tick(env, input, options.clients);
+    const opened = await connectRole(env, "W5", options.deps);
+    try {
+      await opened.openKey();
+      return await tick(env, input, opened.clients);
+    } finally {
+      await opened.close();
+    }
+  };
   if (!supervise) return once().then(() => 0);
   return once().then(() => new Promise((resolve) => {
     const timer = setInterval(() => {

@@ -12,14 +12,15 @@ start_once() {
   local name="$1"
   shift
   local pidfile="$HOME_DIR/${name}.pid"
-  if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
-    return 0
-  fi
   (
+    flock -w 10 9 || exit 0
+    if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile" 2>/dev/null)" 2>/dev/null; then
+      exit 0
+    fi
     cd "$ROOT" || exit 1
     "$@" >> "$HOME_DIR/${name}.log" 2>&1 &
     echo $! > "$pidfile"
-  )
+  ) 9>"$HOME_DIR/${name}.lock"
 }
 
 if [ "${FOUNDRY_W1_DEX_SUPERVISOR:-}" = "yes" ]; then

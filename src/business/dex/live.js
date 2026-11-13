@@ -96,7 +96,12 @@ function readRoleAccount(file, account) {
     if (!stat.isFile() || stat.nlink !== 1 || (stat.mode & 0o777) !== 0o600) {
       throw coded(w1 ? "W1 account file must be mode 0600" : "role account file must be mode 0600", "AUTH");
     }
-    const body = JSON.parse(fs.readFileSync(fd, "utf8"));
+    let body;
+    try {
+      body = JSON.parse(fs.readFileSync(fd, "utf8"));
+    } catch {
+      throw coded(w1 ? "W1 account file is not json" : "role key file is not json", "AUTH");
+    }
     const xrpl = require("xrpl");
     if (!body || body.account !== account || body.account === anchors.WALLETS.W0.address) {
       throw coded(w1 ? "W1 regular-key file must name the W1 account" : "role key file must name its account", "WALLET");

@@ -123,7 +123,20 @@ function assertOraclePrice(tx) {
   if (!row || row.BaseAsset !== CURRENCY || row.QuoteAsset !== "XRP") {
     throw coded("oracle must price official RLUSD in XRP", "TX");
   }
-  if (tx.OracleDocumentID === 1) throw coded("document 1 is the AETH oracle", "TX");
+  if (!Number.isInteger(tx.OracleDocumentID) || tx.OracleDocumentID === 1) {
+    throw coded("document 1 is the AETH oracle", "TX");
+  }
+  if (tx.OracleDocumentID !== 2) throw coded("RLUSD oracle uses document 2", "TX");
+  const scale = Number(row.Scale);
+  if (!Number.isInteger(scale) || scale < 0 || scale > 10) throw coded("oracle Scale is not 0-10", "TX");
+  if (typeof row.AssetPrice !== "string" || !/^[0-9a-fA-F]+$/.test(row.AssetPrice)) {
+    throw coded("AssetPrice is not a hex integer", "TX");
+  }
+  const price = BigInt(`0x${row.AssetPrice}`);
+  if (price <= 0n || price > (1n << 64n) - 1n) throw coded("AssetPrice does not fit uint64", "TX");
+  if (!Number.isInteger(tx.LastUpdateTime) || tx.LastUpdateTime < 1500000000) {
+    throw coded("LastUpdateTime is not unix seconds", "TX");
+  }
 }
 
 function assertOracleWallet(wallet, tx) {

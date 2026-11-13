@@ -23,6 +23,8 @@ const { decide } = require("./director");
 const { health } = require("./supervisor");
 const runtimePolicy = require("../../runtime/policy");
 const runtimeSigner = require("../../runtime/signer");
+const bankroll = require("../bankroll");
+const math = require("../../frontier/oracle-math");
 
 const TOKEN = "mission-internal-16";
 const NOW = "2026-11-13T18:00:00.000Z";
@@ -131,6 +133,7 @@ function roleLedger(role, extra) {
       },
     },
     box: state.box,
+    beforeReserve: state.beforeReserve,
   };
 }
 
@@ -275,6 +278,75 @@ describe("shared RLUSD caps", () => {
     assert.equal(exposure.blocksNewRisk(state, "W1"), true);
     assert.equal(exposure.blocksNewRisk(state, "W4"), false);
     assert.equal(exposure.allows(state, "W3", 100000n, 3500000n), false);
+    assert.equal(exposure.allows({ missions: {} }, "W1", 1000n, 999999999n), true);
+    assert.equal(exposure.allows({ missions: {} }, "W1", 3500001n, 999999999n), false);
+  });
+
+  it("counts every role once against the shared 100 XRP bankroll", () => {
+    const observed = {
+      proved: true,
+      reserveBase: 1000000n,
+      reserveInc: 200000n,
+      ownerCount: 0n,
+      balance: 100000000n,
+      offers: [],
+      rlusdOffers: [],
+      bids: [],
+      pool: { xrp: 0n, balance: 0n, supply: 1n, aethScaled: 0n, sole: false },
+    };
+    const shared = {
+      missions: {
+        w3: mission({ id: "w3", kind: "w3-rlusd", role: "W3", outstanding_drops: "500000" }),
+        copy: mission({ id: "w3", kind: "w3-rlusd", role: "W3", outstanding_drops: "500000" }),
+        legacy: mission({ id: exposure.LEGACY_HOLD, kind: "w3-rlusd", role: "W3", outstanding_drops: "5000000" }),
+      },
+    };
+    const position = bankroll.room(shared, observed);
+    assert.equal(position.used, 1500000n);
+    assert.equal(position.proved_xrp, 1000000n);
+    const marked = {
+      missions: Object.assign({}, shared.missions, {
+        "bankroll-lp-high-water": {
+          id: "bankroll-lp-high-water",
+          kind: "w1-bankroll-mark",
+          proved_xrp_drops: "5000000",
+          rlusd_overlap_drops: "0",
+          lp_high_water_drops: "0",
+          hold: "released",
+          outstanding_drops: "0",
+        },
+        dex: mission({ id: "dex", kind: "w1-dex-offer", role: "W1", outstanding_drops: "2000000", action: "rest", status: "dex_open" }),
+      }),
+    };
+    assert.equal(exposure.ledgerHeadroom(marked).used, 5500000n);
+  });
+
+  it("does not let two roles reserve past 3.5 XRP on one ledger", async () => {
+    const ledger = home();
+    seed(ledger, mission({ id: "w4", kind: "w4-rlusd", role: "W4", outstanding_drops: "3000000", status: "rlusd_filled", action: "bid" }));
+    seed(ledger, { id: exposure.LEGACY_HOLD, hold: "uncertain", signed: true, outstanding_drops: "1747", updated_at: NOW });
+    let waiting = [];
+    const barrier = () => new Promise((resolve) => {
+      waiting.push(resolve);
+      if (waiting.length === 2) {
+        const ready = waiting.splice(0, waiting.length);
+        ready.forEach((fn) => fn());
+      }
+    });
+    const w3 = { trust: true, box: { signs: 0, types: [], flags: [] }, beforeReserve: barrier };
+    const w1box = { signs: 0, types: [], flags: [] };
+    const w1 = w1Client(w1box);
+    w1.beforeReserve = barrier;
+    await Promise.all([
+      taker.tick(baseEnv("W3"), ledger, NOW, roleLedger("W3", w3), { headroom: 100000000n }, null),
+      rlusd.tick(Object.assign(baseEnv("W1"), { FOUNDRY_DEX_RLUSD: "yes" }), ledger, NOW, w1, { proved_xrp: 0n, reserve_inc: 200000n }),
+    ]);
+    assert.equal(exposure.teamOpen(view(ledger, NOW)) <= 3500000n, true);
+    assert.equal(w3.box.signs + w1box.signs, 1);
+    const legacy = view(ledger, NOW).missions[exposure.LEGACY_HOLD];
+    assert.equal(legacy.hold, "uncertain");
+    assert.equal(legacy.signed, true);
+    assert.equal(legacy.outstanding_drops, "1747");
   });
 });
 
@@ -347,6 +419,18 @@ describe("signer gates", () => {
       intent: "w5_rlusd_oracle",
       tx: Object.assign({}, oracleTx, { Amount: "1", Destination: OUTSIDER }),
     })), (error) => error.code === "CAP");
+    assert.throws(() => runtimePolicy.assertAgentRequest(agentCtx({
+      wallet: "W5",
+      intent: "w5_rlusd_oracle",
+      tx: Object.assign({}, oracleTx, {
+        PriceDataSeries: [{ PriceData: { BaseAsset: rlusd.CURRENCY, QuoteAsset: "XRP", AssetPrice: "1", Scale: 11 } }],
+      }),
+    })), (error) => error.code === "TX");
+    assert.throws(() => runtimePolicy.assertAgentRequest(agentCtx({
+      wallet: "W5",
+      intent: "w5_rlusd_oracle",
+      tx: Object.assign({}, oracleTx, { LastUpdateTime: 800000000 }),
+    })), (error) => error.code === "TX");
   });
 });
 
@@ -413,8 +497,10 @@ describe("W3 taker and W4 quoter", () => {
             AffectedNodes: [
               { ModifiedNode: { LedgerEntryType: "Offer", FinalFields: { Account: OUTSIDER }, PreviousFields: {} } },
               { ModifiedNode: { LedgerEntryType: "Offer", FinalFields: { Account: rlusd.AMM }, PreviousFields: {} } },
-              { ModifiedNode: { LedgerEntryType: "AccountRoot", FinalFields: { Account: anchors.WALLETS.W0.address }, PreviousFields: {} } },
-            ],
+              { ModifiedNode: { LedgerEntryType: "Offer", FinalFields: { Account: anchors.AMM }, PreviousFields: {} } },
+            ].concat(anchors.WALLET_IDS.map((id) => ({
+              ModifiedNode: { LedgerEntryType: "AccountRoot", FinalFields: { Account: anchors.WALLETS[id].address }, PreviousFields: {} },
+            }))),
           },
         },
       },
@@ -422,7 +508,10 @@ describe("W3 taker and W4 quoter", () => {
     const row = await taker.tick(baseEnv("W3"), ledger, NOW, roleLedger("W3", state), null, journal);
     assert.equal(row.fill_proof.outside_accounts.includes(OUTSIDER), true);
     assert.equal(row.fill_proof.outside_accounts.includes(rlusd.AMM), false);
-    assert.equal(row.fill_proof.outside_accounts.includes(anchors.WALLETS.W0.address), false);
+    assert.equal(row.fill_proof.outside_accounts.includes(anchors.AMM), false);
+    for (const id of anchors.WALLET_IDS) {
+      assert.equal(row.fill_proof.outside_accounts.includes(anchors.WALLETS[id].address), false);
+    }
     assert.equal(row.fill_proof.house_accounts.includes(anchors.WALLETS.W1.address) || row.fill_proof.house_accounts.includes(rlusd.AMM), true);
     const text = fs.readFileSync(path.join(journal, "decisions.jsonl"), "utf8");
     assert.match(text, new RegExp(OUTSIDER));
@@ -492,6 +581,56 @@ describe("W3 taker and W4 quoter", () => {
     assert.equal(cancelled.signed, true);
     assert.equal(old.box.types[0], "OfferCancel");
     assert.equal(old.box.signs, 1);
+    const replaced = await quoter.tick(baseEnv("W4"), stale, NOW, roleLedger("W4", Object.assign({ trust: true, box: { signs: 0, types: [], flags: [] }, offers: [] }, spread())), null, null);
+    assert.equal(replaced.decision, "place");
+    assert.equal(replaced.signed, true);
+    assert.equal(replaced.flags, bounds.TF_PASSIVE);
+    const open = exposure.rows(view(stale, NOW)).filter((mission) => mission.role === "W4" && mission.hold !== "released" && (mission.action === "bid" || mission.action === "ask"));
+    assert.equal(open.length, 1);
+  });
+
+  it("sells only the RLUSD the taker bought", async () => {
+    const ledger = home();
+    seed(ledger, {
+      id: "msnbuyroundtrip01",
+      idempotency_key: "w3-bought",
+      kind: "w3-rlusd",
+      role: "W3",
+      action: "buy",
+      status: "rlusd_filled",
+      hold: "uncertain",
+      outstanding_drops: "200012",
+      bought_rlusd: "0.05",
+      realized_loss_drops: "0",
+      submit_attempted: true,
+      chicago_day: "2026-11-13",
+      updated_at: NOW,
+    });
+    const state = { trust: true, balance: "5", box: { signs: 0, types: [], flags: [], last: null } };
+    const sold = await taker.tick(baseEnv("W3"), ledger, NOW, roleLedger("W3", state), { headroom: 100000000n }, null);
+    assert.equal(sold.signed, true);
+    assert.equal(state.box.last.Flags, gates.TF_IOC);
+    assert.equal(state.box.last.TakerGets.value, "0.05");
+    assert.equal(state.box.last.TakerGets.issuer, rlusd.ISSUER);
+    const bare = home();
+    seed(bare, {
+      id: "msnbuyunproved01",
+      idempotency_key: "w3-unproved",
+      kind: "w3-rlusd",
+      role: "W3",
+      action: "buy",
+      status: "rlusd_filled",
+      hold: "uncertain",
+      outstanding_drops: "200012",
+      realized_loss_drops: "0",
+      submit_attempted: true,
+      chicago_day: "2026-11-13",
+      updated_at: NOW,
+    });
+    const quiet = { trust: true, balance: "5", box: { signs: 0, types: [], flags: [] } };
+    const skipped = await taker.tick(baseEnv("W3"), bare, NOW, roleLedger("W3", quiet), { headroom: 100000000n }, null);
+    assert.equal(skipped.signed, false);
+    assert.equal(quiet.box.signs, 0);
   });
 
   it("lets W1 use the 3.5 XRP team room without raising its own 2 XRP cap", async () => {
@@ -531,6 +670,31 @@ describe("W5 oracle", () => {
     assert.equal(row.tx.TransactionType, "OracleSet");
     assert.equal(row.tx.OracleDocumentID, 2);
     assert.equal(row.tx.Amount, undefined);
+    assert.equal(row.quote_xrp_per_rlusd, "2.5");
+    assert.equal(row.tx.PriceDataSeries[0].PriceData.Scale, 8);
+    assert.equal(row.tx.PriceDataSeries[0].PriceData.AssetPrice, math.encodeQuote("2.5").asset_price_hex);
+    assert.equal(row.tx.LastUpdateTime, math.unixSeconds(NOW));
+    assert.equal(row.tx.PriceDataSeries[0].PriceData.BaseAsset, rlusd.CURRENCY);
+    assert.equal(row.tx.PriceDataSeries[0].PriceData.QuoteAsset, "XRP");
+    const liveJournal = fs.mkdtempSync(path.join(os.tmpdir(), "w5-live-"));
+    const liveBox = { signs: 0, types: [], flags: [] };
+    const liveEnv = {
+      FOUNDRY_W5_ORACLE_LIVE: "yes",
+      FOUNDRY_DEX_EXECUTE: "yes",
+      FOUNDRY_DEX_NETWORK: "xrpl:1",
+      FOUNDRY_DEX_AXELAR_DROPS: "0",
+      FOUNDRY_W5_ORACLE_ACTIVATE: oracle.PHRASE,
+    };
+    const posted = await oracle.tick(liveEnv, { now: new Date().toISOString(), journal: liveJournal }, roleLedger("W5", { trust: true, box: liveBox }));
+    assert.equal(posted.dry_run, false);
+    assert.equal(posted.signed, true);
+    assert.equal(posted.tx.Fee, "12");
+    assert.equal(posted.tx.Sequence, 20);
+    assert.equal(posted.tx.OracleDocumentID, 2);
+    assert.equal(liveBox.signs, 1);
+    const again = await oracle.tick(liveEnv, { now: new Date().toISOString(), journal: liveJournal }, roleLedger("W5", { trust: true, box: { signs: 0, types: [], flags: [] } }));
+    assert.equal(again.decision, "research");
+    assert.equal(again.signed, false);
     assert.equal(reads, 0);
     const soon = await oracle.tick({}, { now: "2026-11-13T18:20:00.000Z", journal, pool }, null);
     assert.equal(soon.decision, "research");

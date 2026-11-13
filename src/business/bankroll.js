@@ -25,6 +25,8 @@ const BANKROLL_DROPS = 100000000n;
 const MARK_ID = "bankroll-lp-high-water";
 const MARK_KIND = "w1-bankroll-mark";
 const MIN_BID_DROPS = 1000000n;
+const LEGACY_HOLD = "msn5b5c3223e5e88526";
+const RLUSD_KINDS = new Set(["w1-rlusd", "w3-rlusd", "w4-rlusd"]);
 
 function drops(value) {
   return typeof value === "string" && /^[0-9]+$/.test(value) ? BigInt(value) : 0n;
@@ -61,6 +63,38 @@ function blank(code) {
 function storedHigh(state) {
   const mission = state && state.missions && state.missions[MARK_ID];
   return drops(mission && mission.lp_high_water_drops);
+}
+
+function rlusdOpen(mission) {
+  if (!mission || mission.hold === "released") return false;
+  if (mission.action === "trust" && mission.status === "rlusd_proved") return false;
+  if (mission.action === "swap" && mission.status === "rlusd_proved") return false;
+  if (mission.action === "cancel" && mission.status === "rlusd_proved") return false;
+  return true;
+}
+
+function rlusdBooked(state) {
+  const seen = new Set();
+  let amount = 0n;
+  for (const mission of Object.values((state && state.missions) || {})) {
+    if (!mission || mission.id === LEGACY_HOLD || !RLUSD_KINDS.has(mission.kind)) continue;
+    if (mission.role === "W1" || mission.kind === "w1-rlusd") continue;
+    if (mission.id) {
+      if (seen.has(mission.id)) continue;
+      seen.add(mission.id);
+    }
+    const loss = drops(mission.realized_loss_drops);
+    const open = rlusdOpen(mission) ? drops(mission.outstanding_drops) : 0n;
+    amount += loss + open;
+  }
+  return { amount, overlap: 0n };
+}
+
+function carried(prev) {
+  const extra = {};
+  if (prev && typeof prev.proved_xrp_drops === "string") extra.proved_xrp_drops = prev.proved_xrp_drops;
+  if (prev && typeof prev.rlusd_overlap_drops === "string") extra.rlusd_overlap_drops = prev.rlusd_overlap_drops;
+  return extra;
 }
 
 function aethBid(observed) {
@@ -140,7 +174,8 @@ function room(state, observed) {
   const provedXrp = offerLock + lpXrp + reserveBase + reserve + pending + loss;
   const priced = aethBid(observed);
   const aethXrp = priced.proved ? priced.xrp : 0n;
-  const capital = provedXrp + aethXrp;
+  const booked = rlusdBooked(state);
+  const capital = provedXrp + aethXrp + booked.amount;
   const over = capital > BANKROLL_DROPS;
   const capRoom = capital >= BANKROLL_DROPS ? 0n : BANKROLL_DROPS - capital;
   const free = spendable(observed);
@@ -167,6 +202,8 @@ function room(state, observed) {
     reserve_inc: reserveInc,
     pending,
     sole: pool.sole === true && pool.balance > 0n,
+    rlusd_overlap: booked.overlap,
+    rlusd_booked: booked.amount,
   };
 }
 
@@ -185,20 +222,22 @@ function spendable(observed) {
 function commitMark(dir, current, now) {
   const amount = typeof current === "bigint" ? current : 0n;
   return exclusive(dir, (api) => {
-    const prev = storedHigh(view(dir, now));
+    const state = view(dir, now);
+    const prev = storedHigh(state);
     const next = amount > prev ? amount : prev;
-    if (next === prev && view(dir, now).missions[MARK_ID]) return next;
+    const prior = state.missions && state.missions[MARK_ID];
+    if (next === prev && prior) return next;
     api.append({
       type: "mission.upsert",
       at: now,
-      mission: {
+      mission: Object.assign({
         id: MARK_ID,
         kind: MARK_KIND,
         lp_high_water_drops: next.toString(),
         hold: "released",
         outstanding_drops: "0",
         updated_at: now,
-      },
+      }, carried(prior)),
     });
     return next;
   });
@@ -208,13 +247,15 @@ function recover(dir, xrpOut, current, now) {
   const back = typeof xrpOut === "bigint" ? xrpOut : 0n;
   const live = typeof current === "bigint" ? current : 0n;
   return exclusive(dir, (api) => {
-    const prev = storedHigh(view(dir, now));
+    const state = view(dir, now);
+    const prev = storedHigh(state);
     const reduced = prev > back ? prev - back : 0n;
     const next = live > reduced ? live : reduced;
+    const prior = state.missions && state.missions[MARK_ID];
     api.append({
       type: "mission.upsert",
       at: now,
-      mission: {
+      mission: Object.assign({
         id: MARK_ID,
         kind: MARK_KIND,
         lp_high_water_drops: next.toString(),
@@ -222,9 +263,33 @@ function recover(dir, xrpOut, current, now) {
         hold: "released",
         outstanding_drops: "0",
         updated_at: now,
-      },
+      }, carried(prior)),
     });
     return next;
+  });
+}
+
+function noteShared(dir, proved, overlap, now) {
+  const amount = typeof proved === "bigint" && proved >= 0n ? proved : 0n;
+  const shave = typeof overlap === "bigint" && overlap >= 0n ? overlap : 0n;
+  return exclusive(dir, (api) => {
+    const state = view(dir, now);
+    const prior = state.missions && state.missions[MARK_ID];
+    api.append({
+      type: "mission.upsert",
+      at: now,
+      mission: {
+        id: MARK_ID,
+        kind: MARK_KIND,
+        lp_high_water_drops: storedHigh(state).toString(),
+        proved_xrp_drops: amount.toString(),
+        rlusd_overlap_drops: shave.toString(),
+        hold: "released",
+        outstanding_drops: "0",
+        updated_at: now,
+      },
+    });
+    return amount;
   });
 }
 
@@ -243,6 +308,7 @@ module.exports = {
   spendable,
   maxLock,
   commitMark,
+  noteShared,
   recover,
   MIN_BID_DROPS,
 };

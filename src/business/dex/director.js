@@ -133,6 +133,9 @@ async function decide(env, input, clients) {
     const currentLp = observed.pool.balance === 0n ? 0n : (observed.pool.xrp * observed.pool.balance) / observed.pool.supply;
     bankroll.commitMark(body.ledger, currentLp, now);
     const position = bankroll.room(view(body.ledger, now), observed);
+    if (position.uncertain !== true && typeof position.proved_xrp === "bigint") {
+      bankroll.noteShared(body.ledger, position.proved_xrp, position.rlusd_overlap || 0n, now);
+    }
     let slip = null;
     try {
       const probe = observed.pool.xrp > 1000000n ? 1000000n : observed.pool.xrp / 10n;

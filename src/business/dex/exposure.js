@@ -79,11 +79,16 @@ function blocksNewRisk(state, role) {
   return false;
 }
 
+function boundedCap(cap) {
+  if (typeof cap !== "bigint" || cap <= 0n || cap > TEAM_CAP_DROPS) return TEAM_CAP_DROPS;
+  return cap;
+}
+
 function allows(state, role, add, cap) {
   if (blocksNewRisk(state, role)) return false;
   const addDrops = typeof add === "bigint" ? add : 0n;
   if (addDrops < 0n) return false;
-  const limit = typeof cap === "bigint" ? cap : TEAM_CAP_DROPS;
+  const limit = boundedCap(cap);
   if (teamOpen(state) + addDrops > limit) return false;
   const roleCap = ROLE_CAP[role];
   if (typeof roleCap !== "bigint") return false;
@@ -92,7 +97,7 @@ function allows(state, role, add, cap) {
 }
 
 function tighterRoom(state, role, cap) {
-  const limit = typeof cap === "bigint" ? cap : TEAM_CAP_DROPS;
+  const limit = boundedCap(cap);
   const team = teamOpen(state);
   const mine = roleOpen(state, role);
   const teamRoom = limit > team ? limit - team : 0n;
@@ -101,25 +106,44 @@ function tighterRoom(state, role, cap) {
   return teamRoom < roleRoom ? teamRoom : roleRoom;
 }
 
-function ledgerHeadroom(state) {
-  let base = 0n;
-  const mark = state && state.missions && state.missions["bankroll-lp-high-water"];
-  if (mark && typeof mark.lp_high_water_drops === "string" && /^[0-9]+$/.test(mark.lp_high_water_drops)) {
-    base = BigInt(mark.lp_high_water_drops);
-  }
+function sumKind(state, accept, releasedLoss) {
   const seen = new Set();
   let extra = 0n;
   for (const mission of Object.values((state && state.missions) || {})) {
-    if (!mission || mission.id === LEGACY_HOLD) continue;
+    if (!mission || mission.id === LEGACY_HOLD || !accept(mission)) continue;
     if (mission.id) {
       if (seen.has(mission.id)) continue;
       seen.add(mission.id);
     }
-    if (mission.hold === "released") continue;
-    const kind = mission.kind;
-    if (kind !== "w1-dex-offer" && kind !== "w1-amm-lp" && !ALL.has(kind)) continue;
-    extra += drops(mission.outstanding_drops) + drops(mission.realized_loss_drops);
+    const loss = drops(mission.realized_loss_drops);
+    if (mission.hold === "released") {
+      if (releasedLoss) extra += loss;
+      continue;
+    }
+    extra += drops(mission.outstanding_drops) + loss;
   }
+  return extra;
+}
+
+function ledgerHeadroom(state) {
+  const mark = state && state.missions && state.missions["bankroll-lp-high-water"];
+  if (mark && typeof mark.proved_xrp_drops === "string" && /^[0-9]+$/.test(mark.proved_xrp_drops)) {
+    const proved = BigInt(mark.proved_xrp_drops);
+    let rlusd = sumKind(state, (mission) => ALL.has(mission.kind), true);
+    const overlap = drops(mark.rlusd_overlap_drops);
+    if (overlap > 0n && rlusd > overlap) rlusd -= overlap;
+    const used = proved + rlusd;
+    const headroom = used >= bankroll.BANKROLL_DROPS ? 0n : bankroll.BANKROLL_DROPS - used;
+    return { used, headroom, proved_xrp: proved };
+  }
+  let base = 0n;
+  if (mark && typeof mark.lp_high_water_drops === "string" && /^[0-9]+$/.test(mark.lp_high_water_drops)) {
+    base = BigInt(mark.lp_high_water_drops);
+  }
+  const extra = sumKind(state, (mission) => {
+    const kind = mission.kind;
+    return kind === "w1-dex-offer" || kind === "w1-amm-lp" || ALL.has(kind);
+  }, false);
   const used = base + extra;
   const headroom = used >= bankroll.BANKROLL_DROPS ? 0n : bankroll.BANKROLL_DROPS - used;
   return { used, headroom, proved_xrp: base };
@@ -135,6 +159,7 @@ module.exports = {
   teamOpen,
   roleOpen,
   blocksNewRisk,
+  boundedCap,
   allows,
   tighterRoom,
   ledgerHeadroom,

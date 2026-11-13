@@ -140,6 +140,61 @@ async function load(ledger, account, regularKey) {
   };
 }
 
+function signed15(value) {
+  if (typeof value !== "string") return null;
+  const neg = value.startsWith("-");
+  const exact = market.exactIou(neg ? value.slice(1) : value);
+  if (!exact) return null;
+  const shift = exact.exp + 15;
+  if (shift < 0 || shift > 80) return null;
+  const mag = shift === 0 ? exact.coeff : exact.coeff * (10n ** BigInt(shift));
+  return neg ? -mag : mag;
+}
+
+function holder15(fields, account) {
+  if (!fields || !fields.HighLimit || !fields.LowLimit) return null;
+  const high = fields.HighLimit;
+  const low = fields.LowLimit;
+  const currency = high.currency || low.currency;
+  if (currency !== rlusd.CURRENCY) return null;
+  if (high.issuer !== rlusd.ISSUER && low.issuer !== rlusd.ISSUER) return null;
+  if (high.issuer !== account && low.issuer !== account) return null;
+  const raw = signed15(fields.Balance);
+  if (raw == null) return null;
+  if (low.issuer === account && high.issuer === rlusd.ISSUER) return raw;
+  if (high.issuer === account && low.issuer === rlusd.ISSUER) return -raw;
+  return null;
+}
+
+function format15(scaled) {
+  if (scaled <= 0n) return "0";
+  const digits = scaled.toString().padStart(16, "0");
+  const whole = digits.slice(0, digits.length - 15).replace(/^0+/, "") || "0";
+  const frac = digits.slice(digits.length - 15).replace(/0+$/, "");
+  return frac ? `${whole}.${frac}` : whole;
+}
+
+function rlusdAcquired(meta, account) {
+  const nodes = meta && Array.isArray(meta.AffectedNodes) ? meta.AffectedNodes : [];
+  let delta = 0n;
+  let seen = false;
+  for (const node of nodes) {
+    const body = node && (node.CreatedNode || node.ModifiedNode || node.DeletedNode);
+    if (!body || body.LedgerEntryType !== "RippleState") continue;
+    const created = Boolean(node.CreatedNode);
+    const finalFields = created ? body.NewFields : body.FinalFields;
+    const previous = created ? null : body.PreviousFields;
+    const after = holder15(finalFields || previous, account);
+    const before = created ? 0n : holder15(previous || finalFields, account);
+    if (after == null && before == null) continue;
+    if (after == null || before == null) return null;
+    delta += node.DeletedNode ? -before : after - before;
+    seen = true;
+  }
+  if (!seen) return null;
+  return format15(delta);
+}
+
 function counterparties(meta, self) {
   const nodes = meta && Array.isArray(meta.AffectedNodes) ? meta.AffectedNodes : [];
   const found = [];
@@ -170,5 +225,6 @@ module.exports = {
   outside,
   load,
   exactOf,
+  rlusdAcquired,
   counterparties,
 };

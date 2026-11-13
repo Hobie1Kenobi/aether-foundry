@@ -17,6 +17,7 @@ const bounds = require("./bounds");
 const exposure = require("./exposure");
 const book = require("./book");
 const rlusd = require("./rlusd");
+const market = require("./market");
 const signer = require("./signer");
 
 const KIND = "w3-rlusd";
@@ -49,12 +50,50 @@ function dayCount(state, day) {
   return rows(state).filter((mission) => mission.submit_attempted === true && mission.chicago_day === day && (mission.action === "buy" || mission.action === "sell")).length;
 }
 
+function projected(state, releaseId) {
+  if (!releaseId || !state || !state.missions || !state.missions[releaseId]) return state;
+  const source = state.missions[releaseId];
+  if (!source || source.id === LEGACY) return state;
+  return {
+    missions: Object.assign({}, state.missions, {
+      [releaseId]: Object.assign({}, source, { outstanding_drops: "0" }),
+    }),
+  };
+}
+
+function admit(state, order) {
+  const add = typeof order.exposure === "bigint" ? order.exposure : 0n;
+  const next = projected(state, order.release);
+  if (exposure.blocksNewRisk(next, ROLE)) throw coded("An uncertain RLUSD hold from another role is still open. Nothing is signed.", "HOLD");
+  if (order.action === "buy" || order.action === "sell") {
+    if (dayCount(next, order.day) >= MAX_PER_DAY) throw coded("W3 has used its daily taker count.", "DAY");
+  }
+  if (order.action !== "sell" && !exposure.allows(next, ROLE, add, order.cap)) {
+    throw coded("The team RLUSD cap or the W3 0.5 XRP cap is already full.", "CAP");
+  }
+  if (order.action === "sell" && !exposure.allows(next, ROLE, add, order.cap)) {
+    throw coded("The IOC sell does not fit the caps.", "CAP");
+  }
+  if (add > exposure.ledgerHeadroom(next).headroom) throw coded("The shared bankroll headroom does not fit this taker order.", "BANKROLL");
+}
+
 function reserve(dir, order, shot, now) {
   return exclusive(dir, (api) => {
     const state = view(dir, now);
     if (state.killed) throw coded("hard stop is on", "killed");
     const existing = Object.values(state.missions || {}).find((mission) => mission && mission.idempotency_key === order.key);
-    if (existing) return { mission: existing, created: false, terminal: existing.submit_attempted === true || existing.hold === "released" };
+    if (existing) {
+      const terminal = existing.submit_attempted === true || existing.hold === "released" || existing.signing === true;
+      return { mission: existing, created: false, terminal };
+    }
+    admit(state, order);
+    if (order.release && state.missions && state.missions[order.release] && state.missions[order.release].id !== LEGACY) {
+      api.append({
+        type: "mission.upsert",
+        at: now,
+        mission: Object.assign({}, state.missions[order.release], { outstanding_drops: "0", updated_at: now }),
+      });
+    }
     const mission = {
       id: `msn${crypto.createHash("sha256").update(`w3|${order.key}`).digest("hex").slice(0, 16)}`,
       idempotency_key: order.key,
@@ -65,6 +104,7 @@ function reserve(dir, order, shot, now) {
       hold: "uncertain",
       signed: false,
       submitted: false,
+      signing: true,
       action: order.action,
       chicago_day: order.day,
       sequence: shot.sequence,
@@ -80,6 +120,13 @@ function reserve(dir, order, shot, now) {
     api.append({ type: "mission.upsert", at: now, mission });
     return { mission, created: true };
   });
+}
+
+function caught(error) {
+  if (error && (error.code === "CAP" || error.code === "HOLD" || error.code === "DAY" || error.code === "BANKROLL")) {
+    return { decision: "research", signed: false, traded: false, rationale: error.message };
+  }
+  return null;
 }
 
 function save(dir, mission) {
@@ -98,7 +145,13 @@ async function submit(dir, reserved, tx, expected, clients, now, gate, journal) 
   if (reserved.mission.submit_attempted) return { mission: reserved.mission, replay: true };
   if (gate.signed >= MAX_PER_TICK) throw coded("W3 already signed this tick", "CAP");
   gate.signed += 1;
-  const signed = await signer.sign(tx, expected, clients.sign);
+  let signed;
+  try {
+    signed = await signer.sign(tx, expected, clients.sign);
+  } catch (error) {
+    save(dir, Object.assign({}, reserved.mission, { signing: false, updated_at: now }));
+    throw error;
+  }
   const mission = Object.assign({}, reserved.mission, {
     signed: true,
     signed_hash: signed.hash,
@@ -139,6 +192,7 @@ async function proveNow(clients, hash, self) {
     mission: {
       status: "rlusd_filled",
       hold: "uncertain",
+      bought_rlusd: book.rlusdAcquired(meta, self) || "0",
       proof_hash: String(result.hash || hash).toUpperCase(),
       proof_result: "tesSUCCESS",
       proof_type: "consuming_tx",
@@ -238,7 +292,15 @@ async function trust(dir, now, clients, observed, room, day, gate, cap) {
     Sequence: shot.sequence,
     LastLedgerSequence: shot.validatedLedger + bounds.LEDGER_WINDOW,
   };
-  const reserved = reserve(dir, { key: "w3-rlusd-trust", action: "trust", day, exposure: need, tx }, shot, now);
+  if (clients && typeof clients.beforeReserve === "function") await clients.beforeReserve();
+  let reserved;
+  try {
+    reserved = reserve(dir, { key: "w3-rlusd-trust", action: "trust", day, exposure: need, tx, cap }, shot, now);
+  } catch (error) {
+    const quiet = caught(error);
+    if (quiet) return quiet;
+    throw error;
+  }
   if (reserved.terminal) return { decision: "trustline", replay: true, traded: false };
   const sent = await submit(dir, reserved, tx, expectedFor(tx, shot), clients, now, gate);
   return { decision: "trustline", signed: !sent.replay, submitted: sent.mission.submitted === true, traded: false, replay: sent.replay === true };
@@ -268,7 +330,15 @@ async function buy(dir, now, clients, observed, room, day, gate, cap, journal) {
     LastLedgerSequence: shot.validatedLedger + bounds.LEDGER_WINDOW,
   };
   const key = `w3-rlusd-buy-${day}-${shot.sequence}`;
-  const reserved = reserve(dir, { key, action: "buy", day, exposure: exposureDrops, tx }, shot, now);
+  if (clients && typeof clients.beforeReserve === "function") await clients.beforeReserve();
+  let reserved;
+  try {
+    reserved = reserve(dir, { key, action: "buy", day, exposure: exposureDrops, tx, cap }, shot, now);
+  } catch (error) {
+    const quiet = caught(error);
+    if (quiet) return quiet;
+    throw error;
+  }
   if (reserved.terminal) return { decision: "research", replay: true, traded: false, signed: false };
   const sent = await submit(dir, reserved, tx, expectedFor(tx, shot), clients, now, gate, journal);
   return {
@@ -283,13 +353,27 @@ async function buy(dir, now, clients, observed, room, day, gate, cap, journal) {
   };
 }
 
+function smaller(left, right) {
+  const span = Math.max(-left.exp, -right.exp, 0);
+  const width = (exact) => exact.coeff * (10n ** BigInt(span + exact.exp));
+  return width(left) <= width(right) ? left : right;
+}
+
 async function sell(dir, source, now, clients, observed, room, day, gate, cap, journal) {
   const state = view(dir, now);
   if (dayCount(state, day) >= MAX_PER_DAY) return { decision: "research", signed: false, rationale: "W3 has used its daily taker count." };
   const shot = observed.shot;
-  const text = formatBalance(observed.balance);
+  const bought = market.exactIou(source.bought_rlusd || "");
+  if (!bought || bought.coeff <= 0n) {
+    return { decision: "research", signed: false, rationale: "The round trip has no proved RLUSD buy. Nothing is sold." };
+  }
+  if (!observed.balance || observed.balance.coeff <= 0n) {
+    return { decision: "research", signed: false, rationale: "The RLUSD inventory cannot be priced." };
+  }
+  const capped = smaller(bought, observed.balance);
+  const text = formatBalance(capped);
   if (!text) return { decision: "research", signed: false, rationale: "The RLUSD inventory cannot be priced." };
-  const pays = sellDrops(observed.pool, observed.balance);
+  const pays = sellDrops(observed.pool, capped);
   if (pays == null || pays < 100000n || pays > 250000n) {
     return { decision: "research", signed: false, rationale: "The IOC sell is outside 0.1-0.25 XRP." };
   }
@@ -312,9 +396,24 @@ async function sell(dir, source, now, clients, observed, room, day, gate, cap, j
     Sequence: shot.sequence,
     LastLedgerSequence: shot.validatedLedger + bounds.LEDGER_WINDOW,
   };
-  const reserved = reserve(dir, { key: `w3-rlusd-sell-${day}-${shot.sequence}`, action: "sell", day, exposure: exposureDrops, tx }, shot, now);
+  if (clients && typeof clients.beforeReserve === "function") await clients.beforeReserve();
+  let reserved;
+  try {
+    reserved = reserve(dir, {
+      key: `w3-rlusd-sell-${day}-${shot.sequence}`,
+      action: "sell",
+      day,
+      exposure: exposureDrops,
+      tx,
+      cap,
+      release: source.id,
+    }, shot, now);
+  } catch (error) {
+    const quiet = caught(error);
+    if (quiet) return quiet;
+    throw error;
+  }
   if (reserved.terminal) return { decision: "research", replay: true, signed: false };
-  save(dir, Object.assign({}, source, { outstanding_drops: "0", updated_at: now }));
   let sent;
   try {
     sent = await submit(dir, reserved, tx, expectedFor(tx, shot), clients, now, gate, journal);

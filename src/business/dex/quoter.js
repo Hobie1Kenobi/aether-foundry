@@ -24,6 +24,7 @@ const SIZE = 200000n;
 const MIN_REPLACE_MS = 2 * 60 * 60 * 1000;
 const REFRESH_MS = 3 * 60 * 60 * 1000;
 const MAX_PER_TICK = 1;
+const MAX_PER_DAY = 12;
 const LEGACY = exposure.LEGACY_HOLD;
 
 function formatExact(coeff, exp) {
@@ -105,12 +106,41 @@ function ageMs(mission, now) {
   return clock - stamp;
 }
 
+function dayQuotes(state, day) {
+  return rowsOf(state).filter((mission) => mission.submit_attempted === true && mission.chicago_day === day && (mission.action === "bid" || mission.action === "ask")).length;
+}
+
+function openQuotes(state) {
+  return rowsOf(state).filter((mission) => mission.hold !== "released" && (mission.action === "bid" || mission.action === "ask"));
+}
+
+function admit(state, order) {
+  const add = typeof order.exposure === "bigint" ? order.exposure : 0n;
+  if (exposure.blocksNewRisk(state, ROLE)) throw coded("An uncertain RLUSD hold from another role is still open. Nothing is signed.", "HOLD");
+  if ((order.action === "bid" || order.action === "ask") && dayQuotes(state, order.day) >= MAX_PER_DAY) {
+    throw coded("W4 has used its daily quote count.", "DAY");
+  }
+  if ((order.action === "bid" || order.action === "ask") && openQuotes(state).length > 0) {
+    throw coded("W4 already has a resting quote.", "CAP");
+  }
+  if (order.action !== "cancel" && !exposure.allows(state, ROLE, add, order.cap)) {
+    throw coded("The resting quote does not fit the team cap.", "CAP");
+  }
+  if (order.action !== "cancel" && add > exposure.ledgerHeadroom(state).headroom) {
+    throw coded("The resting quote does not fit the shared bankroll.", "BANKROLL");
+  }
+}
+
 function reserve(dir, order, shot, now) {
   return exclusive(dir, (api) => {
     const state = view(dir, now);
     if (state.killed) throw coded("hard stop is on", "killed");
     const existing = Object.values(state.missions || {}).find((mission) => mission && mission.idempotency_key === order.key);
-    if (existing) return { mission: existing, created: false, terminal: existing.submit_attempted === true };
+    if (existing) {
+      const terminal = existing.submit_attempted === true || existing.signing === true;
+      return { mission: existing, created: false, terminal };
+    }
+    admit(state, order);
     const mission = {
       id: `msn${crypto.createHash("sha256").update(`w4|${order.key}`).digest("hex").slice(0, 16)}`,
       idempotency_key: order.key,
@@ -121,6 +151,7 @@ function reserve(dir, order, shot, now) {
       hold: "uncertain",
       signed: false,
       submitted: false,
+      signing: true,
       action: order.action,
       chicago_day: order.day,
       quoted_at: now,
@@ -138,6 +169,13 @@ function reserve(dir, order, shot, now) {
   });
 }
 
+function caught(error) {
+  if (error && (error.code === "CAP" || error.code === "HOLD" || error.code === "DAY" || error.code === "BANKROLL")) {
+    return { decision: "research", signed: false, traded: false, rationale: error.message };
+  }
+  return null;
+}
+
 function save(dir, mission) {
   if (mission.id === LEGACY) throw coded("refusing the legacy mission hold", "HOLD");
   exclusive(dir, (api) => api.append({ type: "mission.upsert", at: mission.updated_at, mission }));
@@ -147,7 +185,13 @@ async function submit(dir, reserved, tx, expected, clients, now, gate) {
   if (reserved.mission.submit_attempted) return { mission: reserved.mission, replay: true };
   if (gate.signed >= MAX_PER_TICK) throw coded("W4 already signed this tick", "CAP");
   gate.signed += 1;
-  const signed = await signer.sign(tx, expected, clients.sign);
+  let signed;
+  try {
+    signed = await signer.sign(tx, expected, clients.sign);
+  } catch (error) {
+    save(dir, Object.assign({}, reserved.mission, { signing: false, updated_at: now }));
+    throw error;
+  }
   const mission = Object.assign({}, reserved.mission, {
     signed: true,
     signed_hash: signed.hash,
@@ -195,7 +239,7 @@ async function tick(env, dir, now, clients, position, journal) {
     rlusd_role_open_drops: exposure.roleOpen(state, ROLE).toString(),
     rlusd_team_cap_drops: cap == null ? null : cap.toString(),
   };
-  const resting = rowsOf(state).find((mission) => mission.hold !== "released" && (mission.action === "bid" || mission.action === "ask") && (mission.status === "rlusd_resting" || mission.status === "rlusd_unknown" || mission.status === "rlusd_reserved"));
+  let resting = rowsOf(state).find((mission) => mission.hold !== "released" && (mission.action === "bid" || mission.action === "ask") && (mission.status === "rlusd_resting" || mission.status === "rlusd_unknown" || mission.status === "rlusd_reserved"));
   if (resting && (resting.status === "rlusd_unknown" || resting.status === "rlusd_reserved")) {
     const listed = (observed.own || []).some((row) => Number(row.seq != null ? row.seq : row.Sequence) === resting.sequence);
     if (listed) {
@@ -203,6 +247,25 @@ async function tick(env, dir, now, clients, position, journal) {
       return Object.assign(base, { decision: "reconcile", status: "rlusd_resting", signed: false });
     }
     return Object.assign(base, { decision: "research", signed: false, rationale: "The W4 quote is still unproved. Exposure stays open." });
+  }
+  if (resting && resting.status === "rlusd_resting") {
+    const listed = (observed.own || []).some((row) => Number(row.seq != null ? row.seq : row.Sequence) === resting.sequence);
+    if (!listed) {
+      const cancel = rowsOf(state).find((mission) => mission.action === "cancel" && mission.submit_attempted === true && mission.unsigned_tx && mission.unsigned_tx.OfferSequence === resting.sequence);
+      if (!cancel) {
+        return Object.assign(base, { decision: "research", signed: false, rationale: "The resting quote left the book without a cancel. Exposure stays open." });
+      }
+      save(dir, Object.assign({}, resting, { hold: "released", status: "rlusd_cancelled", outstanding_drops: "0", updated_at: now }));
+      const fee = BigInt(cancel.outstanding_drops || "0");
+      save(dir, Object.assign({}, cancel, {
+        hold: "released",
+        status: "rlusd_proved",
+        outstanding_drops: "0",
+        realized_loss_drops: fee.toString(),
+        updated_at: now,
+      }));
+      resting = null;
+    }
   }
   if (cap == null) return Object.assign(base, { decision: "research", rationale: "The team RLUSD cap is not a valid drop string." });
   if (exposure.blocksNewRisk(state, ROLE)) {
@@ -234,7 +297,15 @@ async function trust(dir, now, clients, observed, gate, cap, position, state) {
     Sequence: shot.sequence,
     LastLedgerSequence: shot.validatedLedger + bounds.LEDGER_WINDOW,
   };
-  const reserved = reserve(dir, { key: "w4-rlusd-trust", action: "trust", day: policy.chicagoDay(now), exposure: need, tx }, shot, now);
+  if (clients && typeof clients.beforeReserve === "function") await clients.beforeReserve();
+  let reserved;
+  try {
+    reserved = reserve(dir, { key: "w4-rlusd-trust", action: "trust", day: policy.chicagoDay(now), exposure: need, tx, cap }, shot, now);
+  } catch (error) {
+    const quiet = caught(error);
+    if (quiet) return quiet;
+    throw error;
+  }
   if (reserved.terminal) return { decision: "trustline", replay: true, signed: false };
   const sent = await submit(dir, reserved, tx, expectedFor(tx, shot), clients, now, gate);
   return { decision: "trustline", signed: !sent.replay, traded: false };
@@ -265,13 +336,22 @@ async function place(dir, now, clients, observed, gate, cap, position, state) {
     Sequence: shot.sequence,
     LastLedgerSequence: shot.validatedLedger + bounds.LEDGER_WINDOW,
   };
-  const reserved = reserve(dir, {
-    key: `w4-rlusd-bid-${policy.chicagoDay(now)}-${shot.sequence}`,
-    action: "bid",
-    day: policy.chicagoDay(now),
-    exposure: exposureDrops,
-    tx,
-  }, shot, now);
+  if (clients && typeof clients.beforeReserve === "function") await clients.beforeReserve();
+  let reserved;
+  try {
+    reserved = reserve(dir, {
+      key: `w4-rlusd-bid-${policy.chicagoDay(now)}-${shot.sequence}`,
+      action: "bid",
+      day: policy.chicagoDay(now),
+      exposure: exposureDrops,
+      tx,
+      cap,
+    }, shot, now);
+  } catch (error) {
+    const quiet = caught(error);
+    if (quiet) return quiet;
+    throw error;
+  }
   if (reserved.terminal) return { decision: "research", replay: true, signed: false };
   const sent = await submit(dir, reserved, tx, expectedFor(tx, shot), clients, now, gate);
   return { decision: "place", signed: !sent.replay, traded: false, flags: tx.Flags, send_max_drops: tx.TakerGets };
@@ -303,13 +383,21 @@ async function manage(dir, resting, now, clients, observed, gate, cap) {
     Sequence: shot.sequence,
     LastLedgerSequence: shot.validatedLedger + bounds.LEDGER_WINDOW,
   };
-  const reserved = reserve(dir, {
-    key: `w4-rlusd-cancel-${resting.sequence}`,
-    action: "cancel",
-    day: policy.chicagoDay(now),
-    exposure: shot.fee,
-    tx,
-  }, shot, now);
+  let reserved;
+  try {
+    reserved = reserve(dir, {
+      key: `w4-rlusd-cancel-${resting.sequence}`,
+      action: "cancel",
+      day: policy.chicagoDay(now),
+      exposure: shot.fee,
+      tx,
+      cap,
+    }, shot, now);
+  } catch (error) {
+    const quiet = caught(error);
+    if (quiet) return quiet;
+    throw error;
+  }
   if (reserved.terminal) return { decision: "cancel", replay: true, signed: false };
   const sent = await submit(dir, reserved, tx, expectedFor(tx, shot), clients, now, gate);
   return { decision: "cancel", signed: !sent.replay, traded: false };
