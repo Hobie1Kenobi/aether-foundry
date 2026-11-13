@@ -4,6 +4,10 @@
  * W3 pool taker. One IOC round-trip leg per tick against official RLUSD.
  * Size stays inside 0.1-0.25 XRP. Role exposure stays at or below 0.5 XRP.
  * The team cap and uncertain holds are shared through the mission ledger.
+ * A proved lot is sold only when the pool or book quote, after the AMM
+ * trading fee and the transaction fee, covers that tesSUCCESS cost basis
+ * plus the configured margin. Realized P&L, including fees, is fsynced per
+ * Chicago day and a loss of 50000 drops stops new buys until the next day.
  */
 
 const crypto = require("crypto");
@@ -19,6 +23,7 @@ const book = require("./book");
 const rlusd = require("./rlusd");
 const market = require("./market");
 const signer = require("./signer");
+const guard = require("./w3-guard");
 
 const KIND = "w3-rlusd";
 const ROLE = "W3";
@@ -86,6 +91,16 @@ function reserve(dir, order, shot, now) {
       const terminal = existing.submit_attempted === true || existing.hold === "released" || existing.signing === true;
       return { mission: existing, created: false, terminal };
     }
+    if (order.action === "buy" || order.action === "sell") {
+      const guardState = guard.read(dir);
+      if (guardState.closed) throw coded("The W3 daily loss record is unreadable. Nothing is signed.", "GUARD");
+      if (order.action === "buy") {
+        if (typeof order.lossCap !== "bigint") throw coded("The W3 daily loss cap is not a safe drop string.", "LOSS");
+        if (guard.lossOf(guardState, order.day) >= order.lossCap) {
+          throw coded("W3 has reached its Chicago-day loss cap. No new buy is opened.", "LOSS");
+        }
+      }
+    }
     admit(state, order);
     if (order.release && state.missions && state.missions[order.release] && state.missions[order.release].id !== LEGACY) {
       api.append({
@@ -116,6 +131,9 @@ function reserve(dir, order, shot, now) {
       updated_at: now,
       unsigned_tx: order.tx,
     };
+    if (typeof order.costBasis === "string" && /^[0-9]+$/.test(order.costBasis)) {
+      mission.cost_basis_drops = order.costBasis;
+    }
     if (mission.id === LEGACY) throw coded("refusing the legacy mission hold", "HOLD");
     api.append({ type: "mission.upsert", at: now, mission });
     return { mission, created: true };
@@ -123,7 +141,7 @@ function reserve(dir, order, shot, now) {
 }
 
 function caught(error) {
-  if (error && (error.code === "CAP" || error.code === "HOLD" || error.code === "DAY" || error.code === "BANKROLL")) {
+  if (error && (error.code === "CAP" || error.code === "HOLD" || error.code === "DAY" || error.code === "BANKROLL" || error.code === "LOSS" || error.code === "GUARD")) {
     return { decision: "research", signed: false, traded: false, rationale: error.message };
   }
   return null;
@@ -170,10 +188,17 @@ async function submit(dir, reserved, tx, expected, clients, now, gate, journal) 
   if (proof) {
     const filled = Object.assign({}, mission, proof.mission, { updated_at: now });
     save(dir, filled);
+    notePnl(dir, mission.chicago_day || policy.chicagoDay(now), proof);
     writePublic(journal, proof.journal);
     return { mission: filled, replay: false, fill_proof: proof.journal };
   }
   return { mission, replay: false };
+}
+
+function notePnl(dir, day, proof) {
+  if (!proof || typeof proof.realized_pnl !== "bigint" || proof.realized_pnl === 0n) return null;
+  const hash = proof.mission && proof.mission.proof_hash;
+  return guard.record(dir, day, proof.realized_pnl, hash);
 }
 
 async function proveNow(clients, hash, self, mission) {
@@ -213,18 +238,31 @@ async function proveNow(clients, hash, self, mission) {
   if (acquired !== "0" && pays && typeof pays === "object" && pays.currency === rlusd.CURRENCY && pays.issuer === rlusd.ISSUER) {
     acquired = book.atMost(acquired, pays.value) || "0";
   }
+  const settled = {
+    status: "rlusd_filled",
+    hold: "uncertain",
+    bought_rlusd: acquired,
+    proof_hash: String(result.hash || hash).toUpperCase(),
+    proof_result: "tesSUCCESS",
+    proof_type: "consuming_tx",
+    outside_fill: proof.outside === true,
+    counterparties: proof.accounts,
+    outside_accounts: proof.outside_accounts,
+  };
+  let realized = null;
+  if (mission && mission.action === "sell") {
+    const delta = guard.accountDelta(meta, self);
+    if (delta != null && typeof mission.cost_basis_drops === "string" && /^[0-9]+$/.test(mission.cost_basis_drops)) {
+      realized = delta - BigInt(mission.cost_basis_drops);
+    }
+  } else if (!mission || mission.action === "buy") {
+    const spent = guard.provedSpend(meta, tx, self);
+    if (spent != null && acquired !== "0") settled.cost_basis_drops = spent;
+    else if (spent != null && acquired === "0" && mission && mission.action === "buy") realized = -BigInt(spent);
+  }
   return {
-    mission: {
-      status: "rlusd_filled",
-      hold: "uncertain",
-      bought_rlusd: acquired,
-      proof_hash: String(result.hash || hash).toUpperCase(),
-      proof_result: "tesSUCCESS",
-      proof_type: "consuming_tx",
-      outside_fill: proof.outside === true,
-      counterparties: proof.accounts,
-      outside_accounts: proof.outside_accounts,
-    },
+    mission: settled,
+    realized_pnl: realized,
     journal: {
       schema: "aether.business.rlusd-fill",
       at: new Date().toISOString(),
@@ -290,6 +328,7 @@ async function tick(env, dir, now, clients, position, journal) {
     const proved = await proveNow(clients, pending.signed_hash, anchors.WALLETS.W3.address, pending);
     if (proved) {
       save(dir, Object.assign({}, pending, proved.mission, { updated_at: now }));
+      notePnl(dir, day, proved);
       writePublic(journal, Object.assign({}, proved.journal, { at: now }));
       return Object.assign(base, { decision: "reconcile", fill_proof: proved.journal, status: proved.mission.status });
     }
@@ -309,9 +348,9 @@ async function tick(env, dir, now, clients, position, journal) {
       save(dir, inventory);
     }
   }
-  if (inventory && observed.balance.coeff > 0n) return Object.assign(base, await sell(dir, inventory, now, clients, observed, room, day, gate, cap, journal));
+  if (inventory && observed.balance.coeff > 0n) return Object.assign(base, await sell(dir, inventory, now, clients, observed, room, day, gate, cap, journal, env));
   if (!observed.trustline) return Object.assign(base, await trust(dir, now, clients, observed, room, day, gate, cap));
-  return Object.assign(base, await buy(dir, now, clients, observed, room, day, gate, cap, journal));
+  return Object.assign(base, await buy(dir, now, clients, observed, room, day, gate, cap, journal, env));
 }
 
 function roomOf(position, state) {
@@ -350,9 +389,14 @@ async function trust(dir, now, clients, observed, room, day, gate, cap) {
   return { decision: "trustline", signed: !sent.replay, submitted: sent.mission.submitted === true, traded: false, replay: sent.replay === true };
 }
 
-async function buy(dir, now, clients, observed, room, day, gate, cap, journal) {
+async function buy(dir, now, clients, observed, room, day, gate, cap, journal, env) {
   const state = view(dir, now);
   if (dayCount(state, day) >= MAX_PER_DAY) return { decision: "research", signed: false, rationale: "W3 has used its daily taker count." };
+  const lossLimit = guard.lossCap(env);
+  if (lossLimit == null) return { decision: "research", signed: false, rationale: "The W3 daily loss cap is not a safe drop string." };
+  const guardState = guard.inspect(dir, day);
+  if (guardState.closed) return { decision: "research", signed: false, rationale: "The W3 daily loss record is unreadable. Nothing is signed." };
+  if (guardState.loss >= lossLimit) return { decision: "research", signed: false, rationale: "W3 has reached its Chicago-day loss cap. No new buy is opened." };
   const shot = observed.shot;
   let spend = SIZE;
   const roomLeft = exposure.tighterRoom(state, ROLE, cap);
@@ -377,7 +421,7 @@ async function buy(dir, now, clients, observed, room, day, gate, cap, journal) {
   if (clients && typeof clients.beforeReserve === "function") await clients.beforeReserve();
   let reserved;
   try {
-    reserved = reserve(dir, { key, action: "buy", day, exposure: exposureDrops, tx, cap }, shot, now);
+    reserved = reserve(dir, { key, action: "buy", day, exposure: exposureDrops, tx, cap, lossCap: lossLimit }, shot, now);
   } catch (error) {
     const quiet = caught(error);
     if (quiet) return quiet;
@@ -449,12 +493,15 @@ async function reacquire(clients, mission, account) {
   if (!ceiling || sequenceText(tx && tx.Sequence) !== wanted) return null;
   const capped = book.atMost(book.rlusdAcquired(meta, account), ceiling);
   if (!capped || capped === "0" || !market.exactIou(capped) || market.exactIou(capped).coeff <= 0n) return null;
-  return {
+  const refreshed = {
     bought_rlusd: capped,
     proof_hash: hash,
     proof_result: "tesSUCCESS",
     proof_type: "consuming_tx",
   };
+  const spent = guard.provedSpend(meta, tx, account);
+  if (spent != null) refreshed.cost_basis_drops = spent;
+  return refreshed;
 }
 
 function smaller(left, right) {
@@ -463,7 +510,14 @@ function smaller(left, right) {
   return width(left) <= width(right) ? left : right;
 }
 
-async function sell(dir, source, now, clients, observed, room, day, gate, cap, journal) {
+function provedBasis(source, bought, sold) {
+  if (!source || source.proof_result !== "tesSUCCESS" || source.proof_type !== "consuming_tx") return null;
+  if (typeof source.cost_basis_drops !== "string" || !/^(?:0|[1-9][0-9]*)$/.test(source.cost_basis_drops)) return null;
+  const basis = guard.portion(BigInt(source.cost_basis_drops), bought, sold);
+  return basis == null ? false : basis;
+}
+
+async function sell(dir, source, now, clients, observed, room, day, gate, cap, journal, env) {
   const state = view(dir, now);
   if (dayCount(state, day) >= MAX_PER_DAY) return { decision: "research", signed: false, rationale: "W3 has used its daily taker count." };
   const shot = observed.shot;
@@ -477,7 +531,23 @@ async function sell(dir, source, now, clients, observed, room, day, gate, cap, j
   const capped = smaller(bought, observed.balance);
   const text = formatBalance(capped);
   if (!text) return { decision: "research", signed: false, rationale: "The RLUSD inventory cannot be priced." };
-  const pays = sellDrops(observed.pool, capped);
+  const guardState = guard.inspect(dir, day);
+  if (guardState.closed) return { decision: "research", signed: false, rationale: "The W3 daily loss record is unreadable. Nothing is signed." };
+  const basis = provedBasis(source, bought, capped);
+  let pays = sellDrops(observed.pool, capped);
+  if (basis === false) {
+    return { decision: "research", signed: false, rationale: "The IOC sell price does not cover the proved cost basis. The RLUSD stays put." };
+  }
+  if (basis != null) {
+    const margin = guard.sellMargin(env);
+    if (margin == null) return { decision: "research", signed: false, rationale: "The W3 sell margin is not a safe drop string." };
+    const quoted = guard.netProceeds(observed.pool, observed.bids, capped, shot.fee);
+    if (quoted == null || quoted < basis + margin) {
+      return { decision: "research", signed: false, rationale: "The IOC sell price does not cover the proved cost basis. The RLUSD stays put." };
+    }
+    const floor = basis + margin + shot.fee;
+    if (pays == null || pays < floor) pays = floor;
+  }
   if (pays == null || pays < 100000n || pays > 250000n) {
     return { decision: "research", signed: false, rationale: "The IOC sell is outside 0.1-0.25 XRP." };
   }
@@ -511,6 +581,7 @@ async function sell(dir, source, now, clients, observed, room, day, gate, cap, j
       tx,
       cap,
       release: source.id,
+      costBasis: basis == null || basis === false ? undefined : basis.toString(),
     }, shot, now);
   } catch (error) {
     const quiet = caught(error);
