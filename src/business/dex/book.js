@@ -142,8 +142,9 @@ async function load(ledger, account, regularKey) {
 
 function balanceText(balance) {
   if (typeof balance === "string") return balance;
-  if (balance && typeof balance === "object" && typeof balance.value === "string") return balance.value;
-  return null;
+  if (!balance || typeof balance !== "object" || typeof balance.value !== "string") return null;
+  if (balance.currency != null && balance.currency !== rlusd.CURRENCY) return null;
+  return balance.value;
 }
 
 function orient(fields, account) {
@@ -177,6 +178,11 @@ function width(amount, span) {
   if (!amount || amount.coeff === 0n) return 0n;
   const mag = amount.coeff * (10n ** BigInt(span + amount.exp));
   return amount.sign < 0 ? -mag : mag;
+}
+
+function heldWidth(amount, span) {
+  const value = width(amount, span);
+  return value > 0n ? value : 0n;
 }
 
 function formatSpan(value, span) {
@@ -230,11 +236,25 @@ function rlusdAcquired(meta, account) {
   }
   if (!parts.length) return null;
   const span = parts.reduce((max, part) => Math.max(max, -part.before.exp, -part.after.exp, 0), 0);
-  let total = 0n;
-  for (const part of parts) total += width(part.after, span) - width(part.before, span);
-  if (total <= 0n) return "0";
-  const text = formatSpan(total, span);
+  const gains = [];
+  for (const part of parts) {
+    const gain = heldWidth(part.after, span) - heldWidth(part.before, span);
+    if (gain > 0n) gains.push(gain);
+  }
+  if (gains.length > 1) return null;
+  if (gains.length === 0) return "0";
+  const text = formatSpan(gains[0], span);
   return market.exactIou(text) ? text : null;
+}
+
+function atMost(text, ceiling) {
+  if (typeof text !== "string" || typeof ceiling !== "string") return null;
+  const got = market.exactIou(text);
+  const cap = market.exactIou(ceiling);
+  if (!got || got.coeff <= 0n || !cap || cap.coeff <= 0n) return null;
+  const span = Math.max(-got.exp, -cap.exp, 0);
+  const mag = (exact) => exact.coeff * (10n ** BigInt(span + exact.exp));
+  return mag(got) <= mag(cap) ? text : ceiling;
 }
 
 function counterparties(meta, self) {
@@ -300,6 +320,7 @@ module.exports = {
   load,
   exactOf,
   rlusdAcquired,
+  atMost,
   counterparties,
   trustSettled,
 };
