@@ -7,10 +7,13 @@
  *
  * Proved XRP is open-offer locks, the LP's share of pool XRP, the account
  * base reserve, OwnerCount times the incremental reserve, in-flight holds,
- * and realized losses. The AETH leg is not priced off this pool. It counts
+ * and realized losses. Each of those is counted once. Remaining is the
+ * ceiling minus that proved XRP, and it cannot exceed the XRP W1 can
+ * actually spend. The AETH leg is not priced off this pool. It counts
  * only when an outside bid pays XRP for that AETH, and only for the AETH
- * that bid actually takes. Uncovered or frozen AETH is unproved: new risk
- * is closed, and the XRP already in the pool stays consumed.
+ * that bid actually takes. Uncovered or frozen AETH is unproved: new AETH
+ * risk is closed, and the XRP already in the pool stays consumed. The
+ * unused cap stays open.
  */
 
 const { exclusive } = require("../missions/ledger");
@@ -48,6 +51,7 @@ function blank(code) {
     aeth_xrp: 0n,
     base_reserve: 0n,
     reserve: 0n,
+    reserve_inc: 0n,
     pending: 0n,
     sole: false,
     rlusd_headroom: 0n,
@@ -136,8 +140,11 @@ function room(state, observed) {
   const provedXrp = offerLock + lpXrp + reserveBase + reserve + pending + loss;
   const priced = aethBid(observed);
   const aethXrp = priced.proved ? priced.xrp : 0n;
-  const used = provedXrp + aethXrp;
-  const over = used > BANKROLL_DROPS;
+  const capital = provedXrp + aethXrp;
+  const over = capital > BANKROLL_DROPS;
+  const capRoom = capital >= BANKROLL_DROPS ? 0n : BANKROLL_DROPS - capital;
+  const free = spendable(observed);
+  const remaining = free < capRoom ? free : capRoom;
   const risk = priced.proved && !over;
   return {
     uncertain: false,
@@ -145,11 +152,11 @@ function room(state, observed) {
     aeth_valuation: priced.proved ? "proved" : "unproved",
     risk_increasing: risk,
     code: priced.proved ? (over ? "BANKROLL" : null) : "VALUATION",
-    cap_blocked: !risk,
+    cap_blocked: remaining === 0n,
     limit: BANKROLL_DROPS,
-    used: priced.proved ? used : provedXrp,
+    used: capital,
     proved_xrp: provedXrp,
-    remaining: risk ? BANKROLL_DROPS - used : 0n,
+    remaining,
     rlusd_headroom: provedXrp >= BANKROLL_DROPS ? 0n : BANKROLL_DROPS - provedXrp,
     loss,
     offer_lock: offerLock,
@@ -157,14 +164,20 @@ function room(state, observed) {
     aeth_xrp: aethXrp,
     base_reserve: reserveBase,
     reserve,
+    reserve_inc: reserveInc,
     pending,
     sole: pool.sole === true && pool.balance > 0n,
   };
 }
 
+function sumLocks(offers) {
+  return (offers || []).reduce((sum, offer) => sum + (offer && offer.locked || 0n), 0n);
+}
+
 function spendable(observed) {
   if (!observed || observed.proved !== true) return 0n;
-  const locks = (observed.offers || []).reduce((sum, offer) => sum + (offer.locked || 0n), 0n);
+  if (typeof observed.balance !== "bigint" || typeof observed.reserveBase !== "bigint" || typeof observed.reserveInc !== "bigint" || typeof observed.ownerCount !== "bigint") return 0n;
+  const locks = sumLocks(observed.offers) + sumLocks(observed.rlusdOffers);
   const free = observed.balance - observed.reserveBase - (observed.ownerCount * observed.reserveInc) - locks;
   return free > 0n ? free : 0n;
 }

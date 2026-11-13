@@ -253,13 +253,22 @@ function marketXrp(value) {
   return typeof value === "string" && /^[0-9]+$/.test(value) ? BigInt(value) : null;
 }
 
-function headroom(position, state) {
+function reserveHeld(mission, observed) {
+  if (!mission || !observed) return false;
+  if (mission.action === "trust") return observed.trustline === true;
+  return Boolean(listedOffer(observed, mission.sequence));
+}
+
+function headroom(position, state, observed) {
   const base = position && typeof position.proved_xrp === "bigint" ? position.proved_xrp : bankroll.BANKROLL_DROPS;
+  const reserveInc = position && typeof position.reserve_inc === "bigint" && position.reserve_inc > 0n ? position.reserve_inc : 0n;
   let extra = 0n;
   for (const mission of Object.values((state && state.missions) || {})) {
     if (!mission || mission.kind !== KIND) continue;
-    extra += BigInt(mission.outstanding_drops || "0");
-    extra += BigInt(mission.realized_loss_drops || "0");
+    let outstanding = BigInt(mission.outstanding_drops || "0");
+    const loss = BigInt(mission.realized_loss_drops || "0");
+    if (reserveInc > 0n && outstanding >= reserveInc && reserveHeld(mission, observed)) outstanding -= reserveInc;
+    extra += outstanding + loss;
   }
   const used = base + extra;
   return {
@@ -392,7 +401,7 @@ async function tick(env, dir, now, clients, position) {
   if (!env || env.FOUNDRY_DEX_RLUSD !== "yes") return null;
   const observed = await load(clients.ledger);
   const state = view(dir, now);
-  const room = headroom(position, state);
+  const room = headroom(position, state, observed);
   const day = policy.chicagoDay(now);
   const gate = { signed: 0 };
   const fields = {
@@ -1657,5 +1666,6 @@ module.exports = {
   markInventory,
   load,
   tick,
+  headroom,
   historyDropped,
 };
