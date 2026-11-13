@@ -35,7 +35,7 @@ async function tick(env, input, clients) {
   const source = env || {};
   const config = verifiedEnv(source);
   const body = input || {};
-  if (!config) {
+  if (!config || config.role !== "W1") {
     return {
       activated: false,
       enabled: false,

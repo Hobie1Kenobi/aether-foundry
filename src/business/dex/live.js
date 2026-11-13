@@ -81,33 +81,43 @@ function assertFile(file) {
   return resolved;
 }
 
-function readPrivateW1(file) {
+function readRoleAccount(file, account) {
+  const w1 = account === bounds.ACCOUNT;
   const resolved = assertFile(file);
   let fd;
   try {
     fd = fs.openSync(resolved, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
   } catch (error) {
-    if (error && error.code === "ENOENT") throw coded("W1 account file is missing", "AUTH");
-    throw coded("W1 account file cannot be read", "AUTH");
+    if (error && error.code === "ENOENT") throw coded(w1 ? "W1 account file is missing" : "role account file is missing", "AUTH");
+    throw coded(w1 ? "W1 account file cannot be read" : "role account file cannot be read", "AUTH");
   }
   try {
     const stat = fs.fstatSync(fd);
     if (!stat.isFile() || stat.nlink !== 1 || (stat.mode & 0o777) !== 0o600) {
-      throw coded("W1 account file must be mode 0600", "AUTH");
+      throw coded(w1 ? "W1 account file must be mode 0600" : "role account file must be mode 0600", "AUTH");
     }
-    const body = JSON.parse(fs.readFileSync(fd, "utf8"));
+    let body;
+    try {
+      body = JSON.parse(fs.readFileSync(fd, "utf8"));
+    } catch {
+      throw coded(w1 ? "W1 account file is not json" : "role key file is not json", "AUTH");
+    }
     const xrpl = require("xrpl");
-    if (!body || body.account !== bounds.ACCOUNT || body.account === anchors.WALLETS.W0.address) {
-      throw coded("W1 regular-key file must name the W1 account", "WALLET");
+    if (!body || body.account !== account || body.account === anchors.WALLETS.W0.address) {
+      throw coded(w1 ? "W1 regular-key file must name the W1 account" : "role key file must name its account", "WALLET");
     }
-    if (body.regular_key === bounds.ACCOUNT || body.regular_key === anchors.WALLETS.W0.address || !xrpl.isValidClassicAddress(body.regular_key || "")) {
-      throw coded("refusing a master key as the W1 signer", "MASTER_KEY");
+    if (body.regular_key === account || body.regular_key === anchors.WALLETS.W0.address || !xrpl.isValidClassicAddress(body.regular_key || "")) {
+      throw coded(w1 ? "refusing a master key as the W1 signer" : "refusing a master key", "MASTER_KEY");
     }
-    if (typeof body.seed !== "string" || body.seed.length < 8) throw coded("W1 regular-key file is missing its seed", "WALLET");
+    if (typeof body.seed !== "string" || body.seed.length < 8) throw coded(w1 ? "W1 regular-key file is missing its seed" : "role key file is missing its seed", "WALLET");
     return { account: body.account, regular_key: body.regular_key, seed: body.seed };
   } finally {
     fs.closeSync(fd);
   }
+}
+
+function readPrivateW1(file) {
+  return readRoleAccount(file, bounds.ACCOUNT);
 }
 
 function health(env) {
@@ -282,6 +292,95 @@ function liveExpected(tx) {
   };
 }
 
+async function connectRole(env, role, deps) {
+  const source = env || {};
+  const options = deps || {};
+  if (role !== "W3" && role !== "W4" && role !== "W5") throw coded("dex role is not live", "WALLET");
+  const account = anchors.WALLETS[role].address;
+  if (account === anchors.WALLETS.W0.address) throw coded("refusing to sign as W0", "W0");
+  if (role === "W5") {
+    if (source.FOUNDRY_W5_ORACLE_LIVE !== "yes" || source.FOUNDRY_DEX_EXECUTE !== "yes" || source.FOUNDRY_W5_ORACLE_ACTIVATE !== "ACTIVATE-W5-RLUSD-ORACLE") {
+      throw coded("W5 oracle live gate is off", "DORMANT");
+    }
+    if (source.FOUNDRY_DEX_NETWORK !== "xrpl:1") throw coded("socket did not prove xrpl network id 1", "MAINNET");
+    if (source.FOUNDRY_DEX_AXELAR_DROPS !== "0") throw coded("Axelar budget is not zero", "BRIDGE");
+  } else if (!bounds.verifiedEnv(source) || bounds.verifiedEnv(source).role !== role || source[bounds.liveEnvName(role)] !== "yes") {
+    throw coded("dex role live gate is off", "DORMANT");
+  }
+  assertNoHouseSeeds(source);
+  for (const name of HOUSE_ENVS) {
+    if (source[name]) throw coded(`refusing house environment ${name}`, "HOUSE_SEED");
+  }
+  if (source.seed || source.secret || source.privateKey) throw coded("refusing a caller seed", "SECRET");
+  const sockets = websocketList(source.FOUNDRY_W1_DEX_WS);
+  const read = options.readAccount || ((file) => readRoleAccount(file, account));
+  const open = options.openWallet || ((seed) => require("xrpl").Wallet.fromSeed(seed));
+  const connect = options.connect || (async (url) => {
+    const xrpl = require("xrpl");
+    const client = new xrpl.Client(url, { connectionTimeout: CONNECTION_TIMEOUT_MS });
+    if (typeof client.on === "function") client.on("error", () => {});
+    await client.connect();
+    return client;
+  });
+  let client = null;
+  let lastError = null;
+  for (const ws of sockets) {
+    let opened = null;
+    try {
+      opened = await connect(ws);
+      const info = await opened.request({ command: "server_info" });
+      const network = info && info.result && info.result.info && info.result.info.network_id;
+      if (Number(network) !== 1) throw coded("socket did not prove xrpl network id 1", "MAINNET");
+      client = opened;
+      break;
+    } catch (error) {
+      if (opened && opened !== client) {
+        try {
+          await opened.disconnect();
+        } catch {
+          /* already closed */
+        }
+      }
+      if (error.code === "MAINNET" || error.code === "HOST") throw error;
+      lastError = error;
+      client = null;
+    }
+  }
+  if (!client) throw lastError || coded("dex websocket did not connect", "HOST");
+  let wallet = null;
+  async function openKey() {
+    if (wallet) return;
+    const loaded = await read(source[bounds.keyEnvName(role)]);
+    if (!loaded || loaded.account !== account) throw coded("role key file must name its account", "WALLET");
+    const opened = await open(loaded.seed);
+    const classic = opened && (opened.classicAddress || opened.address);
+    if (classic === account || classic === anchors.WALLETS.W0.address) throw coded("refusing a master key", "MASTER_KEY");
+    if (classic !== loaded.regular_key) throw coded("derived key does not match the role file", "REGULAR_KEY");
+    wallet = opened;
+  }
+  let closed = false;
+  async function close() {
+    if (closed) return;
+    closed = true;
+    await client.disconnect();
+  }
+  return {
+    close,
+    openKey,
+    clients: {
+      mode: "live",
+      bound: `${role.toLowerCase()}-dex`,
+      sign: (tx) => {
+        if (!wallet) throw coded("role key is not open", "AUTH");
+        const signed = wallet.sign(tx);
+        return { tx_blob: signed.tx_blob, hash: signed.hash };
+      },
+      submit: (blob) => client.submit(blob),
+      ledger: { request: (body) => settledRequest((payload) => client.request(payload), body) },
+    },
+  };
+}
+
 module.exports = {
   WS,
   CONNECTION_TIMEOUT_MS,
@@ -289,7 +388,9 @@ module.exports = {
   health,
   preflight,
   readPrivateW1,
+  readRoleAccount,
   connectLive,
+  connectRole,
   liveExpected,
   settledRequest,
   notFoundResponse,

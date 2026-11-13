@@ -4,6 +4,7 @@ const xrpl = require("xrpl");
 const { coded } = require("../../missions/ledger");
 const anchors = require("../../director/anchors");
 const bounds = require("./bounds");
+const gates = require("./gates");
 
 function same(left, right) {
   if (typeof left === "string" || typeof right === "string") return left === right;
@@ -12,6 +13,10 @@ function same(left, right) {
 }
 
 function assertFields(tx, expected) {
+  if (expected && (expected.role === "W3" || expected.role === "W4" || expected.role === "W5")) {
+    gates.assertDex(tx, expected);
+    return;
+  }
   if (!tx || typeof tx !== "object") throw coded("refusing an empty transaction", "TX");
   if (tx.Account === anchors.WALLETS.W0.address) throw coded("refusing to sign as W0", "W0");
   if (tx.Account !== bounds.ACCOUNT || expected.account !== bounds.ACCOUNT) throw coded("signer account is not W1", "WALLET");

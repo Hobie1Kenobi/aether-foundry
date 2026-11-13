@@ -12,12 +12,15 @@ const path = require("path");
 const { view } = require("../../missions/engine");
 const policy = require("../../missions/policy");
 const { verifiedEnv, KIND } = require("./bounds");
-const { connectLive } = require("./live");
+const { connectLive, connectRole } = require("./live");
 const engine = require("./engine");
 const market = require("./market");
 const bankroll = require("../bankroll");
 const amm = require("./amm");
 const rlusd = require("./rlusd");
+const exposure = require("./exposure");
+const taker = require("./taker");
+const quoter = require("./quoter");
 
 const CHOICES = ["research", "observe", "hold", "reconcile", "cancel", "place", "withdraw"];
 
@@ -83,7 +86,10 @@ async function decide(env, input, clients) {
   const source = env || {};
   const body = input || {};
   const now = body.now || new Date().toISOString();
-  const spend = verifiedEnv(source) != null && source.FOUNDRY_W1_DEX_LIVE === "yes";
+  const config = verifiedEnv(source);
+  const role = config && (config.role === "W3" || config.role === "W4") ? config.role : "W1";
+  const liveOn = role === "W1" ? source.FOUNDRY_W1_DEX_LIVE === "yes" : source[`${role === "W3" ? "FOUNDRY_W3_DEX_LIVE" : "FOUNDRY_W4_DEX_LIVE"}`] === "yes";
+  const spend = config != null && liveOn;
   const base = {
     schema: "aether.business.research",
     at: now,
@@ -104,6 +110,7 @@ async function decide(env, input, clients) {
     remember(body.journal, row);
     return row;
   }
+  if (role === "W3" || role === "W4") return decideRole(source, body, clients, base, role);
   const saved = savedPolicy(source, body);
   const runtime = clients && clients.mode === "injected" ? clients : null;
   const live = runtime ? null : await connectLive(source, body.deps);
@@ -126,6 +133,9 @@ async function decide(env, input, clients) {
     const currentLp = observed.pool.balance === 0n ? 0n : (observed.pool.xrp * observed.pool.balance) / observed.pool.supply;
     bankroll.commitMark(body.ledger, currentLp, now);
     const position = bankroll.room(view(body.ledger, now), observed);
+    if (position.uncertain !== true && typeof position.proved_xrp === "bigint") {
+      bankroll.noteShared(body.ledger, position.proved_xrp, position.rlusd_overlap || 0n, now);
+    }
     let slip = null;
     try {
       const probe = observed.pool.xrp > 1000000n ? 1000000n : observed.pool.xrp / 10n;
@@ -357,6 +367,40 @@ async function decide(env, input, clients) {
     return remember(body.journal, row);
   } finally {
     if (live) await live.close();
+  }
+}
+
+async function decideRole(source, body, clients, base, role) {
+  const runtime = clients && clients.mode === "injected" ? clients : null;
+  const opened = runtime ? null : await connectRole(source, role, body.deps);
+  const actor = runtime || (opened && opened.clients);
+  try {
+    if (opened) await opened.openKey();
+    const state = view(body.ledger, base.at);
+    const ledgerRoom = exposure.ledgerHeadroom(state);
+    const position = { headroom: ledgerRoom.headroom, proved_xrp: ledgerRoom.proved_xrp };
+    const mod = role === "W3" ? taker : quoter;
+    let traded = null;
+    let errorCode = null;
+    try {
+      traded = await mod.tick(source, body.ledger, base.at, actor, position, body.journal);
+    } catch (error) {
+      errorCode = error.code || "UNCERTAIN";
+    }
+    const row = Object.assign({}, base, {
+      decision: "research",
+      market: "official-rlusd",
+      role,
+      learning: false,
+      rationale: "The role book did not trade.",
+    }, traded || {}, {
+      learning: false,
+      role,
+      error_code: errorCode || (traded && traded.error_code) || undefined,
+    });
+    return remember(body.journal, row);
+  } finally {
+    if (opened) await opened.close();
   }
 }
 

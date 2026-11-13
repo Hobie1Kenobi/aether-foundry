@@ -41,7 +41,8 @@
     "CredentialCreate",
     "CredentialAccept",
     "CredentialDelete",
-    "AccountSet"
+    "AccountSet",
+    "OracleSet"
   ],
   "tx_types_refused": [
     "AccountDelete",
@@ -153,6 +154,53 @@
       "flags": "tfAllOrNothing",
       "trigger": "npm run batch:heartbeat -- --live",
       "refuse": ["w0", "batch_signers", "ci", "mainnet", "over_cap", "atomic_disabled"]
+    },
+    "w3_pool_taker": {
+      "account": "W3",
+      "address": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+      "key_env": "W3_REGULAR_SEED",
+      "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
+      "pool": "rPn7kHwycXzS5XNj167CnKwC2t82yAAdNW",
+      "currency": "524C555344000000000000000000000000000000",
+      "min_drops": "100000",
+      "max_drops": "250000",
+      "role_cap_drops": "500000",
+      "max_per_utc_day": 4,
+      "ioc_required": true,
+      "flags": "tfImmediateOrCancel",
+      "trigger": "FOUNDRY_DEX_ROLE=W3 pool taker round trip",
+      "refuse": ["w0", "passive", "lookalike_issuer", "wrong_pool", "over_cap", "ci", "mainnet"]
+    },
+    "w4_resting_quote": {
+      "account": "W4",
+      "address": "ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN",
+      "key_env": "W4_REGULAR_SEED",
+      "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
+      "pool": "rPn7kHwycXzS5XNj167CnKwC2t82yAAdNW",
+      "currency": "524C555344000000000000000000000000000000",
+      "max_drops": "1000000",
+      "role_cap_drops": "1000000",
+      "min_replace_hours": 2,
+      "max_per_utc_day": 12,
+      "ioc_required": false,
+      "flags": "tfPassive",
+      "trigger": "FOUNDRY_DEX_ROLE=W4 resting quote inside the RLUSD spread",
+      "refuse": ["w0", "ioc", "lookalike_issuer", "wrong_pool", "over_cap", "ci", "mainnet"]
+    },
+    "w5_rlusd_oracle": {
+      "account": "W5",
+      "address": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+      "key_env": "W5_REGULAR_SEED",
+      "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
+      "pool": "rPn7kHwycXzS5XNj167CnKwC2t82yAAdNW",
+      "tx_type": "OracleSet",
+      "fees_only": true,
+      "interval_minutes": 30,
+      "max_drops": "0",
+      "max_fee_drops": "10000",
+      "max_per_utc_day": 48,
+      "trigger": "official RLUSD/XRP AMM price every 30 minutes from W5",
+      "refuse": ["w0", "not_w5", "amount", "lookalike_issuer", "ci", "mainnet"]
     }
   }
 }

@@ -619,7 +619,11 @@ test("keeper and ticket sources do not load a seed or a banned tx", () => {
     assert.doesNotMatch(src, /TransactionType:\s*"TokenEscrow"/);
     assert.doesNotMatch(src, /require\(["']xrpl["']\)/);
   }
-  const allow = fs.readFileSync(path.join(anchors.repoRoot(), "src", "runtime", "allowlist.json"), "utf8");
-  assert.equal(allow.includes("OracleSet"), false);
-  assert.equal(allow.includes("oracle_set"), false);
+  const allow = JSON.parse(fs.readFileSync(path.join(anchors.repoRoot(), "src", "runtime", "allowlist.json"), "utf8"));
+  assert.equal(allow.actions.w5_rlusd_oracle.account, "W5");
+  assert.equal(allow.actions.w5_rlusd_oracle.tx_type, "OracleSet");
+  assert.equal(allow.actions.w5_rlusd_oracle.fees_only, true);
+  assert.equal(allow.tx_types.includes("OracleSet"), true);
+  assert.equal(JSON.stringify(allow).includes("oracle_set"), false);
+  assert.equal(Object.entries(allow.actions).filter(([, row]) => row.tx_type === "OracleSet").length, 1);
 });
