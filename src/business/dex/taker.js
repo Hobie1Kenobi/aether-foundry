@@ -292,7 +292,15 @@ async function tick(env, dir, now, clients, position, journal) {
   if (exposure.blocksNewRisk(state, ROLE)) {
     return Object.assign(base, { decision: "research", signed: false, rationale: "An uncertain RLUSD hold from another role is still open. Nothing is signed." });
   }
-  const inventory = rows(state).find((mission) => mission.hold !== "released" && mission.action === "buy" && mission.status === "rlusd_filled" && BigInt(mission.outstanding_drops || "0") > 0n);
+  let inventory = rows(state).find((mission) => mission.hold !== "released" && mission.action === "buy" && mission.status === "rlusd_filled" && BigInt(mission.outstanding_drops || "0") > 0n);
+  const held = inventory ? market.exactIou(inventory.bought_rlusd || "") : null;
+  if (inventory && (!held || held.coeff <= 0n)) {
+    const refreshed = await reacquire(clients, inventory, anchors.WALLETS.W3.address);
+    if (refreshed) {
+      inventory = Object.assign({}, inventory, refreshed, { updated_at: now });
+      save(dir, inventory);
+    }
+  }
   if (inventory && observed.balance.coeff > 0n) return Object.assign(base, await sell(dir, inventory, now, clients, observed, room, day, gate, cap, journal));
   if (!observed.trustline) return Object.assign(base, await trust(dir, now, clients, observed, room, day, gate, cap));
   return Object.assign(base, await buy(dir, now, clients, observed, room, day, gate, cap, journal));
@@ -378,6 +386,36 @@ async function buy(dir, now, clients, observed, room, day, gate, cap, journal) {
     send_max_drops: tx.TakerGets,
     flags: tx.Flags,
     fill_proof: sent.fill_proof || null,
+  };
+}
+
+async function reacquire(clients, mission, account) {
+  const hash = String(mission.proof_hash || mission.signed_hash || "").toUpperCase();
+  if (!/^[0-9A-F]{64}$/.test(hash) || !clients || !clients.ledger) return null;
+  let lookup;
+  try {
+    lookup = await clients.ledger.request({ command: "tx", transaction: hash, binary: false });
+  } catch (error) {
+    return null;
+  }
+  const result = lookup && lookup.result;
+  const meta = result && (result.meta || result.metaData);
+  const tx = result && (result.tx_json || result);
+  if (!result || result.validated !== true || !meta || meta.TransactionResult !== "tesSUCCESS") return null;
+  if (String(result.hash || "").toUpperCase() !== hash) return null;
+  if (!tx || tx.TransactionType !== "OfferCreate" || tx.Account !== account) return null;
+  const pays = tx.TakerPays;
+  const gets = tx.TakerGets;
+  const amounts = [pays, gets].filter((amount) => amount && typeof amount === "object");
+  if (amounts.some((amount) => String(amount.issuer || "").includes("rKmPxq"))) return null;
+  if (!amounts.some((amount) => amount.currency === rlusd.CURRENCY && amount.issuer === rlusd.ISSUER)) return null;
+  const acquired = book.rlusdAcquired(meta, account);
+  if (!acquired || acquired === "0" || !market.exactIou(acquired) || market.exactIou(acquired).coeff <= 0n) return null;
+  return {
+    bought_rlusd: acquired,
+    proof_hash: hash,
+    proof_result: "tesSUCCESS",
+    proof_type: "consuming_tx",
   };
 }
 

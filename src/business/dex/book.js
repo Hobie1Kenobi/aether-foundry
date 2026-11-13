@@ -140,59 +140,101 @@ async function load(ledger, account, regularKey) {
   };
 }
 
-function signed15(value) {
-  if (typeof value !== "string") return null;
-  const neg = value.startsWith("-");
-  const exact = market.exactIou(neg ? value.slice(1) : value);
-  if (!exact) return null;
-  const shift = exact.exp + 15;
-  if (shift < 0 || shift > 80) return null;
-  const mag = shift === 0 ? exact.coeff : exact.coeff * (10n ** BigInt(shift));
-  return neg ? -mag : mag;
+function balanceText(balance) {
+  if (typeof balance === "string") return balance;
+  if (balance && typeof balance === "object" && typeof balance.value === "string") return balance.value;
+  return null;
 }
 
-function holder15(fields, account) {
+function orient(fields, account) {
   if (!fields || !fields.HighLimit || !fields.LowLimit) return null;
   const high = fields.HighLimit;
   const low = fields.LowLimit;
   const currency = high.currency || low.currency;
+  const issuers = [high.issuer, low.issuer];
   if (currency !== rlusd.CURRENCY) return null;
-  if (high.issuer !== rlusd.ISSUER && low.issuer !== rlusd.ISSUER) return null;
-  if (high.issuer !== account && low.issuer !== account) return null;
-  const raw = signed15(fields.Balance);
-  if (raw == null) return null;
-  if (low.issuer === account && high.issuer === rlusd.ISSUER) return raw;
-  if (high.issuer === account && low.issuer === rlusd.ISSUER) return -raw;
-  return null;
+  if (issuers.some((issuer) => String(issuer || "").includes("rKmPxq"))) return null;
+  if (!issuers.includes(rlusd.ISSUER) || !issuers.includes(account)) return null;
+  const text = balanceText(fields.Balance);
+  if (text == null) return null;
+  const neg = text.startsWith("-");
+  const exact = market.exactIou(neg ? text.slice(1) : text);
+  if (!exact) return null;
+  let sign = 1;
+  if (low.issuer === account && high.issuer === rlusd.ISSUER) sign = 1;
+  else if (high.issuer === account && low.issuer === rlusd.ISSUER) sign = -1;
+  else return null;
+  if (neg) sign = -sign;
+  return { sign, coeff: exact.coeff, exp: exact.exp };
 }
 
-function format15(scaled) {
-  if (scaled <= 0n) return "0";
-  const digits = scaled.toString().padStart(16, "0");
-  const whole = digits.slice(0, digits.length - 15).replace(/^0+/, "") || "0";
-  const frac = digits.slice(digits.length - 15).replace(/0+$/, "");
-  return frac ? `${whole}.${frac}` : whole;
+function overlay(finalFields, previous) {
+  if (!finalFields && !previous) return null;
+  return Object.assign({}, finalFields || {}, previous || {});
+}
+
+function width(amount, span) {
+  if (!amount || amount.coeff === 0n) return 0n;
+  const mag = amount.coeff * (10n ** BigInt(span + amount.exp));
+  return amount.sign < 0 ? -mag : mag;
+}
+
+function formatSpan(value, span) {
+  if (value === 0n) return "0";
+  const neg = value < 0n;
+  const mag = neg ? -value : value;
+  const digits = mag.toString();
+  let text;
+  if (span <= 0) text = `${digits}${"0".repeat(-span)}`;
+  else if (digits.length > span) {
+    const whole = digits.slice(0, digits.length - span);
+    const frac = digits.slice(digits.length - span).replace(/0+$/, "");
+    text = frac ? `${whole}.${frac}` : whole;
+  } else {
+    text = `0.${"0".repeat(span - digits.length)}${digits}`.replace(/0+$/, "");
+  }
+  return neg ? `-${text}` : text;
+}
+
+function nodeDelta(node, account) {
+  if (node.CreatedNode && node.CreatedNode.LedgerEntryType === "RippleState") {
+    const after = orient(node.CreatedNode.NewFields, account);
+    if (!after) return null;
+    return { before: { sign: 1, coeff: 0n, exp: 0 }, after };
+  }
+  if (node.DeletedNode && node.DeletedNode.LedgerEntryType === "RippleState") {
+    const body = node.DeletedNode;
+    const before = orient(overlay(body.FinalFields, body.PreviousFields), account);
+    if (!before) return null;
+    return { before, after: { sign: 1, coeff: 0n, exp: 0 } };
+  }
+  if (node.ModifiedNode && node.ModifiedNode.LedgerEntryType === "RippleState") {
+    const body = node.ModifiedNode;
+    const after = orient(body.FinalFields, account);
+    const before = orient(overlay(body.FinalFields, body.PreviousFields), account);
+    if (!after && !before) return null;
+    if (!after || !before) return false;
+    return { before, after };
+  }
+  return null;
 }
 
 function rlusdAcquired(meta, account) {
   const nodes = meta && Array.isArray(meta.AffectedNodes) ? meta.AffectedNodes : [];
-  let delta = 0n;
-  let seen = false;
+  const parts = [];
   for (const node of nodes) {
-    const body = node && (node.CreatedNode || node.ModifiedNode || node.DeletedNode);
-    if (!body || body.LedgerEntryType !== "RippleState") continue;
-    const created = Boolean(node.CreatedNode);
-    const finalFields = created ? body.NewFields : body.FinalFields;
-    const previous = created ? null : body.PreviousFields;
-    const after = holder15(finalFields || previous, account);
-    const before = created ? 0n : holder15(previous || finalFields, account);
-    if (after == null && before == null) continue;
-    if (after == null || before == null) return null;
-    delta += node.DeletedNode ? -before : after - before;
-    seen = true;
+    if (!node) continue;
+    const delta = nodeDelta(node, account);
+    if (delta === false) return null;
+    if (delta) parts.push(delta);
   }
-  if (!seen) return null;
-  return format15(delta);
+  if (!parts.length) return null;
+  const span = parts.reduce((max, part) => Math.max(max, -part.before.exp, -part.after.exp, 0), 0);
+  let total = 0n;
+  for (const part of parts) total += width(part.after, span) - width(part.before, span);
+  if (total <= 0n) return "0";
+  const text = formatSpan(total, span);
+  return market.exactIou(text) ? text : null;
 }
 
 function counterparties(meta, self) {

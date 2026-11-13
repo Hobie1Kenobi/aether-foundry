@@ -113,14 +113,15 @@ function roleLedger(role, extra) {
           return { result: { validated: true, offers: state.offers || [] } };
         }
         if (req.command === "amm_info") {
+          const amm = state.amm || {};
           return {
             result: {
               validated: true,
               amm: {
                 account: rlusd.AMM,
-                amount: "10000000000",
-                amount2: { currency: rlusd.CURRENCY, issuer: rlusd.ISSUER, value: "4000" },
-                trading_fee: 500,
+                amount: amm.amount || "10000000000",
+                amount2: { currency: rlusd.CURRENCY, issuer: rlusd.ISSUER, value: amm.value || "4000" },
+                trading_fee: amm.trading_fee == null ? 500 : amm.trading_fee,
               },
             },
           };
@@ -295,6 +296,29 @@ describe("shared RLUSD caps", () => {
     assert.equal(exposure.teamOpen(doubled), 400032n);
     assert.equal(exposure.roleOpen(doubled, "W4"), 400032n);
     assert.equal(exposure.teamOpen(doubled) > 400010n, true);
+    const existingQuote = {
+      missions: {
+        trust: mission({
+          id: "msnde18ca1a9d441a55",
+          kind: "w4-rlusd",
+          role: "W4",
+          action: "trust",
+          status: "rlusd_proved",
+          outstanding_drops: "0",
+          fee_drops: "10",
+        }),
+        bid: mission({
+          id: "msn0e39f438e3c0dc85",
+          kind: "w4-rlusd",
+          role: "W4",
+          action: "bid",
+          status: "rlusd_resting",
+          outstanding_drops: "400010",
+        }),
+      },
+    };
+    assert.equal(exposure.teamOpen(existingQuote), 400010n);
+    assert.equal(exposure.roleOpen(existingQuote, "W4"), 400010n);
     assert.equal(exposure.ledgerHeadroom(doubled).used, 400032n);
     const smallAsk = {
       missions: {
@@ -730,6 +754,98 @@ describe("W3 taker and W4 quoter", () => {
     const skipped = await rlusd.tick(baseEnv("W1"), tight, NOW, w1Client(quiet), { proved_xrp: 0n, reserve_inc: 200000n });
     assert.equal(skipped.signed === true, false);
     assert.equal(quiet.signs, 0);
+  });
+});
+
+describe("W3 fill acquisition", () => {
+  const HASH = "BDBC06FE6CB57A1869029CE9DA4A4CE5C6C1C82D5004B6CEAFCEDFEA6D949EB1";
+  const fixture = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures/w3-ioc-buy-22299209.json"), "utf8"));
+
+  it("reads 0.01476733 RLUSD from the live IOC buy metadata", () => {
+    assert.equal(book.rlusdAcquired(fixture.meta, anchors.WALLETS.W3.address), fixture.acquired);
+    assert.equal(fixture.acquired.startsWith("0.01476733"), true);
+    assert.equal(book.rlusdAcquired(fixture.meta, anchors.WALLETS.W0.address), null);
+    const lookalike = {
+      AffectedNodes: [{
+        ModifiedNode: {
+          LedgerEntryType: "RippleState",
+          FinalFields: {
+            Balance: { currency: rlusd.CURRENCY, issuer: "rrrrrrrrrrrrrrrrrrrrBZbvji", value: "1" },
+            HighLimit: { currency: rlusd.CURRENCY, issuer: "rKmPxqLookalikeIssuerXXXXXXXX", value: "0" },
+            LowLimit: { currency: rlusd.CURRENCY, issuer: anchors.WALLETS.W3.address, value: "10" },
+          },
+          PreviousFields: { Balance: { currency: rlusd.CURRENCY, issuer: "rrrrrrrrrrrrrrrrrrrrBZbvji", value: "0" } },
+        },
+      }],
+    };
+    assert.equal(book.rlusdAcquired(lookalike, anchors.WALLETS.W3.address), null);
+    const created = {
+      AffectedNodes: [{
+        CreatedNode: {
+          LedgerEntryType: "RippleState",
+          NewFields: {
+            Balance: { currency: rlusd.CURRENCY, issuer: "rrrrrrrrrrrrrrrrrrrrBZbvji", value: "0.2" },
+            HighLimit: { currency: rlusd.CURRENCY, issuer: rlusd.ISSUER, value: "0" },
+            LowLimit: { currency: rlusd.CURRENCY, issuer: anchors.WALLETS.W3.address, value: "10" },
+          },
+        },
+      }],
+    };
+    assert.equal(book.rlusdAcquired(created, anchors.WALLETS.W3.address), "0.2");
+    const deleted = {
+      AffectedNodes: [{
+        DeletedNode: {
+          LedgerEntryType: "RippleState",
+          FinalFields: {
+            Balance: { currency: rlusd.CURRENCY, issuer: "rrrrrrrrrrrrrrrrrrrrBZbvji", value: "0.2" },
+            HighLimit: { currency: rlusd.CURRENCY, issuer: rlusd.ISSUER, value: "0" },
+            LowLimit: { currency: rlusd.CURRENCY, issuer: anchors.WALLETS.W3.address, value: "10" },
+          },
+          PreviousFields: { Balance: { currency: rlusd.CURRENCY, issuer: "rrrrrrrrrrrrrrrrrrrrBZbvji", value: "0.5" } },
+        },
+      }],
+    };
+    assert.equal(book.rlusdAcquired(deleted, anchors.WALLETS.W3.address), "0");
+  });
+
+  it("re-proves a zero acquire from the validated buy and sells the smaller official amount", async () => {
+    const ledger = home();
+    seed(ledger, {
+      id: "msna9cb1105fdf57c75",
+      kind: "w3-rlusd",
+      role: "W3",
+      action: "buy",
+      account: anchors.WALLETS.W3.address,
+      hold: "uncertain",
+      status: "rlusd_filled",
+      bought_rlusd: "0",
+      proof_hash: HASH,
+      proof_result: "tesSUCCESS",
+      signed_hash: HASH,
+      outstanding_drops: "200010",
+      realized_loss_drops: "0",
+      submit_attempted: true,
+      updated_at: NOW,
+    });
+    const state = {
+      trust: true,
+      balance: "0.01",
+      box: { signs: 0, types: [], flags: [] },
+      amm: { amount: "20000000", value: "1", trading_fee: 0 },
+      tx: { result: Object.assign({ validated: true, hash: HASH, ledger_index: fixture.ledger_index }, fixture) },
+    };
+    const row = await taker.tick(baseEnv("W3"), ledger, NOW, roleLedger("W3", state), { headroom: 100000000n }, null);
+    const saved = view(ledger, NOW).missions.msna9cb1105fdf57c75;
+    assert.equal(saved.bought_rlusd, fixture.acquired);
+    assert.equal(saved.hold, "uncertain");
+    assert.equal(saved.id, "msna9cb1105fdf57c75");
+    assert.equal(row.signed, true);
+    assert.equal(state.box.flags[0], gates.TF_IOC);
+    assert.equal(state.box.last.TakerGets.issuer, rlusd.ISSUER);
+    assert.equal(state.box.last.TakerGets.currency, rlusd.CURRENCY);
+    assert.equal(state.box.last.TakerGets.value, "0.01");
+    const pays = BigInt(state.box.last.TakerPays);
+    assert.equal(pays >= 100000n && pays <= 250000n, true);
   });
 });
 
