@@ -205,12 +205,19 @@ async function proveNow(clients, hash, self, mission) {
     };
   }
   if (!result || result.validated !== true || !meta || meta.TransactionResult !== "tesSUCCESS") return null;
+  if (String(result.hash || "").toUpperCase() !== String(hash || "").toUpperCase()) return null;
   const proof = book.counterparties(meta, self);
+  const tx = txBody(result);
+  const pays = tx && tx.TakerPays;
+  let acquired = book.rlusdAcquired(meta, self) || "0";
+  if (acquired !== "0" && pays && typeof pays === "object" && pays.currency === rlusd.CURRENCY && pays.issuer === rlusd.ISSUER) {
+    acquired = book.atMost(acquired, pays.value) || "0";
+  }
   return {
     mission: {
       status: "rlusd_filled",
       hold: "uncertain",
-      bought_rlusd: book.rlusdAcquired(meta, self) || "0",
+      bought_rlusd: acquired,
       proof_hash: String(result.hash || hash).toUpperCase(),
       proof_result: "tesSUCCESS",
       proof_type: "consuming_tx",
@@ -292,7 +299,16 @@ async function tick(env, dir, now, clients, position, journal) {
   if (exposure.blocksNewRisk(state, ROLE)) {
     return Object.assign(base, { decision: "research", signed: false, rationale: "An uncertain RLUSD hold from another role is still open. Nothing is signed." });
   }
-  const inventory = rows(state).find((mission) => mission.hold !== "released" && mission.action === "buy" && mission.status === "rlusd_filled" && BigInt(mission.outstanding_drops || "0") > 0n);
+  let inventory = rows(state).find((mission) => mission.hold !== "released" && mission.action === "buy" && mission.status === "rlusd_filled" && BigInt(mission.outstanding_drops || "0") > 0n);
+  if (inventory && inventory.id === LEGACY) inventory = null;
+  const held = inventory ? market.exactIou(inventory.bought_rlusd || "") : null;
+  if (inventory && (!held || held.coeff <= 0n)) {
+    const refreshed = await reacquire(clients, inventory, anchors.WALLETS.W3.address);
+    if (refreshed) {
+      inventory = Object.assign({}, inventory, refreshed, { updated_at: now });
+      save(dir, inventory);
+    }
+  }
   if (inventory && observed.balance.coeff > 0n) return Object.assign(base, await sell(dir, inventory, now, clients, observed, room, day, gate, cap, journal));
   if (!observed.trustline) return Object.assign(base, await trust(dir, now, clients, observed, room, day, gate, cap));
   return Object.assign(base, await buy(dir, now, clients, observed, room, day, gate, cap, journal));
@@ -378,6 +394,66 @@ async function buy(dir, now, clients, observed, room, day, gate, cap, journal) {
     send_max_drops: tx.TakerGets,
     flags: tx.Flags,
     fill_proof: sent.fill_proof || null,
+  };
+}
+
+function txBody(result) {
+  const nested = result && result.tx_json;
+  if (nested && nested.TransactionType) return nested;
+  return result || null;
+}
+
+function sequenceText(value) {
+  if (typeof value === "bigint") return value > 0n ? value.toString() : null;
+  if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) return String(value);
+  if (typeof value === "string" && /^[1-9][0-9]*$/.test(value)) return value;
+  return null;
+}
+
+function officialBuy(tx, account) {
+  if (!tx || tx.TransactionType !== "OfferCreate" || tx.Account !== account) return null;
+  if (!account || account === anchors.WALLETS.W0.address) return null;
+  if (JSON.stringify(tx).includes("rKmPxq")) return null;
+  if (tx.NetworkID != null && Number(tx.NetworkID) !== 1) return null;
+  if (Number(tx.Flags) !== 0x00020000) return null;
+  if (typeof tx.TakerGets !== "string" || !/^[0-9]+$/.test(tx.TakerGets)) return null;
+  const pays = tx.TakerPays;
+  if (!pays || typeof pays !== "object") return null;
+  if (pays.currency !== rlusd.CURRENCY || pays.issuer !== rlusd.ISSUER) return null;
+  if (String(pays.issuer).includes("rKmPxq")) return null;
+  const ceiling = market.exactIou(pays.value);
+  if (!ceiling || ceiling.coeff <= 0n) return null;
+  return pays.value;
+}
+
+async function reacquire(clients, mission, account) {
+  if (!mission || mission.id === LEGACY || mission.account !== account || account === anchors.WALLETS.W0.address) return null;
+  const proofHash = String(mission.proof_hash || "").toUpperCase();
+  const signedHash = String(mission.signed_hash || "").toUpperCase();
+  if (proofHash && signedHash && proofHash !== signedHash) return null;
+  const hash = proofHash || signedHash;
+  const wanted = sequenceText(mission.sequence);
+  if (!wanted || !/^[0-9A-F]{64}$/.test(hash) || !clients || !clients.ledger) return null;
+  let lookup;
+  try {
+    lookup = await clients.ledger.request({ command: "tx", transaction: hash, binary: false });
+  } catch (error) {
+    return null;
+  }
+  const result = lookup && lookup.result;
+  const meta = result && (result.meta || result.metaData);
+  const tx = txBody(result);
+  if (!result || result.validated !== true || !meta || meta.TransactionResult !== "tesSUCCESS") return null;
+  if (String(result.hash || "").toUpperCase() !== hash) return null;
+  const ceiling = officialBuy(tx, account);
+  if (!ceiling || sequenceText(tx && tx.Sequence) !== wanted) return null;
+  const capped = book.atMost(book.rlusdAcquired(meta, account), ceiling);
+  if (!capped || capped === "0" || !market.exactIou(capped) || market.exactIou(capped).coeff <= 0n) return null;
+  return {
+    bought_rlusd: capped,
+    proof_hash: hash,
+    proof_result: "tesSUCCESS",
+    proof_type: "consuming_tx",
   };
 }
 

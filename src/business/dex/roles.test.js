@@ -113,14 +113,15 @@ function roleLedger(role, extra) {
           return { result: { validated: true, offers: state.offers || [] } };
         }
         if (req.command === "amm_info") {
+          const amm = state.amm || {};
           return {
             result: {
               validated: true,
               amm: {
                 account: rlusd.AMM,
-                amount: "10000000000",
-                amount2: { currency: rlusd.CURRENCY, issuer: rlusd.ISSUER, value: "4000" },
-                trading_fee: 500,
+                amount: amm.amount || "10000000000",
+                amount2: { currency: rlusd.CURRENCY, issuer: rlusd.ISSUER, value: amm.value || "4000" },
+                trading_fee: amm.trading_fee == null ? 500 : amm.trading_fee,
               },
             },
           };
@@ -295,6 +296,29 @@ describe("shared RLUSD caps", () => {
     assert.equal(exposure.teamOpen(doubled), 400032n);
     assert.equal(exposure.roleOpen(doubled, "W4"), 400032n);
     assert.equal(exposure.teamOpen(doubled) > 400010n, true);
+    const existingQuote = {
+      missions: {
+        trust: mission({
+          id: "msnde18ca1a9d441a55",
+          kind: "w4-rlusd",
+          role: "W4",
+          action: "trust",
+          status: "rlusd_proved",
+          outstanding_drops: "0",
+          fee_drops: "10",
+        }),
+        bid: mission({
+          id: "msn0e39f438e3c0dc85",
+          kind: "w4-rlusd",
+          role: "W4",
+          action: "bid",
+          status: "rlusd_resting",
+          outstanding_drops: "400010",
+        }),
+      },
+    };
+    assert.equal(exposure.teamOpen(existingQuote), 400010n);
+    assert.equal(exposure.roleOpen(existingQuote, "W4"), 400010n);
     assert.equal(exposure.ledgerHeadroom(doubled).used, 400032n);
     const smallAsk = {
       missions: {
@@ -730,6 +754,324 @@ describe("W3 taker and W4 quoter", () => {
     const skipped = await rlusd.tick(baseEnv("W1"), tight, NOW, w1Client(quiet), { proved_xrp: 0n, reserve_inc: 200000n });
     assert.equal(skipped.signed === true, false);
     assert.equal(quiet.signs, 0);
+  });
+});
+
+describe("W3 fill acquisition", () => {
+  const HASH = "BDBC06FE6CB57A1869029CE9DA4A4CE5C6C1C82D5004B6CEAFCEDFEA6D949EB1";
+  const fixture = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures/w3-ioc-buy-22299209.json"), "utf8"));
+
+  function line(balance, prev, high, low, currency) {
+    const code = currency || rlusd.CURRENCY;
+    return {
+      ModifiedNode: {
+        LedgerEntryType: "RippleState",
+        FinalFields: {
+          Balance: { currency: code, issuer: "rrrrrrrrrrrrrrrrrrrrBZbvji", value: balance },
+          HighLimit: { currency: code, issuer: high, value: "0" },
+          LowLimit: { currency: code, issuer: low, value: "10" },
+        },
+        PreviousFields: { Balance: { currency: code, issuer: "rrrrrrrrrrrrrrrrrrrrBZbvji", value: prev } },
+      },
+    };
+  }
+
+  it("reads 0.01476733 RLUSD from the live IOC buy metadata", () => {
+    const w3 = anchors.WALLETS.W3.address;
+    assert.equal(book.rlusdAcquired(fixture.meta, w3), fixture.acquired);
+    assert.equal(fixture.acquired.startsWith("0.01476733"), true);
+    assert.equal(book.rlusdAcquired(fixture.meta, anchors.WALLETS.W0.address), null);
+    assert.equal(book.rlusdAcquired(fixture.meta, anchors.WALLETS.W4.address), null);
+    assert.equal(book.rlusdAcquired(fixture.meta, rlusd.AMM), "0");
+    assert.equal(book.rlusdAcquired(fixture.meta, rlusd.ISSUER), null);
+    assert.equal(book.rlusdAcquired({
+      AffectedNodes: [line("-0.01476733409826197", "0", w3, rlusd.ISSUER)],
+    }, w3), fixture.acquired);
+    assert.equal(book.rlusdAcquired({
+      AffectedNodes: [line("-0.1", "-0.5", w3, rlusd.ISSUER)],
+    }, w3), "0");
+    assert.equal(book.rlusdAcquired({
+      AffectedNodes: [line("0.2", "0", w3, rlusd.ISSUER)],
+    }, w3), "0");
+    assert.equal(book.rlusdAcquired({
+      AffectedNodes: [line("0.2", "0.5", rlusd.ISSUER, w3)],
+    }, w3), "0");
+    assert.equal(book.rlusdAcquired({
+      AffectedNodes: [line("0.1", "-0.4", rlusd.ISSUER, w3)],
+    }, w3), "0.1");
+    assert.equal(book.rlusdAcquired({
+      AffectedNodes: [line("0.2", "0", rlusd.ISSUER, w3), line("0.2", "0", rlusd.ISSUER, w3)],
+    }, w3), null);
+    assert.equal(book.rlusdAcquired({
+      AffectedNodes: [line("0.005", "0", rlusd.ISSUER, w3), fixture.meta.AffectedNodes[2]],
+    }, w3), "0.005");
+    assert.equal(book.rlusdAcquired({
+      AffectedNodes: [line("1", "0", "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", w3)],
+    }, w3), null);
+    assert.equal(book.rlusdAcquired({
+      AffectedNodes: [line("1", "0", rlusd.ISSUER, w3, "USD")],
+    }, w3), null);
+    assert.equal(book.rlusdAcquired({
+      AffectedNodes: [{
+        ModifiedNode: {
+          LedgerEntryType: "RippleState",
+          FinalFields: {
+            Balance: fixture.acquired,
+            HighLimit: { currency: rlusd.CURRENCY, issuer: rlusd.ISSUER, value: "0" },
+            LowLimit: { currency: rlusd.CURRENCY, issuer: w3, value: "10" },
+          },
+          PreviousFields: { Balance: "0" },
+        },
+      }],
+    }, w3), fixture.acquired);
+    assert.equal(book.atMost(fixture.acquired, fixture.acquired), fixture.acquired);
+    assert.equal(book.atMost("1", "0.01"), "0.01");
+    assert.equal(book.atMost("0.005", fixture.acquired), "0.005");
+    const lookalike = {
+      AffectedNodes: [{
+        ModifiedNode: {
+          LedgerEntryType: "RippleState",
+          FinalFields: {
+            Balance: { currency: rlusd.CURRENCY, issuer: "rrrrrrrrrrrrrrrrrrrrBZbvji", value: "1" },
+            HighLimit: { currency: rlusd.CURRENCY, issuer: "rKmPxqLookalikeIssuerXXXXXXXX", value: "0" },
+            LowLimit: { currency: rlusd.CURRENCY, issuer: anchors.WALLETS.W3.address, value: "10" },
+          },
+          PreviousFields: { Balance: { currency: rlusd.CURRENCY, issuer: "rrrrrrrrrrrrrrrrrrrrBZbvji", value: "0" } },
+        },
+      }],
+    };
+    assert.equal(book.rlusdAcquired(lookalike, anchors.WALLETS.W3.address), null);
+    const created = {
+      AffectedNodes: [{
+        CreatedNode: {
+          LedgerEntryType: "RippleState",
+          NewFields: {
+            Balance: { currency: rlusd.CURRENCY, issuer: "rrrrrrrrrrrrrrrrrrrrBZbvji", value: "0.2" },
+            HighLimit: { currency: rlusd.CURRENCY, issuer: rlusd.ISSUER, value: "0" },
+            LowLimit: { currency: rlusd.CURRENCY, issuer: anchors.WALLETS.W3.address, value: "10" },
+          },
+        },
+      }],
+    };
+    assert.equal(book.rlusdAcquired(created, anchors.WALLETS.W3.address), "0.2");
+    const deleted = {
+      AffectedNodes: [{
+        DeletedNode: {
+          LedgerEntryType: "RippleState",
+          FinalFields: {
+            Balance: { currency: rlusd.CURRENCY, issuer: "rrrrrrrrrrrrrrrrrrrrBZbvji", value: "0.2" },
+            HighLimit: { currency: rlusd.CURRENCY, issuer: rlusd.ISSUER, value: "0" },
+            LowLimit: { currency: rlusd.CURRENCY, issuer: anchors.WALLETS.W3.address, value: "10" },
+          },
+          PreviousFields: { Balance: { currency: rlusd.CURRENCY, issuer: "rrrrrrrrrrrrrrrrrrrrBZbvji", value: "0.5" } },
+        },
+      }],
+    };
+    assert.equal(book.rlusdAcquired(deleted, anchors.WALLETS.W3.address), "0");
+    const deletedDebt = {
+      AffectedNodes: [{
+        DeletedNode: {
+          LedgerEntryType: "RippleState",
+          FinalFields: {
+            Balance: { currency: rlusd.CURRENCY, issuer: "rrrrrrrrrrrrrrrrrrrrBZbvji", value: "0" },
+            HighLimit: { currency: rlusd.CURRENCY, issuer: rlusd.ISSUER, value: "0" },
+            LowLimit: { currency: rlusd.CURRENCY, issuer: anchors.WALLETS.W3.address, value: "10" },
+          },
+          PreviousFields: { Balance: { currency: rlusd.CURRENCY, issuer: "rrrrrrrrrrrrrrrrrrrrBZbvji", value: "-0.4" } },
+        },
+      }],
+    };
+    assert.equal(book.rlusdAcquired(deletedDebt, anchors.WALLETS.W3.address), "0");
+  });
+
+  function provenBuy(extra) {
+    return Object.assign({
+      id: "msna9cb1105fdf57c75",
+      kind: "w3-rlusd",
+      role: "W3",
+      action: "buy",
+      account: anchors.WALLETS.W3.address,
+      hold: "uncertain",
+      status: "rlusd_filled",
+      bought_rlusd: "0",
+      proof_hash: HASH,
+      proof_result: "tesSUCCESS",
+      signed_hash: HASH,
+      sequence: 21093764,
+      outstanding_drops: "200010",
+      realized_loss_drops: "0",
+      submit_attempted: true,
+      updated_at: NOW,
+    }, extra || {});
+  }
+
+  function buyResult(patch) {
+    const result = JSON.parse(JSON.stringify(Object.assign({
+      validated: true,
+      hash: HASH,
+      ledger_index: fixture.ledger_index,
+    }, fixture)));
+    return patch ? patch(result) : result;
+  }
+
+  async function replay(mission, result, extra) {
+    const ledger = home();
+    seed(ledger, mission);
+    seed(ledger, {
+      id: exposure.LEGACY_HOLD,
+      kind: "w3-rlusd",
+      role: "W3",
+      action: "buy",
+      account: anchors.WALLETS.W3.address,
+      hold: "uncertain",
+      signed: true,
+      status: "rlusd_filled",
+      bought_rlusd: "0",
+      proof_hash: HASH,
+      signed_hash: HASH,
+      sequence: 21093764,
+      outstanding_drops: "1747",
+      updated_at: "2026-11-01T00:00:00.000Z",
+    });
+    const state = Object.assign({
+      trust: true,
+      balance: "0.01",
+      box: { signs: 0, types: [], flags: [] },
+      amm: { amount: "20000000", value: "1", trading_fee: 0 },
+      tx: { result },
+    }, extra || {});
+    const journal = fs.mkdtempSync(path.join(os.tmpdir(), "w3-reprove-"));
+    let row;
+    try {
+      row = await taker.tick(baseEnv("W3"), ledger, extra && extra.now || NOW, roleLedger("W3", state), { headroom: 100000000n }, journal);
+    } catch (error) {
+      row = error;
+    }
+    const saved = view(ledger, extra && extra.now || NOW).missions.msna9cb1105fdf57c75;
+    const legacy = view(ledger, extra && extra.now || NOW).missions[exposure.LEGACY_HOLD];
+    const text = `${JSON.stringify(saved || {})}${JSON.stringify(legacy || {})}${fs.existsSync(path.join(journal, "decisions.jsonl")) ? fs.readFileSync(path.join(journal, "decisions.jsonl"), "utf8") : ""}`;
+    assert.equal(/seed|secret|tx_blob|private/i.test(text), false);
+    assert.equal(legacy.hold, "uncertain");
+    assert.equal(legacy.signed, true);
+    assert.equal(legacy.outstanding_drops, "1747");
+    assert.equal(legacy.bought_rlusd, "0");
+    return { row, saved, state, ledger };
+  }
+
+  it("re-proves a zero acquire from the validated buy and sells the smaller official amount", async () => {
+    const { row, saved, state } = await replay(provenBuy(), buyResult());
+    assert.equal(saved.bought_rlusd, fixture.acquired);
+    assert.equal(saved.hold, "uncertain");
+    assert.equal(saved.id, "msna9cb1105fdf57c75");
+    assert.equal(saved.sequence, 21093764);
+    assert.equal(row.signed, true);
+    assert.equal(state.box.flags[0], gates.TF_IOC);
+    assert.equal(state.box.last.Destination, undefined);
+    assert.equal(state.box.last.TakerGets.issuer, rlusd.ISSUER);
+    assert.equal(state.box.last.TakerGets.currency, rlusd.CURRENCY);
+    assert.equal(state.box.last.TakerGets.value, "0.01");
+    assert.equal(JSON.stringify(state.box.last).includes("rKmPxq"), false);
+    const pays = BigInt(state.box.last.TakerPays);
+    assert.equal(pays >= 100000n && pays <= 250000n, true);
+  });
+
+  it("refuses a re-proof that is not the validated sequenced buy", async () => {
+    const refused = [
+      () => buyResult((result) => { result.validated = false; return result; }),
+      () => buyResult((result) => { result.meta.TransactionResult = "tecPATH_DRY"; return result; }),
+      () => buyResult((result) => { result.hash = "AB".repeat(32); return result; }),
+      () => buyResult((result) => { result.tx_json.Sequence = 21093765; return result; }),
+      () => buyResult((result) => { result.tx_json.Account = anchors.WALLETS.W0.address; return result; }),
+      () => buyResult((result) => { result.tx_json.NetworkID = 0; return result; }),
+      () => buyResult((result) => { result.tx_json.Flags = 0; return result; }),
+      () => buyResult((result) => { result.tx_json.TakerPays.issuer = "rKmPxqLookalikeIssuerXXXXXXXX"; return result; }),
+    ];
+    for (const build of refused) {
+      const { row, saved, state } = await replay(provenBuy(), build());
+      assert.equal(saved.bought_rlusd, "0");
+      assert.equal(saved.hold, "uncertain");
+      assert.equal(saved.outstanding_drops, "200010");
+      assert.equal(row.signed, false);
+      assert.equal(state.box.signs, 0);
+    }
+    const missing = await replay(provenBuy({ sequence: undefined }), buyResult());
+    assert.equal(missing.saved.bought_rlusd, "0");
+    assert.equal(missing.saved.outstanding_drops, "200010");
+    assert.equal(missing.state.box.signs, 0);
+    const mismatched = await replay(provenBuy({ proof_hash: "CD".repeat(32) }), buyResult());
+    assert.equal(mismatched.saved.bought_rlusd, "0");
+    assert.equal(mismatched.state.box.signs, 0);
+    const later = await replay(provenBuy({ sequence: undefined }), buyResult(), { now: "2026-12-01T00:00:00.000Z" });
+    assert.equal(later.saved.bought_rlusd, "0");
+    assert.equal(later.saved.hold, "uncertain");
+    assert.equal(later.saved.outstanding_drops, "200010");
+    assert.equal(later.state.box.signs, 0);
+  });
+
+  it("caps the booked fill at the offer and sells that partial official amount", async () => {
+    const w3 = anchors.WALLETS.W3.address;
+    const partial = buyResult((result) => {
+      result.meta.AffectedNodes[0].ModifiedNode.FinalFields.Balance.value = "0.01";
+      result.tx_json.TakerPays.value = fixture.acquired;
+      return result;
+    });
+    const filled = await replay(provenBuy(), partial, { balance: "5" });
+    assert.equal(filled.saved.bought_rlusd, "0.01");
+    assert.notEqual(filled.saved.bought_rlusd, fixture.acquired);
+    assert.equal(filled.state.box.last.TakerGets.value, "0.01");
+    assert.equal(filled.state.box.last.TakerGets.issuer, rlusd.ISSUER);
+    assert.equal(filled.state.box.flags[0], gates.TF_IOC);
+    const dust = buyResult((result) => {
+      result.meta.AffectedNodes[0].ModifiedNode.FinalFields.Balance.value = "0.005";
+      result.tx_json.TakerPays.value = fixture.acquired;
+      return result;
+    });
+    const undersized = await replay(provenBuy(), dust, { balance: "5" });
+    assert.equal(undersized.saved.bought_rlusd, "0.005");
+    assert.equal(undersized.state.box.signs, 0);
+    const spiked = buyResult((result) => {
+      result.meta.AffectedNodes[0].ModifiedNode.FinalFields.Balance.value = "1";
+      result.tx_json.TakerPays.value = "0.01";
+      return result;
+    });
+    const capped = await replay(provenBuy(), spiked, { balance: "5" });
+    assert.equal(capped.saved.bought_rlusd, "0.01");
+    assert.equal(capped.state.box.last.TakerGets.value, "0.01");
+    assert.notEqual(capped.state.box.last.TakerGets.value, "1");
+    assert.equal(capped.state.box.last.Account, w3);
+    const pays = BigInt(capped.state.box.last.TakerPays);
+    assert.equal(pays >= 100000n && pays <= 250000n, true);
+  });
+
+  it("does not sell a re-proved fill through a full team cap or the wrong network", async () => {
+    const ledger = home();
+    seed(ledger, provenBuy());
+    seed(ledger, mission({ id: "w1full", kind: "w1-rlusd", role: "W1", outstanding_drops: "3500000", status: "rlusd_filled" }));
+    const state = {
+      trust: true,
+      balance: "0.01",
+      box: { signs: 0, types: [], flags: [] },
+      amm: { amount: "20000000", value: "1", trading_fee: 0 },
+      tx: { result: buyResult() },
+    };
+    const row = await taker.tick(baseEnv("W3"), ledger, NOW, roleLedger("W3", state), { headroom: 100000000n }, null);
+    const saved = view(ledger, NOW).missions.msna9cb1105fdf57c75;
+    assert.equal(saved.bought_rlusd, fixture.acquired);
+    assert.equal(saved.outstanding_drops, "200010");
+    assert.equal(row.signed, false);
+    assert.equal(state.box.signs, 0);
+    assert.equal(exposure.teamOpen(view(ledger, NOW)) > 3500000n, true);
+    const wrongNet = home();
+    seed(wrongNet, provenBuy());
+    await assert.rejects(() => taker.tick(baseEnv("W3"), wrongNet, NOW, roleLedger("W3", {
+      trust: true,
+      balance: "0.01",
+      networkId: 0,
+      box: { signs: 0, types: [], flags: [] },
+      tx: { result: buyResult() },
+    }), { headroom: 100000000n }, null), (error) => error.code === "MAINNET");
+    assert.equal(view(wrongNet, NOW).missions.msna9cb1105fdf57c75.bought_rlusd, "0");
+    assert.equal(view(wrongNet, NOW).missions.msna9cb1105fdf57c75.outstanding_drops, "200010");
   });
 });
 
