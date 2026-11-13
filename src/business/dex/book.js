@@ -220,6 +220,30 @@ function counterparties(meta, self) {
   };
 }
 
+function trustSettled(result, mission, account) {
+  const meta = result && (result.meta || result.metaData);
+  const tx = result && (result.tx_json || result);
+  if (!result || result.validated !== true || !meta || meta.TransactionResult !== "tesSUCCESS") return null;
+  if (!tx || tx.TransactionType !== "TrustSet" || tx.Account !== account) return null;
+  const limit = tx.LimitAmount;
+  if (!limit || limit.currency !== rlusd.CURRENCY || limit.issuer !== rlusd.ISSUER) return null;
+  const hash = String(result.hash || (mission && mission.signed_hash) || "").toUpperCase();
+  if (!/^[0-9A-F]{64}$/.test(hash)) return null;
+  if (mission && mission.signed_hash && hash !== String(mission.signed_hash).toUpperCase()) return null;
+  if (mission && Number.isInteger(mission.sequence) && tx.Sequence !== mission.sequence) return null;
+  return {
+    status: "rlusd_proved",
+    hold: "uncertain",
+    outstanding_drops: "0",
+    proof_hash: hash,
+    proof_result: "tesSUCCESS",
+    proof_type: "trust_set",
+    validated_ledger: Number.isInteger(result.ledger_index) ? result.ledger_index : null,
+    outside_fill: false,
+    settled: true,
+  };
+}
+
 module.exports = {
   REGULAR,
   outside,
@@ -227,4 +251,5 @@ module.exports = {
   exactOf,
   rlusdAcquired,
   counterparties,
+  trustSettled,
 };

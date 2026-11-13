@@ -6,7 +6,7 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const ENTRIES = ["src/business/worker.js", "src/business/dex/live.js", "src/business/dex/supervisor.js"];
+const ENTRIES = ["src/business/worker.js", "src/business/dex/live.js", "src/business/dex/supervisor.js", "src/business/dex/oracle.js"];
 
 function walk(root, rel, seen) {
   if (seen.has(rel)) return;

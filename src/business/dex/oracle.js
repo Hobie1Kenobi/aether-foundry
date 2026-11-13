@@ -82,17 +82,52 @@ function readJournal(dir) {
   return fs.readFileSync(file, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
 }
 
+function countsTowardRateLimit(row) {
+  if (!row || row.role !== "W5") return false;
+  if (row.submitted !== true && row.attempted !== true && row.validated !== true) return false;
+  return row.decision === "publish" || row.decision === "submitted";
+}
+
 function tooSoon(dir, now) {
   const rows = readJournal(dir);
   const clock = Date.parse(now);
   for (let i = rows.length - 1; i >= 0; i -= 1) {
     const row = rows[i];
-    if (!row || row.role !== "W5" || row.decision === "research") continue;
+    if (!countsTowardRateLimit(row)) continue;
     const stamp = Date.parse(row.at || "");
     if (!Number.isFinite(stamp)) continue;
     return clock - stamp < INTERVAL_MS;
   }
   return false;
+}
+
+function reportFailure(error, dir, stderr) {
+  let message = String(error && error.message ? error.message : "oracle tick failed");
+  message = message.replace(/sEd[1-9A-HJ-NP-Za-km-z]{10,}/g, "[redacted]");
+  message = message.replace(/\b[0-9A-F]{64}\b/gi, "[hash]");
+  if (/seed|secret|tx_blob|private/i.test(message)) message = "oracle tick failed";
+  const record = {
+    schema: "aether.business.rlusd-oracle",
+    at: new Date().toISOString(),
+    decision: "error",
+    role: "W5",
+    learning: false,
+    signed: false,
+    submitted: false,
+    attempted: false,
+    validated: false,
+    error_code: (error && error.code) || "FATAL",
+    rationale: message.slice(0, 240),
+  };
+  const line = `${JSON.stringify(record)}\n`;
+  const write = stderr || ((text) => process.stderr.write(text));
+  write(line);
+  try {
+    writePublic(dir, record);
+  } catch (err) {
+    write(`${JSON.stringify({ decision: "error", role: "W5", learning: false, rationale: "oracle error could not be journaled" })}\n`);
+  }
+  return record;
 }
 
 function locked(dir, fn) {
@@ -191,7 +226,7 @@ async function tick(env, input, clients) {
   };
   const admitted = locked(body.journal, () => {
     if (tooSoon(body.journal, now)) return false;
-    writePublic(body.journal, row);
+    if (dry) writePublic(body.journal, row);
     return true;
   });
   if (!admitted) {
@@ -222,10 +257,15 @@ async function tick(env, input, clients) {
   row.signed = true;
   row.key_loaded = true;
   row.signed_hash = signed.hash;
+  let submitted = false;
   if (typeof clients.submit === "function") {
     await clients.submit(signed.tx_blob);
-    row.submitted = true;
+    submitted = true;
   }
+  row.submitted = submitted;
+  row.attempted = submitted;
+  row.validated = false;
+  if (!submitted) return row;
   return writePublic(body.journal, row);
 }
 
@@ -249,10 +289,12 @@ function main(argv, deps) {
       await opened.close();
     }
   };
+  const journal = env.FOUNDRY_W5_ORACLE_JOURNAL || (options.input && options.input.journal);
+  const report = (error) => reportFailure(error, journal, options.stderr);
   if (!supervise) return once().then(() => 0);
-  return once().then(() => new Promise((resolve) => {
+  return once().catch(report).then(() => new Promise((resolve) => {
     const timer = setInterval(() => {
-      once().catch(() => {});
+      once().catch(report);
     }, INTERVAL_MS);
     if (options.stop) options.stop(() => {
       clearInterval(timer);
@@ -274,4 +316,6 @@ module.exports = {
   xrpPerRlusd,
   tick,
   main,
+  reportFailure,
+  tooSoon,
 };

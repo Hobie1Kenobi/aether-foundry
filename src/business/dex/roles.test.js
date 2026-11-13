@@ -252,7 +252,7 @@ describe("shared RLUSD caps", () => {
     assert.equal(exposure.roleOpen(state, "W1") + exposure.roleOpen(state, "W3") + exposure.roleOpen(state, "W4"), 3500000n);
     assert.equal(exposure.allows(state, "W1", 0n, 3500000n), true);
     assert.equal(exposure.allows(state, "W3", 1n, 3500000n), false);
-    assert.equal(exposure.ledgerHeadroom(state).used, 3500000n + 200010n);
+    assert.equal(exposure.ledgerHeadroom(state).used, 3500000n);
     const roomy = {
       missions: {
         w4: mission({ id: "w4", kind: "w4-rlusd", role: "W4", outstanding_drops: "1500000" }),
@@ -263,6 +263,31 @@ describe("shared RLUSD caps", () => {
     assert.equal(exposure.allows({ missions: {} }, "W1", 2000001n, 3500000n), false);
     assert.equal(exposure.allows({ missions: {} }, "W3", 500001n, 3500000n), false);
     assert.equal(exposure.allows({ missions: {} }, "W4", 1000001n, 3500000n), false);
+    const doubled = {
+      missions: {
+        trust: mission({
+          id: "msnde18ca1a9d441a55",
+          kind: "w4-rlusd",
+          role: "W4",
+          action: "trust",
+          status: "rlusd_unknown",
+          outstanding_drops: "200010",
+        }),
+        bid: mission({
+          id: "w4bid",
+          kind: "w4-rlusd",
+          role: "W4",
+          action: "bid",
+          status: "rlusd_resting",
+          outstanding_drops: "400010",
+        }),
+      },
+    };
+    assert.equal(exposure.teamOpen(doubled), 400010n);
+    assert.equal(exposure.roleOpen(doubled, "W4"), 400010n);
+    doubled.missions.trust.status = "rlusd_proved";
+    assert.equal(exposure.teamOpen(doubled), 400010n);
+    assert.equal(exposure.ledgerHeadroom(doubled).used, 400010n);
     const position = { proved_xrp: 0n, reserve_inc: 200000n };
     const head = rlusd.headroom(position, { missions: { w3: mission({ id: "w3", kind: "w3-rlusd", role: "W3", outstanding_drops: "500000" }) } }, { trustline: false, own: [] });
     assert.equal(head.used, 500000n);
@@ -650,6 +675,119 @@ describe("W3 taker and W4 quoter", () => {
   });
 });
 
+describe("trust line proof", () => {
+  const HASH = "CD".repeat(32);
+
+  function trustTx(account, issuer) {
+    return {
+      result: {
+        validated: true,
+        hash: HASH,
+        ledger_index: 3210,
+        tx_json: {
+          TransactionType: "TrustSet",
+          Account: account,
+          Sequence: 9,
+          Fee: "10",
+          LimitAmount: { currency: rlusd.CURRENCY, issuer, value: "10" },
+        },
+        meta: { TransactionResult: "tesSUCCESS", AffectedNodes: [] },
+      },
+    };
+  }
+
+  it("proves a W4 trust line from tesSUCCESS and does not release it on a clock", async () => {
+    const ledger = home();
+    seed(ledger, {
+      id: "msnde18ca1a9d441a55",
+      idempotency_key: "w4-rlusd-trust",
+      kind: "w4-rlusd",
+      role: "W4",
+      action: "trust",
+      account: anchors.WALLETS.W4.address,
+      hold: "uncertain",
+      status: "rlusd_unknown",
+      signed_hash: HASH,
+      sequence: 9,
+      outstanding_drops: "200010",
+      realized_loss_drops: "0",
+      submit_attempted: true,
+      updated_at: "2026-11-13T12:00:00.000Z",
+    });
+    assert.equal(exposure.blocksNewRisk(view(ledger, NOW), "W1"), true);
+    const state = { trust: true, box: { signs: 0, types: [], flags: [] }, tx: trustTx(anchors.WALLETS.W4.address, rlusd.ISSUER) };
+    const proved = await quoter.tick(baseEnv("W4"), ledger, NOW, roleLedger("W4", state), null, null);
+    assert.equal(proved.status, "rlusd_proved");
+    assert.equal(proved.signed, false);
+    assert.equal(state.box.signs, 0);
+    const saved = view(ledger, NOW).missions.msnde18ca1a9d441a55;
+    assert.equal(saved.status, "rlusd_proved");
+    assert.equal(saved.hold, "uncertain");
+    assert.equal(saved.outstanding_drops, "0");
+    assert.equal(saved.proof_result, "tesSUCCESS");
+    assert.equal(exposure.blocksNewRisk(view(ledger, NOW), "W1"), false);
+    const later = await quoter.tick(baseEnv("W4"), ledger, "2026-11-14T18:00:00.000Z", roleLedger("W4", { trust: true, box: { signs: 0, types: [], flags: [] }, bids: [], asks: [] }), null, null);
+    const still = view(ledger, "2026-11-14T18:00:00.000Z").missions.msnde18ca1a9d441a55;
+    assert.equal(still.hold, "uncertain");
+    assert.equal(still.status, "rlusd_proved");
+    assert.notEqual(later.status, "rlusd_cancelled");
+
+    const stuck = home();
+    seed(stuck, {
+      id: "w4unproved",
+      kind: "w4-rlusd",
+      role: "W4",
+      action: "trust",
+      account: anchors.WALLETS.W4.address,
+      hold: "uncertain",
+      status: "rlusd_unknown",
+      signed_hash: HASH,
+      sequence: 9,
+      outstanding_drops: "200010",
+      realized_loss_drops: "0",
+      updated_at: "2026-11-01T00:00:00.000Z",
+    });
+    const refused = await quoter.tick(baseEnv("W4"), stuck, NOW, roleLedger("W4", {
+      trust: true,
+      box: { signs: 0, types: [], flags: [] },
+      tx: trustTx(anchors.WALLETS.W4.address, "rKmPxqLookalikeIssuerXXXXXXXX"),
+    }), null, null);
+    assert.equal(refused.signed, false);
+    const open = view(stuck, NOW).missions.w4unproved;
+    assert.equal(open.status, "rlusd_unknown");
+    assert.equal(open.hold, "uncertain");
+    assert.equal(open.outstanding_drops, "200010");
+  });
+
+  it("books a W3 trust line as proved rather than filled", async () => {
+    const ledger = home();
+    seed(ledger, {
+      id: "w3trust",
+      kind: "w3-rlusd",
+      role: "W3",
+      action: "trust",
+      account: anchors.WALLETS.W3.address,
+      hold: "uncertain",
+      status: "rlusd_unknown",
+      signed_hash: HASH,
+      sequence: 9,
+      outstanding_drops: "200012",
+      realized_loss_drops: "0",
+      submit_attempted: true,
+      updated_at: NOW,
+    });
+    const state = { trust: true, box: { signs: 0, types: [], flags: [] }, tx: trustTx(anchors.WALLETS.W3.address, rlusd.ISSUER) };
+    const row = await taker.tick(baseEnv("W3"), ledger, NOW, roleLedger("W3", state), null, null);
+    assert.equal(row.status, "rlusd_proved");
+    const saved = view(ledger, NOW).missions.w3trust;
+    assert.equal(saved.status, "rlusd_proved");
+    assert.equal(saved.hold, "uncertain");
+    assert.equal(saved.outstanding_drops, "0");
+    assert.equal(exposure.roleOpen(view(ledger, NOW), "W3"), 0n);
+    assert.equal(state.box.signs, 0);
+  });
+});
+
 describe("W5 oracle", () => {
   it("dry-runs the official RLUSD price every 30 minutes and does not read a key", async () => {
     const journal = fs.mkdtempSync(path.join(os.tmpdir(), "w5-oracle-"));
@@ -697,8 +835,8 @@ describe("W5 oracle", () => {
     assert.equal(again.signed, false);
     assert.equal(reads, 0);
     const soon = await oracle.tick({}, { now: "2026-11-13T18:20:00.000Z", journal, pool }, null);
-    assert.equal(soon.decision, "research");
-    assert.match(soon.rationale, /30 minutes/);
+    assert.equal(soon.decision, "dry-run");
+    assert.equal(soon.dry_run, true);
     await assert.rejects(() => oracle.tick({}, { now: "2026-11-13T20:00:00.000Z", pool: Object.assign({}, pool, { network_id: 0 }) }, null), (error) => error.code === "MAINNET");
     assert.equal(health(Object.assign(baseEnv("W3"), { FOUNDRY_W3_DEX_SUPERVISOR: "yes" })).role, "w3-dex-supervisor");
     assert.equal(health(baseEnv("W1")).role, "w1-dex-supervisor");
@@ -709,5 +847,26 @@ describe("W5 oracle", () => {
     }, roleLedger("W3", { trust: true, box: { signs: 0, types: [], flags: [] } }));
     assert.equal(decided.learning, false);
     assert.equal(decided.role, "W3");
+    const failed = fs.mkdtempSync(path.join(os.tmpdir(), "w5-fail-"));
+    const lines = [];
+    await assert.rejects(() => oracle.tick({
+      FOUNDRY_W5_ORACLE_LIVE: "yes",
+      FOUNDRY_DEX_EXECUTE: "yes",
+      FOUNDRY_DEX_NETWORK: "xrpl:1",
+      FOUNDRY_DEX_AXELAR_DROPS: "0",
+      FOUNDRY_W5_ORACLE_ACTIVATE: oracle.PHRASE,
+    }, { now: new Date().toISOString(), journal: failed }, {
+      sign: async () => ({ tx_blob: "00", hash: "AB".repeat(32) }),
+      submit: async () => { throw Object.assign(new Error("submit failed seed sEd11111111111111111111"), { code: "SUBMIT" }); },
+      ledger: roleLedger("W5", { trust: true, box: { signs: 0, types: [], flags: [] } }).ledger,
+    }), (error) => error.code === "SIGNER" || error.code === "TX" || error.code === "SUBMIT");
+    assert.equal(oracle.tooSoon(failed, new Date().toISOString()), false);
+    const logged = oracle.reportFailure(Object.assign(new Error("seed sEd11111111111111111111 tx_blob AAAA"), { code: "SUBMIT" }), failed, (line) => lines.push(line));
+    assert.equal(logged.attempted, false);
+    assert.equal(logged.submitted, false);
+    const text = `${lines.join("")}${fs.readFileSync(path.join(failed, "decisions.jsonl"), "utf8")}`;
+    assert.equal(text.includes("sEd"), false);
+    assert.equal(text.includes("tx_blob"), false);
+    assert.equal(oracle.tooSoon(failed, new Date().toISOString()), false);
   });
 });

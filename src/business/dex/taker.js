@@ -166,7 +166,7 @@ async function submit(dir, reserved, tx, expected, clients, now, gate, journal) 
     mission.submitted = false;
   }
   save(dir, mission);
-  const proof = await proveNow(clients, signed.hash, anchors.WALLETS.W3.address);
+  const proof = await proveNow(clients, signed.hash, anchors.WALLETS.W3.address, mission);
   if (proof) {
     const filled = Object.assign({}, mission, proof.mission, { updated_at: now });
     save(dir, filled);
@@ -176,7 +176,7 @@ async function submit(dir, reserved, tx, expected, clients, now, gate, journal) 
   return { mission, replay: false };
 }
 
-async function proveNow(clients, hash, self) {
+async function proveNow(clients, hash, self, mission) {
   if (!clients || !clients.ledger || typeof hash !== "string") return null;
   let lookup;
   try {
@@ -186,7 +186,26 @@ async function proveNow(clients, hash, self) {
   }
   const result = lookup && lookup.result;
   const meta = result && (result.meta || result.metaData);
+  const tx = result && (result.tx_json || result);
   if (!result || result.validated !== true || !meta || meta.TransactionResult !== "tesSUCCESS") return null;
+  if (tx && tx.TransactionType === "TrustSet") {
+    const settled = book.trustSettled(result, mission || { signed_hash: hash }, self);
+    if (!settled) return null;
+    return {
+      mission: settled,
+      journal: {
+        schema: "aether.business.rlusd-trust",
+        at: new Date().toISOString(),
+        learning: false,
+        role: ROLE,
+        decision: "reconcile",
+        status: "rlusd_proved",
+        proof_type: "trust_set",
+        proof_hash: settled.proof_hash,
+        outside_fill: false,
+      },
+    };
+  }
   const proof = book.counterparties(meta, self);
   return {
     mission: {
@@ -252,11 +271,11 @@ async function tick(env, dir, now, clients, position, journal) {
   };
   const pending = rows(state).find((mission) => mission.hold === "uncertain" && (mission.status === "rlusd_reserved" || mission.status === "rlusd_unknown") && mission.signed_hash);
   if (pending) {
-    const proved = await proveNow(clients, pending.signed_hash, anchors.WALLETS.W3.address);
+    const proved = await proveNow(clients, pending.signed_hash, anchors.WALLETS.W3.address, pending);
     if (proved) {
       save(dir, Object.assign({}, pending, proved.mission, { updated_at: now }));
       writePublic(journal, Object.assign({}, proved.journal, { at: now }));
-      return Object.assign(base, { decision: "reconcile", fill_proof: proved.journal, status: "rlusd_filled" });
+      return Object.assign(base, { decision: "reconcile", fill_proof: proved.journal, status: proved.mission.status });
     }
     return Object.assign(base, { decision: "research", signed: false, rationale: "The W3 taker order is still unproved. Exposure stays open." });
   }
