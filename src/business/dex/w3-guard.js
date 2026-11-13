@@ -36,6 +36,16 @@ function configured(raw, fallback, max) {
   return value;
 }
 
+function isDay(day) {
+  if (typeof day !== "string" || !DAY.test(day)) return false;
+  const year = Number(day.slice(0, 4));
+  const month = Number(day.slice(5, 7));
+  const date = Number(day.slice(8, 10));
+  if (month < 1 || month > 12 || date < 1 || date > 31) return false;
+  const utc = new Date(Date.UTC(year, month - 1, date));
+  return utc.getUTCFullYear() === year && utc.getUTCMonth() === month - 1 && utc.getUTCDate() === date;
+}
+
 function fresh() {
   return { schema: SCHEMA, day: null, realized_pnl_drops: "0", proofs: [], fresh: true };
 }
@@ -47,7 +57,7 @@ function parsePnl(text) {
 
 function valid(parsed) {
   if (!parsed || parsed.schema !== SCHEMA) return false;
-  if (typeof parsed.day !== "string" || !DAY.test(parsed.day)) return false;
+  if (!isDay(parsed.day)) return false;
   if (parsePnl(parsed.realized_pnl_drops) == null) return false;
   if (!Array.isArray(parsed.proofs)) return false;
   return parsed.proofs.every((hash) => typeof hash === "string" && HASH.test(hash));
@@ -112,24 +122,30 @@ function inspect(dir, day) {
 }
 
 function record(dir, day, delta, hash) {
-  if (typeof day !== "string" || !DAY.test(day)) throw coded("W3 loss day is not a Chicago day", "GUARD");
+  if (!isDay(day)) throw coded("W3 loss day is not a Chicago day", "GUARD");
   if (typeof delta !== "bigint") throw coded("W3 realized result is not drops", "GUARD");
   const id = String(hash || "").toUpperCase();
   if (!HASH.test(id)) throw coded("W3 loss proof hash is missing", "GUARD");
   return exclusive(dir, () => {
     const state = read(dir);
     if (state.closed) throw coded("The W3 daily loss record is unreadable. Nothing is signed.", "GUARD");
-    const same = state.day === day;
-    const proofs = same && Array.isArray(state.proofs) ? state.proofs.slice() : [];
-    const pnl = same ? parsePnl(state.realized_pnl_drops) : 0n;
+    let target = day;
+    let proofs = [];
+    let pnl = 0n;
+    if (state.day && isDay(state.day) && state.day >= day) {
+      target = state.day;
+      proofs = state.proofs.slice();
+      pnl = parsePnl(state.realized_pnl_drops);
+    }
     if (pnl == null) throw coded("The W3 daily loss record is unreadable. Nothing is signed.", "GUARD");
     if (proofs.includes(id)) {
-      return { schema: SCHEMA, day, realized_pnl_drops: pnl.toString(), proofs, replay: true };
+      return { schema: SCHEMA, day: target, realized_pnl_drops: pnl.toString(), proofs, replay: true };
     }
+    const applied = state.day && state.day > day && delta > 0n ? 0n : delta;
     const next = {
       schema: SCHEMA,
-      day,
-      realized_pnl_drops: (pnl + delta).toString(),
+      day: target,
+      realized_pnl_drops: (pnl + applied).toString(),
       proofs: proofs.concat(id),
     };
     write(dir, next);
@@ -161,11 +177,20 @@ function moreXrp(left, right) {
   return left.xrp * width(right.exact, span) > right.xrp * width(left.exact, span);
 }
 
+function sizedBid(bid) {
+  if (!bid || typeof bid.xrp !== "bigint" || bid.xrp <= 0n || !bid.exact || bid.exact.coeff <= 0n) return null;
+  if (bid.fundedXrp == null && bid.fundedExact == null) return { xrp: bid.xrp, exact: bid.exact };
+  if (typeof bid.fundedXrp !== "bigint" || bid.fundedXrp <= 0n || !bid.fundedExact || bid.fundedExact.coeff <= 0n) return false;
+  return { xrp: bid.fundedXrp, exact: bid.fundedExact };
+}
+
 function bookOut(bids, exact) {
   const rows = [];
   for (const bid of bids || []) {
-    if (!bid || typeof bid.xrp !== "bigint" || bid.xrp <= 0n || !bid.exact || bid.exact.coeff <= 0n) return null;
-    rows.push(bid);
+    const sized = sizedBid(bid);
+    if (sized === null) return null;
+    if (sized === false) continue;
+    rows.push(sized);
   }
   if (!rows.length || !exact || exact.coeff <= 0n) return null;
   rows.sort((left, right) => (moreXrp(left, right) ? -1 : moreXrp(right, left) ? 1 : 0));
@@ -209,6 +234,38 @@ function portion(cost, bought, sold) {
   return (cost * part + whole - 1n) / whole;
 }
 
+function settledSell(lotCost, lotExact, disposedExact, delta) {
+  if (typeof lotCost !== "bigint" || lotCost <= 0n || typeof delta !== "bigint") return null;
+  if (!lotExact || lotExact.coeff <= 0n || !disposedExact || disposedExact.coeff < 0n) return null;
+  if (disposedExact.coeff === 0n) {
+    if (delta > 0n) return { legacy: true };
+    return {
+      realized: delta,
+      soldBasis: 0n,
+      remainder: lotExact,
+      remainderBasis: lotCost,
+      full: false,
+    };
+  }
+  const soldBasis = portion(lotCost, lotExact, disposedExact);
+  if (soldBasis == null) return null;
+  const span = Math.max(-lotExact.exp, -disposedExact.exp, 0);
+  const whole = width(lotExact, span);
+  const part = width(disposedExact, span);
+  const left = whole - part;
+  if (left < 0n) return null;
+  const remainder = left === 0n ? null : { coeff: left, exp: -span };
+  let remainderBasis = lotCost - soldBasis;
+  if (remainder && remainderBasis <= 0n) remainderBasis = 1n;
+  return {
+    realized: delta - soldBasis,
+    soldBasis,
+    remainder,
+    remainderBasis,
+    full: left === 0n,
+  };
+}
+
 function accountDelta(meta, account) {
   if (!account || account === anchors.WALLETS.W0.address) return null;
   const nodes = meta && Array.isArray(meta.AffectedNodes) ? meta.AffectedNodes : [];
@@ -245,6 +302,7 @@ module.exports = {
   DEFAULT_MARGIN,
   lossCap,
   sellMargin,
+  isDay,
   read,
   inspect,
   record,
@@ -252,6 +310,7 @@ module.exports = {
   netProceeds,
   poolOut,
   portion,
+  settledSell,
   accountDelta,
   provedSpend,
 };

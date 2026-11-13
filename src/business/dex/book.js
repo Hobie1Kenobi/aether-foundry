@@ -30,6 +30,16 @@ function marketXrp(value) {
   return typeof value === "string" && /^[0-9]+$/.test(value) ? BigInt(value) : null;
 }
 
+function fundedPair(row, side) {
+  const xrpRaw = side === "bid" ? row.taker_gets_funded : row.taker_pays_funded;
+  const iouRaw = side === "bid" ? row.taker_pays_funded : row.taker_gets_funded;
+  if (xrpRaw == null && iouRaw == null) return undefined;
+  const xrp = marketXrp(xrpRaw);
+  const exact = exactOf(iouRaw);
+  if (xrp == null || !exact || xrp <= 0n) return null;
+  return { xrp, exact };
+}
+
 function bookSide(offers, side, self) {
   const rows = [];
   for (const row of offers || []) {
@@ -39,7 +49,24 @@ function bookSide(offers, side, self) {
     const raw = side === "bid" ? row.TakerPays : row.TakerGets;
     const exact = exactOf(raw);
     if (xrp == null || !exact || xrp <= 0n) throw coded("RLUSD offer amount cannot be priced", "UNCERTAIN");
-    rows.push({ account: row.Account, xrp, exact, value: raw.value });
+    const funded = fundedPair(row, side);
+    if (funded === null) continue;
+    const entry = { account: row.Account, xrp, exact, value: raw.value };
+    if (funded) {
+      const span = Math.max(-exact.exp, -funded.exact.exp, 0);
+      const width = (value) => value.coeff * (10n ** BigInt(span + value.exp));
+      const offerIou = width(exact);
+      const fundedIou = width(funded.exact);
+      const iou = fundedIou > offerIou ? offerIou : fundedIou;
+      if (iou <= 0n || fundedIou <= 0n || offerIou <= 0n) continue;
+      let outXrp = funded.xrp * iou / fundedIou;
+      const offerXrp = xrp * iou / offerIou;
+      if (outXrp > offerXrp) outXrp = offerXrp;
+      if (outXrp <= 0n) continue;
+      entry.fundedXrp = outXrp;
+      entry.fundedExact = { coeff: iou, exp: -span };
+    }
+    rows.push(entry);
   }
   return rows;
 }
@@ -225,16 +252,21 @@ function nodeDelta(node, account) {
   return null;
 }
 
-function rlusdAcquired(meta, account) {
+function rippleParts(meta, account) {
   const nodes = meta && Array.isArray(meta.AffectedNodes) ? meta.AffectedNodes : [];
   const parts = [];
   for (const node of nodes) {
     if (!node) continue;
     const delta = nodeDelta(node, account);
-    if (delta === false) return null;
+    if (delta === false) return false;
     if (delta) parts.push(delta);
   }
-  if (!parts.length) return null;
+  return parts;
+}
+
+function rlusdAcquired(meta, account) {
+  const parts = rippleParts(meta, account);
+  if (parts === false || !parts.length) return null;
   const span = parts.reduce((max, part) => Math.max(max, -part.before.exp, -part.after.exp, 0), 0);
   const gains = [];
   for (const part of parts) {
@@ -244,6 +276,22 @@ function rlusdAcquired(meta, account) {
   if (gains.length > 1) return null;
   if (gains.length === 0) return "0";
   const text = formatSpan(gains[0], span);
+  return market.exactIou(text) ? text : null;
+}
+
+function rlusdDisposed(meta, account) {
+  const parts = rippleParts(meta, account);
+  if (parts === false) return null;
+  if (!parts.length) return "0";
+  const span = parts.reduce((max, part) => Math.max(max, -part.before.exp, -part.after.exp, 0), 0);
+  const losses = [];
+  for (const part of parts) {
+    const gain = heldWidth(part.after, span) - heldWidth(part.before, span);
+    if (gain < 0n) losses.push(-gain);
+  }
+  if (losses.length > 1) return null;
+  if (losses.length === 0) return "0";
+  const text = formatSpan(losses[0], span);
   return market.exactIou(text) ? text : null;
 }
 
@@ -320,6 +368,7 @@ module.exports = {
   load,
   exactOf,
   rlusdAcquired,
+  rlusdDisposed,
   atMost,
   counterparties,
   trustSettled,

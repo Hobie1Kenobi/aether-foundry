@@ -89,18 +89,10 @@ function reserve(dir, order, shot, now) {
     const existing = Object.values(state.missions || {}).find((mission) => mission && mission.idempotency_key === order.key);
     if (existing) {
       const terminal = existing.submit_attempted === true || existing.hold === "released" || existing.signing === true;
+      if (!terminal) assertGuard(dir, order);
       return { mission: existing, created: false, terminal };
     }
-    if (order.action === "buy" || order.action === "sell") {
-      const guardState = guard.read(dir);
-      if (guardState.closed) throw coded("The W3 daily loss record is unreadable. Nothing is signed.", "GUARD");
-      if (order.action === "buy") {
-        if (typeof order.lossCap !== "bigint") throw coded("The W3 daily loss cap is not a safe drop string.", "LOSS");
-        if (guard.lossOf(guardState, order.day) >= order.lossCap) {
-          throw coded("W3 has reached its Chicago-day loss cap. No new buy is opened.", "LOSS");
-        }
-      }
-    }
+    if (order.action === "buy" || order.action === "sell") assertGuard(dir, order);
     admit(state, order);
     if (order.release && state.missions && state.missions[order.release] && state.missions[order.release].id !== LEGACY) {
       api.append({
@@ -134,10 +126,27 @@ function reserve(dir, order, shot, now) {
     if (typeof order.costBasis === "string" && /^[0-9]+$/.test(order.costBasis)) {
       mission.cost_basis_drops = order.costBasis;
     }
+    if (typeof order.release === "string" && order.release !== LEGACY) mission.release_id = order.release;
+    if (typeof order.releaseOutstanding === "string" && /^[0-9]+$/.test(order.releaseOutstanding)) {
+      mission.release_outstanding = order.releaseOutstanding;
+    }
+    if (typeof order.lotRlusd === "string" && order.lotRlusd) mission.lot_rlusd = order.lotRlusd;
+    if (typeof order.lotCost === "string" && /^[0-9]+$/.test(order.lotCost)) mission.lot_cost_basis = order.lotCost;
     if (mission.id === LEGACY) throw coded("refusing the legacy mission hold", "HOLD");
     api.append({ type: "mission.upsert", at: now, mission });
     return { mission, created: true };
   });
+}
+
+function assertGuard(dir, order) {
+  const guardState = guard.read(dir);
+  if (guardState.closed) throw coded("The W3 daily loss record is unreadable. Nothing is signed.", "GUARD");
+  if (order.action === "buy") {
+    if (typeof order.lossCap !== "bigint") throw coded("The W3 daily loss cap is not a safe drop string.", "LOSS");
+    if (guard.lossOf(guardState, order.day) >= order.lossCap) {
+      throw coded("W3 has reached its Chicago-day loss cap. No new buy is opened.", "LOSS");
+    }
+  }
 }
 
 function caught(error) {
@@ -186,19 +195,61 @@ async function submit(dir, reserved, tx, expected, clients, now, gate, journal) 
   save(dir, mission);
   const proof = await proveNow(clients, signed.hash, anchors.WALLETS.W3.address, mission);
   if (proof) {
-    const filled = Object.assign({}, mission, proof.mission, { updated_at: now });
-    save(dir, filled);
-    notePnl(dir, mission.chicago_day || policy.chicagoDay(now), proof);
+    const filled = commitProof(dir, mission, proof, now);
     writePublic(journal, proof.journal);
     return { mission: filled, replay: false, fill_proof: proof.journal };
   }
   return { mission, replay: false };
 }
 
-function notePnl(dir, day, proof) {
+function guardDay(mission, now) {
+  if (mission && guard.isDay(mission.chicago_day)) return mission.chicago_day;
+  return policy.chicagoDay(now);
+}
+
+function commitPnl(dir, mission, proof, now) {
   if (!proof || typeof proof.realized_pnl !== "bigint" || proof.realized_pnl === 0n) return null;
   const hash = proof.mission && proof.mission.proof_hash;
-  return guard.record(dir, day, proof.realized_pnl, hash);
+  const day = guardDay(mission, now);
+  guard.record(dir, day, proof.realized_pnl, hash);
+  return day;
+}
+
+function commitProof(dir, mission, proof, now) {
+  const day = commitPnl(dir, mission, proof, now);
+  const filled = Object.assign({}, mission, proof.mission, { updated_at: now });
+  if (day) {
+    filled.guard_day = day;
+    filled.guard_delta_drops = proof.realized_pnl.toString();
+  }
+  const missions = [filled];
+  const restored = restoreSource(dir, now, proof.restore);
+  if (restored) missions.push(restored);
+  exclusive(dir, (api) => {
+    api.appendAll(missions.map((row) => ({ type: "mission.upsert", at: now, mission: row })));
+  });
+  return filled;
+}
+
+function restoreSource(dir, now, restore) {
+  if (!restore || !restore.id || restore.id === LEGACY) return null;
+  const source = view(dir, now).missions && view(dir, now).missions[restore.id];
+  if (!source || source.id === LEGACY || source.action !== "buy") return null;
+  return Object.assign({}, source, restore.fields, { updated_at: now });
+}
+
+function replayGuard(dir, now) {
+  const state = view(dir, now);
+  for (const mission of rows(state)) {
+    if (mission.guard_delta_drops == null || mission.guard_delta_drops === "0") continue;
+    if (typeof mission.guard_delta_drops !== "string" || !/^-?(?:0|[1-9][0-9]*)$/.test(mission.guard_delta_drops) || mission.guard_delta_drops === "-0") {
+      throw coded("The W3 daily loss record is unreadable. Nothing is signed.", "GUARD");
+    }
+    const delta = BigInt(mission.guard_delta_drops);
+    if (delta === 0n) continue;
+    const day = guard.isDay(mission.guard_day) ? mission.guard_day : guardDay(mission, now);
+    guard.record(dir, day, delta, mission.proof_hash);
+  }
 }
 
 async function proveNow(clients, hash, self, mission) {
@@ -250,11 +301,11 @@ async function proveNow(clients, hash, self, mission) {
     outside_accounts: proof.outside_accounts,
   };
   let realized = null;
+  let restore = null;
   if (mission && mission.action === "sell") {
-    const delta = guard.accountDelta(meta, self);
-    if (delta != null && typeof mission.cost_basis_drops === "string" && /^[0-9]+$/.test(mission.cost_basis_drops)) {
-      realized = delta - BigInt(mission.cost_basis_drops);
-    }
+    const settled = settleSellProof(meta, tx, self, mission);
+    realized = settled.realized;
+    restore = settled.restore;
   } else if (!mission || mission.action === "buy") {
     const spent = guard.provedSpend(meta, tx, self);
     if (spent != null && acquired !== "0") settled.cost_basis_drops = spent;
@@ -263,6 +314,7 @@ async function proveNow(clients, hash, self, mission) {
   return {
     mission: settled,
     realized_pnl: realized,
+    restore,
     journal: {
       schema: "aether.business.rlusd-fill",
       at: new Date().toISOString(),
@@ -305,6 +357,22 @@ async function tick(env, dir, now, clients, position, journal) {
   const room = roomOf(position, state);
   const day = policy.chicagoDay(now);
   const gate = { signed: 0 };
+  try {
+    replayGuard(dir, now);
+  } catch (error) {
+    const quiet = caught(error);
+    if (quiet) {
+      return Object.assign({
+        learning: false,
+        traded: false,
+        role: ROLE,
+        rlusd_team_open_drops: exposure.teamOpen(state).toString(),
+        rlusd_role_open_drops: exposure.roleOpen(state, ROLE).toString(),
+        rlusd_team_cap_drops: cap == null ? null : cap.toString(),
+      }, quiet);
+    }
+    throw error;
+  }
   const base = {
     learning: false,
     traded: false,
@@ -327,8 +395,13 @@ async function tick(env, dir, now, clients, position, journal) {
   if (pending) {
     const proved = await proveNow(clients, pending.signed_hash, anchors.WALLETS.W3.address, pending);
     if (proved) {
-      save(dir, Object.assign({}, pending, proved.mission, { updated_at: now }));
-      notePnl(dir, day, proved);
+      try {
+        commitProof(dir, pending, proved, now);
+      } catch (error) {
+        const quiet = caught(error);
+        if (quiet) return Object.assign(base, quiet);
+        throw error;
+      }
       writePublic(journal, Object.assign({}, proved.journal, { at: now }));
       return Object.assign(base, { decision: "reconcile", fill_proof: proved.journal, status: proved.mission.status });
     }
@@ -340,12 +413,13 @@ async function tick(env, dir, now, clients, position, journal) {
   }
   let inventory = rows(state).find((mission) => mission.hold !== "released" && mission.action === "buy" && mission.status === "rlusd_filled" && BigInt(mission.outstanding_drops || "0") > 0n);
   if (inventory && inventory.id === LEGACY) inventory = null;
-  const held = inventory ? market.exactIou(inventory.bought_rlusd || "") : null;
-  if (inventory && (!held || held.coeff <= 0n)) {
+  let held = inventory ? market.exactIou(inventory.bought_rlusd || "") : null;
+  if (inventory && (!held || held.coeff <= 0n || !hasProvedBasis(inventory))) {
     const refreshed = await reacquire(clients, inventory, anchors.WALLETS.W3.address);
     if (refreshed) {
       inventory = Object.assign({}, inventory, refreshed, { updated_at: now });
       save(dir, inventory);
+      held = market.exactIou(inventory.bought_rlusd || "");
     }
   }
   if (inventory && observed.balance.coeff > 0n) return Object.assign(base, await sell(dir, inventory, now, clients, observed, room, day, gate, cap, journal, env));
@@ -441,6 +515,50 @@ async function buy(dir, now, clients, observed, room, day, gate, cap, journal, e
   };
 }
 
+function settleSellProof(meta, tx, self, mission) {
+  const empty = { realized: null, restore: null };
+  if (typeof mission.cost_basis_drops !== "string" || !/^[0-9]+$/.test(mission.cost_basis_drops)) return empty;
+  const delta = guard.accountDelta(meta, self);
+  if (delta == null) return empty;
+  const stored = BigInt(mission.cost_basis_drops);
+  const disposedText = book.rlusdDisposed(meta, self);
+  const disposed = disposedText == null ? null : market.exactIou(disposedText);
+  const lot = market.exactIou(mission.lot_rlusd || "");
+  const lotCostOk = typeof mission.lot_cost_basis === "string" && /^[0-9]+$/.test(mission.lot_cost_basis);
+  if (disposed && lot && lot.coeff > 0n && lotCostOk) {
+    const settlement = guard.settledSell(BigInt(mission.lot_cost_basis), lot, disposed, delta);
+    if (settlement && !settlement.legacy) {
+      return { realized: settlement.realized, restore: restoreFields(mission, settlement) };
+    }
+  }
+  if (disposedText === "0" && delta <= 0n) {
+    return { realized: delta, restore: restoreFields(mission, { full: false, remainder: null, unsold: true }) };
+  }
+  return { realized: delta - stored, restore: null };
+}
+
+function restoreFields(mission, settlement) {
+  if (!mission.release_id || mission.release_id === LEGACY) return null;
+  if (settlement.unsold) {
+    if (typeof mission.release_outstanding !== "string") return null;
+    return { id: mission.release_id, fields: { outstanding_drops: mission.release_outstanding } };
+  }
+  if (!settlement.remainder || settlement.full) return null;
+  const bought = formatBalance(settlement.remainder);
+  if (!bought || typeof settlement.remainderBasis !== "bigint" || settlement.remainderBasis <= 0n) return null;
+  return {
+    id: mission.release_id,
+    fields: {
+      bought_rlusd: bought,
+      cost_basis_drops: settlement.remainderBasis.toString(),
+      outstanding_drops: settlement.remainderBasis.toString(),
+      status: "rlusd_filled",
+      hold: "uncertain",
+      action: "buy",
+    },
+  };
+}
+
 function txBody(result) {
   const nested = result && result.tx_json;
   if (nested && nested.TransactionType) return nested;
@@ -510,15 +628,29 @@ function smaller(left, right) {
   return width(left) <= width(right) ? left : right;
 }
 
+function hasProvedBasis(source) {
+  return Boolean(source
+    && source.proof_result === "tesSUCCESS"
+    && source.proof_type === "consuming_tx"
+    && typeof source.proof_hash === "string"
+    && /^[0-9A-F]{64}$/.test(source.proof_hash.toUpperCase())
+    && typeof source.cost_basis_drops === "string"
+    && /^(?:0|[1-9][0-9]*)$/.test(source.cost_basis_drops)
+    && BigInt(source.cost_basis_drops) > 0n);
+}
+
 function provedBasis(source, bought, sold) {
-  if (!source || source.proof_result !== "tesSUCCESS" || source.proof_type !== "consuming_tx") return null;
-  if (typeof source.cost_basis_drops !== "string" || !/^(?:0|[1-9][0-9]*)$/.test(source.cost_basis_drops)) return null;
+  if (!hasProvedBasis(source)) return null;
   const basis = guard.portion(BigInt(source.cost_basis_drops), bought, sold);
   return basis == null ? false : basis;
 }
 
+function amountWidth(exact, span) {
+  return exact.coeff * (10n ** BigInt(span + exact.exp));
+}
+
 async function sell(dir, source, now, clients, observed, room, day, gate, cap, journal, env) {
-  const state = view(dir, now);
+  let state = view(dir, now);
   if (dayCount(state, day) >= MAX_PER_DAY) return { decision: "research", signed: false, rationale: "W3 has used its daily taker count." };
   const shot = observed.shot;
   const bought = market.exactIou(source.bought_rlusd || "");
@@ -533,24 +665,49 @@ async function sell(dir, source, now, clients, observed, room, day, gate, cap, j
   if (!text) return { decision: "research", signed: false, rationale: "The RLUSD inventory cannot be priced." };
   const guardState = guard.inspect(dir, day);
   if (guardState.closed) return { decision: "research", signed: false, rationale: "The W3 daily loss record is unreadable. Nothing is signed." };
-  const basis = provedBasis(source, bought, capped);
-  let pays = sellDrops(observed.pool, capped);
+  let basis = provedBasis(source, bought, capped);
+  if (basis == null) {
+    return { decision: "research", signed: false, rationale: "The RLUSD lot has no tesSUCCESS cost basis. Nothing is sold." };
+  }
   if (basis === false) {
     return { decision: "research", signed: false, rationale: "The IOC sell price does not cover the proved cost basis. The RLUSD stays put." };
   }
-  if (basis != null) {
-    const margin = guard.sellMargin(env);
-    if (margin == null) return { decision: "research", signed: false, rationale: "The W3 sell margin is not a safe drop string." };
-    const quoted = guard.netProceeds(observed.pool, observed.bids, capped, shot.fee);
-    if (quoted == null || quoted < basis + margin) {
-      return { decision: "research", signed: false, rationale: "The IOC sell price does not cover the proved cost basis. The RLUSD stays put." };
+  const heldSpan = Math.max(-bought.exp, -capped.exp, 0);
+  if (amountWidth(capped, heldSpan) < amountWidth(bought, heldSpan)) {
+    const fullCost = BigInt(source.cost_basis_drops);
+    const missing = fullCost > basis ? fullCost - basis : 0n;
+    if (missing > 0n) {
+      const proof = String(source.proof_hash).toUpperCase();
+      const missingHash = crypto.createHash("sha256").update(`w3-unheld|${proof}`).digest("hex").toUpperCase();
+      try {
+        guard.record(dir, day, -missing, missingHash);
+      } catch (error) {
+        const quiet = caught(error);
+        if (quiet) return quiet;
+        throw error;
+      }
     }
-    const floor = basis + margin + shot.fee;
-    if (pays == null || pays < floor) pays = floor;
+    source = Object.assign({}, source, {
+      bought_rlusd: text,
+      cost_basis_drops: basis.toString(),
+      outstanding_drops: basis.toString(),
+      updated_at: now,
+    });
+    save(dir, source);
   }
+  let pays = sellDrops(observed.pool, capped);
+  const margin = guard.sellMargin(env);
+  if (margin == null) return { decision: "research", signed: false, rationale: "The W3 sell margin is not a safe drop string." };
+  const quoted = guard.netProceeds(observed.pool, observed.bids, capped, shot.fee);
+  if (quoted == null || quoted < basis + margin) {
+    return { decision: "research", signed: false, rationale: "The IOC sell price does not cover the proved cost basis. The RLUSD stays put." };
+  }
+  const floor = basis + margin + shot.fee;
+  if (pays == null || pays < floor) pays = floor;
   if (pays == null || pays < 100000n || pays > 250000n) {
     return { decision: "research", signed: false, rationale: "The IOC sell is outside 0.1-0.25 XRP." };
   }
+  state = view(dir, now);
   const exposureDrops = shot.fee;
   const released = BigInt(source.outstanding_drops || "0");
   const teamNext = exposure.teamOpen(state) - released + exposureDrops;
@@ -581,7 +738,10 @@ async function sell(dir, source, now, clients, observed, room, day, gate, cap, j
       tx,
       cap,
       release: source.id,
-      costBasis: basis == null || basis === false ? undefined : basis.toString(),
+      releaseOutstanding: source.outstanding_drops,
+      lotRlusd: text,
+      lotCost: basis.toString(),
+      costBasis: basis.toString(),
     }, shot, now);
   } catch (error) {
     const quiet = caught(error);

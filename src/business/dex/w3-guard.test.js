@@ -77,9 +77,15 @@ function roleLedger(extra) {
       state.box.submits = (state.box.submits || 0) + 1;
       return { result: { engine_result: "tesSUCCESS" } };
     },
+    beforeReserve: state.beforeReserve,
     ledger: {
       request: async (req) => {
-        if (req.command === "tx") return state.tx || { result: { error: "txnNotFound" } };
+        if (req.command === "tx") {
+          if (state.bindHash && state.tx && state.tx.result && state.box && state.box.hash) {
+            state.tx.result.hash = state.box.hash;
+          }
+          return state.tx || { result: { error: "txnNotFound" } };
+        }
         if (req.command === "server_info") {
           return { result: { info: { network_id: 1, validated_ledger: { seq: 3000, reserve_inc_xrp: "0.2", reserve_base_xrp: "1" }, complete_ledgers: "1-3000" } } };
         }
@@ -410,5 +416,229 @@ describe("W3 price and loss guards", () => {
     assert.equal(sell.box.signs, 0);
     assert.equal(view(exit, NOW).missions.msnw3guardcorrupt1.bought_rlusd, "0.1");
     assert.equal(view(exit, NOW).missions.msnw3guardcorrupt1.outstanding_drops, "200012");
+  });
+
+  it("does not sell a lot that has no tesSUCCESS cost basis", async () => {
+    const ledger = home();
+    lot(ledger, { id: "msnw3guardnobasis1", idempotency_key: "w3-guard-nobasis", cost_basis_drops: undefined });
+    const state = { trust: true, balance: "5", box: { signs: 0, types: [], flags: [], last: null } };
+    const held = await taker.tick(baseEnv(), ledger, NOW, roleLedger(state), { headroom: 100000000n }, null);
+    assert.equal(held.signed, false);
+    assert.match(held.rationale, /no tesSUCCESS cost basis/);
+    assert.equal(state.box.signs, 0);
+    assert.equal(view(ledger, NOW).missions.msnw3guardnobasis1.bought_rlusd, "0.1");
+    assert.equal(view(ledger, NOW).missions.msnw3guardnobasis1.outstanding_drops, "200012");
+  });
+
+  it("rebuilds a missing loss file from proved mission deltas and fails closed on an impossible day", async () => {
+    const ledger = home();
+    seed(ledger, {
+      id: "msnw3guardreplay01",
+      idempotency_key: "w3-guard-replay",
+      kind: "w3-rlusd",
+      role: "W3",
+      account: anchors.WALLETS.W3.address,
+      action: "sell",
+      status: "rlusd_filled",
+      hold: "uncertain",
+      proof_hash: "EE".repeat(32),
+      guard_day: DAY,
+      guard_delta_drops: "-50000",
+      outstanding_drops: "0",
+      realized_loss_drops: "0",
+      submit_attempted: true,
+      chicago_day: DAY,
+      updated_at: NOW,
+    });
+    const state = { trust: true, box: { signs: 0, types: [], flags: [], last: null } };
+    const blocked = await taker.tick(baseEnv(), ledger, NOW, roleLedger(state), { headroom: 100000000n }, null);
+    assert.equal(blocked.signed, false);
+    assert.match(blocked.rationale, /loss cap/);
+    assert.equal(state.box.signs, 0);
+    const saved = JSON.parse(fs.readFileSync(path.join(ledger, guard.FILE), "utf8"));
+    assert.equal(saved.day, DAY);
+    assert.equal(saved.realized_pnl_drops, "-50000");
+    assert.deepEqual(saved.proofs, ["EE".repeat(32)]);
+
+    const impossible = home();
+    fs.writeFileSync(path.join(impossible, guard.FILE), `${JSON.stringify({
+      schema: guard.SCHEMA,
+      day: "2026-11-31",
+      realized_pnl_drops: "0",
+      proofs: [],
+    })}\n`);
+    const buy = { trust: true, box: { signs: 0, types: [], flags: [], last: null } };
+    const closed = await taker.tick(baseEnv(), impossible, NOW, roleLedger(buy), { headroom: 100000000n }, null);
+    assert.equal(closed.signed, false);
+    assert.match(closed.rationale, /unreadable/);
+    assert.equal(buy.box.signs, 0);
+    assert.equal(guard.isDay("2026-02-29"), false);
+    assert.equal(guard.isDay("2024-02-29"), true);
+  });
+
+  it("does not roll today's loss backward or let a funded-empty bid authorize a sell", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "w3-day-"));
+    guard.record(dir, DAY, -40000n, "A1".repeat(32));
+    const folded = guard.record(dir, "2026-11-12", -20000n, "B2".repeat(32));
+    assert.equal(folded.day, DAY);
+    assert.equal(folded.realized_pnl_drops, "-60000");
+    const profit = guard.record(dir, "2026-11-12", 1000n, "C3".repeat(32));
+    assert.equal(profit.day, DAY);
+    assert.equal(profit.realized_pnl_drops, "-60000");
+    assert.equal(profit.proofs.includes("C3".repeat(32)), true);
+    const forward = guard.record(dir, "2026-11-14", -5n, "D4".repeat(32));
+    assert.equal(forward.day, "2026-11-14");
+    assert.equal(forward.realized_pnl_drops, "-5");
+
+    const ledger = home();
+    lot(ledger, { id: "msnw3guardunfund1", idempotency_key: "w3-guard-unfund", cost_basis_drops: "190000" });
+    const state = {
+      trust: true,
+      balance: "5",
+      box: { signs: 0, types: [], flags: [], last: null },
+      bids: [{
+        Account: OUTSIDER,
+        TakerGets: "400000",
+        taker_gets_funded: "1000",
+        TakerPays: { currency: rlusd.CURRENCY, issuer: rlusd.ISSUER, value: "0.1" },
+        taker_pays_funded: { currency: rlusd.CURRENCY, issuer: rlusd.ISSUER, value: "0.00025" },
+      }],
+    };
+    const held = await taker.tick(baseEnv(), ledger, NOW, roleLedger(state), { headroom: 100000000n }, null);
+    assert.equal(held.signed, false);
+    assert.match(held.rationale, /proved cost basis/);
+    assert.equal(state.box.signs, 0);
+    assert.equal(guard.lossCap({ FOUNDRY_W3_DAILY_LOSS_CAP_DROPS: "50000 " }), null);
+    assert.equal(guard.lossCap({ FOUNDRY_W3_DAILY_LOSS_CAP_DROPS: "0xC350" }), null);
+    assert.equal(guard.sellMargin({ FOUNDRY_W3_SELL_MARGIN_DROPS: "1.5" }), null);
+  });
+
+  it("keeps the cap until Chicago midnight and counts only the filled slice of an IOC", async () => {
+    const ledger = home();
+    guard.record(ledger, DAY, -50000n, "55".repeat(32));
+    const early = { trust: true, box: { signs: 0, types: [], flags: [], last: null } };
+    const blocked = await taker.tick(baseEnv(), ledger, "2026-11-14T05:30:00.000Z", roleLedger(early), { headroom: 100000000n }, null);
+    assert.equal(blocked.signed, false);
+    assert.match(blocked.rationale, /loss cap/);
+    assert.equal(early.box.signs, 0);
+    const next = { trust: true, box: { signs: 0, types: [], flags: [], last: null } };
+    const bought = await taker.tick(baseEnv(), ledger, "2026-11-14T06:00:00.000Z", roleLedger(next), { headroom: 100000000n }, null);
+    assert.equal(bought.signed, true);
+    const clock = require("../../missions/clock");
+    assert.equal(clock.chicagoDay("2026-07-15T04:30:00.000Z"), "2026-07-14");
+    assert.equal(clock.chicagoDay("2026-07-15T05:00:00.000Z"), "2026-07-15");
+    assert.equal(clock.chicagoDay("2026-11-01T06:30:00.000Z"), "2026-11-01");
+    assert.equal(clock.chicagoDay("2026-11-01T07:30:00.000Z"), "2026-11-01");
+    assert.equal(clock.chicagoDay("2026-03-08T07:59:00.000Z"), "2026-03-08");
+    assert.equal(clock.chicagoDay("2026-03-08T08:00:00.000Z"), "2026-03-08");
+
+    const killed = home();
+    lot(killed, { id: "msnw3guardkill0001", idempotency_key: "w3-guard-kill", cost_basis_drops: net.toString() });
+    const kill = {
+      trust: true,
+      balance: "5",
+      bindHash: true,
+      box: { signs: 0, types: [], flags: [], last: null },
+      tx: {
+        result: {
+          validated: true,
+          meta: {
+            TransactionResult: "tesSUCCESS",
+            AffectedNodes: [{
+              ModifiedNode: {
+                LedgerEntryType: "AccountRoot",
+                FinalFields: { Account: anchors.WALLETS.W3.address, Balance: "49999988" },
+                PreviousFields: { Balance: "50000000" },
+              },
+            }],
+          },
+        },
+      },
+    };
+    const missed = await taker.tick(baseEnv(), killed, NOW, roleLedger(kill), { headroom: 100000000n }, null);
+    assert.equal(missed.signed, true);
+    const afterKill = JSON.parse(fs.readFileSync(path.join(killed, guard.FILE), "utf8"));
+    assert.equal(afterKill.realized_pnl_drops, "-12");
+    const source = view(killed, NOW).missions.msnw3guardkill0001;
+    assert.equal(source.outstanding_drops, net.toString());
+    assert.equal(source.bought_rlusd, "0.1");
+    assert.equal(source.cost_basis_drops, net.toString());
+
+    const partial = home();
+    lot(partial, { id: "msnw3guardslice001", idempotency_key: "w3-guard-slice", cost_basis_drops: net.toString() });
+    const slice = {
+      trust: true,
+      balance: "5",
+      bindHash: true,
+      box: { signs: 0, types: [], flags: [], last: null },
+      tx: {
+        result: {
+          validated: true,
+          meta: {
+            TransactionResult: "tesSUCCESS",
+            AffectedNodes: [
+              {
+                ModifiedNode: {
+                  LedgerEntryType: "AccountRoot",
+                  FinalFields: { Account: anchors.WALLETS.W3.address, Balance: "50090891" },
+                  PreviousFields: { Balance: "50000000" },
+                },
+              },
+              {
+                ModifiedNode: {
+                  LedgerEntryType: "RippleState",
+                  FinalFields: {
+                    Balance: { currency: rlusd.CURRENCY, issuer: "rrrrrrrrrrrrrrrrrrrrBZbvji", value: "0.05" },
+                    HighLimit: { currency: rlusd.CURRENCY, issuer: rlusd.ISSUER, value: "0" },
+                    LowLimit: { currency: rlusd.CURRENCY, issuer: anchors.WALLETS.W3.address, value: "10" },
+                  },
+                  PreviousFields: {
+                    Balance: { currency: rlusd.CURRENCY, issuer: "rrrrrrrrrrrrrrrrrrrrBZbvji", value: "0.1" },
+                  },
+                },
+              },
+            ],
+          },
+        },
+      },
+    };
+    const filled = await taker.tick(baseEnv(), partial, NOW, roleLedger(slice), { headroom: 100000000n }, null);
+    assert.equal(filled.signed, true);
+    const afterSlice = JSON.parse(fs.readFileSync(path.join(partial, guard.FILE), "utf8"));
+    const half = guard.portion(net, market.exactIou("0.1"), market.exactIou("0.05"));
+    assert.equal(BigInt(afterSlice.realized_pnl_drops), 90891n - half);
+    const left = view(partial, NOW).missions.msnw3guardslice001;
+    assert.equal(left.bought_rlusd, "0.05");
+    assert.equal(left.cost_basis_drops, (net - half).toString());
+    assert.equal(left.outstanding_drops, (net - half).toString());
+  });
+
+  it("rechecks the loss cap inside the ledger lock before an already reserved buy is signed", async () => {
+    const ledger = home();
+    seed(ledger, {
+      id: "msnreservedbuy0001",
+      idempotency_key: "w3-rlusd-buy-2026-11-13-20",
+      kind: "w3-rlusd",
+      role: "W3",
+      account: anchors.WALLETS.W3.address,
+      action: "buy",
+      status: "rlusd_reserved",
+      hold: "uncertain",
+      signing: false,
+      submit_attempted: false,
+      outstanding_drops: "200012",
+      realized_loss_drops: "0",
+      chicago_day: DAY,
+      updated_at: NOW,
+    });
+    const state = {
+      trust: true,
+      box: { signs: 0, types: [], flags: [], last: null },
+      beforeReserve: () => guard.record(ledger, DAY, -50000n, "F6".repeat(32)),
+    };
+    const blocked = await taker.tick(baseEnv(), ledger, NOW, roleLedger(state), { headroom: 100000000n }, null);
+    assert.equal(blocked.signed, false);
+    assert.match(blocked.rationale, /loss cap/);
+    assert.equal(state.box.signs, 0);
   });
 });
