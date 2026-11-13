@@ -14,6 +14,7 @@ const guard = require("../x402-outbound-guard");
 const walkIn = require("../walk-in-public");
 const license = require("../license/catalog");
 const axelarConfig = require("../bridge/axelar/config");
+const dexGates = require("../business/dex/gates");
 
 const ALLOWLIST_PATH = path.join(__dirname, "allowlist.json");
 const STALE_MS = anchors.MAX_AGE_HOURS * 60 * 60 * 1000;
@@ -64,6 +65,7 @@ const AGENT_TX_TYPES = [
   "CredentialAccept",
   "CredentialDelete",
   "AccountSet",
+  "OracleSet",
 ];
 const AGENT_TX_REFUSED = [
   "AccountDelete",
@@ -170,6 +172,38 @@ const SPEC = {
     max_fee_drops: "100000",
     signs: true,
   },
+  w3_pool_taker: {
+    account: "W3",
+    address: anchors.WALLETS.W3.address,
+    key_env: "W3_REGULAR_SEED",
+    issuer: "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
+    pool: "rPn7kHwycXzS5XNj167CnKwC2t82yAAdNW",
+    max_drops: "250000",
+    min_drops: "100000",
+    max_per_utc_day: 4,
+    signs: true,
+  },
+  w4_resting_quote: {
+    account: "W4",
+    address: anchors.WALLETS.W4.address,
+    key_env: "W4_REGULAR_SEED",
+    issuer: "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
+    pool: "rPn7kHwycXzS5XNj167CnKwC2t82yAAdNW",
+    max_drops: "1000000",
+    max_per_utc_day: 12,
+    signs: true,
+  },
+  w5_rlusd_oracle: {
+    account: "W5",
+    address: anchors.WALLETS.W5.address,
+    key_env: "W5_REGULAR_SEED",
+    issuer: "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
+    pool: "rPn7kHwycXzS5XNj167CnKwC2t82yAAdNW",
+    tx_type: "OracleSet",
+    max_drops: "0",
+    max_per_utc_day: 48,
+    signs: true,
+  },
 };
 
 const BATCH_HEARTBEAT = {
@@ -271,6 +305,23 @@ function assertAllowlist(doc) {
     if (name === "batch_heartbeat") {
       same(row.max_deposit_drops, spec.max_deposit_drops, "batch deposit");
       same(row.max_fee_drops, spec.max_fee_drops, "batch fee");
+    }
+    if (name === "w3_pool_taker" || name === "w4_resting_quote" || name === "w5_rlusd_oracle") {
+      same(row.issuer, spec.issuer, `${name} issuer`);
+      same(row.pool, spec.pool, `${name} pool`);
+      same(row.max_drops, spec.max_drops, `${name} max`);
+      if (row.max_per_utc_day !== spec.max_per_utc_day) throw coded(`${name} daily count drifted`, "ALLOWLIST");
+      if (row.issuer !== "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV") throw coded(`${name} issuer drifted`, "ALLOWLIST");
+      if (row.pool !== "rPn7kHwycXzS5XNj167CnKwC2t82yAAdNW") throw coded(`${name} pool drifted`, "ALLOWLIST");
+    }
+    if (name === "w3_pool_taker") {
+      same(row.min_drops, spec.min_drops, "w3 min");
+      if (row.ioc_required !== true) throw coded("w3 taker must require IOC", "ALLOWLIST");
+    }
+    if (name === "w5_rlusd_oracle") {
+      same(row.tx_type, "OracleSet", "w5 tx");
+      if (row.fees_only !== true) throw coded("w5 oracle must be fees only", "ALLOWLIST");
+      if (row.account !== "W5") throw coded("OracleSet is only W5", "WALLET");
     }
   }
   assertAgentAllowlist(doc);
@@ -1205,6 +1256,10 @@ function assertLicenseTx(tx, intent, opts) {
 
 function assertKnownIntent(tx, intent, opts) {
   const options = opts || {};
+  if (dexGates.wantsRole(tx, intent)) {
+    dexGates.assertRoleIntent(tx, intent, options);
+    return;
+  }
   if (intent === "batch_heartbeat_prepare") {
     assertBatchPrepare(tx);
     return;

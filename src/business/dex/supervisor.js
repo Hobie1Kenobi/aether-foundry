@@ -25,14 +25,22 @@ function nextWait(current, interval, degraded) {
   return Math.min(previous * 2, MAX_BACKOFF_MS);
 }
 
+function roleId(env) {
+  const id = env && env.FOUNDRY_DEX_ROLE;
+  if (id === "W3" || id === "W4") return id;
+  return "W1";
+}
+
 function health(env, journal) {
   const source = env || {};
+  const role = roleId(source);
   const rows = journal ? readJournal(journal) : [];
   const last = rows.length ? rows[rows.length - 1] : null;
   return {
-    role: "w1-dex-supervisor",
-    dormant: source.FOUNDRY_W1_DEX_SUPERVISOR !== "yes",
-    spend_enabled: source.FOUNDRY_W1_DEX_LIVE === "yes" && source.FOUNDRY_DEX_KILL !== "yes",
+    role: role === "W1" ? "w1-dex-supervisor" : `${role.toLowerCase()}-dex-supervisor`,
+    dex_role: role,
+    dormant: source[role === "W1" ? "FOUNDRY_W1_DEX_SUPERVISOR" : `FOUNDRY_${role}_DEX_SUPERVISOR`] !== "yes",
+    spend_enabled: source[role === "W1" ? "FOUNDRY_W1_DEX_LIVE" : `FOUNDRY_${role}_DEX_LIVE`] === "yes" && source.FOUNDRY_DEX_KILL !== "yes",
     last_decision: last ? last.decision : null,
     last_traded: last ? last.traded === true : false,
     learning: false,
@@ -54,14 +62,16 @@ function main(argv, deps) {
   const args = argv || [];
   const options = deps || {};
   const env = options.env || {};
+  const role = roleId(env);
   if (args.includes("--help")) return Promise.resolve(0);
   const write = options.stdout || (() => {});
-  if (env.FOUNDRY_W1_DEX_SUPERVISOR !== "yes") {
+  const supervisorOn = role === "W1" ? env.FOUNDRY_W1_DEX_SUPERVISOR === "yes" : env[`FOUNDRY_${role}_DEX_SUPERVISOR`] === "yes";
+  if (!supervisorOn) {
     write(`${JSON.stringify(health(env, options.journal))}\n`);
     return Promise.resolve(0);
   }
   const input = options.input || {
-    journal: env.FOUNDRY_W1_DEX_JOURNAL,
+    journal: role === "W1" ? env.FOUNDRY_W1_DEX_JOURNAL : env[`FOUNDRY_${role}_DEX_JOURNAL`],
     ledger: env.FOUNDRY_MISSION_LEDGER,
   };
   if (!input.journal || !input.ledger) {

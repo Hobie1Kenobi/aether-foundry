@@ -13,6 +13,7 @@ const policy = require("../../missions/policy");
 const anchors = require("../../director/anchors");
 const bankroll = require("../bankroll");
 const bounds = require("./bounds");
+const exposure = require("./exposure");
 const market = require("./market");
 const signer = require("./signer");
 const snapshot = require("./snapshot");
@@ -96,19 +97,20 @@ function formatDiv(num, den, exp, round) {
   return text;
 }
 
-function planTrustLine(account) {
+function planTrustLine(account, trader) {
   if (account === anchors.WALLETS.W0.address) throw coded("refusing to sign as W0", "W0");
   if (account === anchors.WALLETS.W7.address) throw coded("W7 is not an xrpl:1 account", "WALLET");
   const allowed = ["W1", "W2", "W3", "W4", "W5", "W6"].map((id) => anchors.WALLETS[id].address);
   if (!allowed.includes(account)) throw coded("trust line account is not W1-W6", "WALLET");
+  const desk = trader || bounds.ACCOUNT;
   return {
     account,
-    submit: account === bounds.ACCOUNT,
+    submit: account === desk,
     currency: CURRENCY,
     issuer: ISSUER,
     limit: TRUST_LIMIT,
     flags: TF_SET_NO_RIPPLE,
-    trading: account === bounds.ACCOUNT,
+    trading: account === desk,
   };
 }
 
@@ -263,11 +265,16 @@ function headroom(position, state, observed) {
   const base = position && typeof position.proved_xrp === "bigint" ? position.proved_xrp : bankroll.BANKROLL_DROPS;
   const reserveInc = position && typeof position.reserve_inc === "bigint" && position.reserve_inc > 0n ? position.reserve_inc : 0n;
   let extra = 0n;
+  const seen = new Set();
   for (const mission of Object.values((state && state.missions) || {})) {
-    if (!mission || mission.kind !== KIND) continue;
+    if (!mission || !exposure.ALL.has(mission.kind) || mission.id === exposure.LEGACY_HOLD) continue;
+    if (mission.id) {
+      if (seen.has(mission.id)) continue;
+      seen.add(mission.id);
+    }
     let outstanding = BigInt(mission.outstanding_drops || "0");
     const loss = BigInt(mission.realized_loss_drops || "0");
-    if (reserveInc > 0n && outstanding >= reserveInc && reserveHeld(mission, observed)) outstanding -= reserveInc;
+    if (mission.kind === KIND && reserveInc > 0n && outstanding >= reserveInc && reserveHeld(mission, observed)) outstanding -= reserveInc;
     extra += outstanding + loss;
   }
   const used = base + extra;
@@ -295,15 +302,12 @@ function findResting(state) {
 }
 
 function openExposure(state) {
-  let open = 0n;
-  for (const mission of rowsOf(state)) {
-    if (mission.hold === "released") continue;
-    if (mission.action === "trust" && mission.status === "rlusd_proved") continue;
-    if (mission.action === "swap" && mission.status === "rlusd_proved") continue;
-    if (mission.action === "cancel" && mission.status === "rlusd_proved") continue;
-    open += BigInt(mission.outstanding_drops || "0");
-  }
-  return open;
+  return exposure.roleOpen(state, "W1");
+}
+
+function teamCapOf(env) {
+  const cap = bounds.teamCapDrops(env);
+  return cap == null ? exposure.TEAM_CAP_DROPS : cap;
 }
 
 function dayTrades(state, day) {
@@ -403,6 +407,7 @@ async function tick(env, dir, now, clients, position) {
   const state = view(dir, now);
   const room = headroom(position, state, observed);
   const day = policy.chicagoDay(now);
+  const teamCap = teamCapOf(env);
   const gate = { signed: 0 };
   const fields = {
     learning: false,
@@ -410,6 +415,8 @@ async function tick(env, dir, now, clients, position) {
     realized_pnl_drops: "0",
     rlusd_headroom_drops: room.headroom.toString(),
     rlusd_open_drops: openExposure(state).toString(),
+    rlusd_team_open_drops: exposure.teamOpen(state).toString(),
+    rlusd_team_cap_drops: teamCap.toString(),
     aeth_exit_proposal: room.exit ? "w1-exit-sole-lp" : null,
     rlusd_trustline: observed.trustline,
   };
@@ -422,16 +429,19 @@ async function tick(env, dir, now, clients, position) {
   const pending = findPending(state);
   if (pending) return Object.assign(fields, await reconcile(dir, pending, now, clients, observed));
   const resting = findResting(state);
-  if (resting) return Object.assign(fields, await manageRest(dir, resting, now, clients, observed, room, day, gate));
+  if (resting) return Object.assign(fields, await manageRest(dir, resting, now, clients, observed, room, day, gate, teamCap));
   const inventory = findInventory(state);
   if (inventory) {
-    const sold = await sellInventory(dir, inventory, now, clients, observed, room, gate);
+    const sold = await sellInventory(dir, inventory, now, clients, observed, room, gate, teamCap);
     const tryBuy = inventory.status === "rlusd_vanished_unattributed" && sold.book === "no_bid" && sold.decision !== "place" && sold.signed !== true;
     if (!tryBuy) return Object.assign(fields, sold);
   }
+  if (bounds.teamCapDrops(env) == null) {
+    return Object.assign(fields, { decision: "research", rationale: "The team RLUSD cap is not a valid drop string." });
+  }
   const shot = await shotOf(clients.ledger);
-  if (!observed.trustline) return Object.assign(fields, await trust(dir, now, clients, shot, room, day, gate));
-  return Object.assign(fields, await buy(dir, now, clients, shot, observed, room, day, gate));
+  if (!observed.trustline) return Object.assign(fields, await trust(dir, now, clients, shot, room, day, gate, teamCap));
+  return Object.assign(fields, await buy(dir, now, clients, shot, observed, room, day, gate, teamCap));
 }
 
 async function submitSigned(dir, reserved, tx, expected, clients, now, gate) {
@@ -470,8 +480,24 @@ async function submitSigned(dir, reserved, tx, expected, clients, now, gate) {
   return { mission, replay: false };
 }
 
-async function trust(dir, now, clients, shot, room, day, gate) {
+function foreignHold(dir, now) {
+  if (!exposure.blocksNewRisk(view(dir, now), "W1")) return null;
+  return {
+    decision: "research",
+    traded: false,
+    signed: false,
+    learning: false,
+    rationale: "An uncertain RLUSD hold from another role is still open. Nothing is signed.",
+  };
+}
+
+async function trust(dir, now, clients, shot, room, day, gate, teamCap) {
+  const held = foreignHold(dir, now);
+  if (held) return held;
   const need = shot.reserveInc + shot.fee;
+  if (!exposure.allows(view(dir, now), "W1", need, teamCap)) {
+    return { decision: "research", traded: false, rationale: "The trust-line reserve does not fit the team RLUSD cap." };
+  }
   if (room.headroom < need) {
     return { decision: "research", aeth_exit_proposal: "w1-exit-sole-lp", rationale: "The trust-line reserve does not fit the RLUSD headroom." };
   }
@@ -498,17 +524,16 @@ async function trust(dir, now, clients, shot, room, day, gate) {
   return { decision: "trustline", signed: true, submitted: sent.mission.submitted === true, traded: false, status: sent.mission.status };
 }
 
-function withinCaps(state, day, exposure, room) {
+function withinCaps(state, day, add, room, teamCap) {
   if (dayTrades(state, day) >= MAX_TRADES_PER_DAY) return false;
-  if (openExposure(state) + exposure > MAX_TRADE_DROPS) return false;
-  if (exposure > room.headroom) return false;
+  if (!exposure.allows(state, "W1", add, teamCap)) return false;
+  if (add > room.headroom) return false;
   return true;
 }
 
-function affordableSpend(state, room, shot) {
+function affordableSpend(state, room, shot, teamCap) {
   const reserve = shot.reserveInc;
-  const open = openExposure(state);
-  const capRoom = MAX_TRADE_DROPS > open ? MAX_TRADE_DROPS - open : 0n;
+  const capRoom = exposure.tighterRoom(state, "W1", teamCap);
   const bank = typeof room.headroom === "bigint" && room.headroom > 0n ? room.headroom : 0n;
   let budget = capRoom < bank ? capRoom : bank;
   if (budget <= reserve + shot.fee) return 0n;
@@ -518,10 +543,12 @@ function affordableSpend(state, room, shot) {
   return spend;
 }
 
-async function buy(dir, now, clients, shot, observed, room, day, gate) {
+async function buy(dir, now, clients, shot, observed, room, day, gate, teamCap) {
+  const held = foreignHold(dir, now);
+  if (held) return held;
   const state = view(dir, now);
   if (findResting(state)) return { decision: "research", traded: false, rationale: "A RLUSD offer is still open." };
-  const spend = affordableSpend(state, room, shot);
+  const spend = affordableSpend(state, room, shot, teamCap);
   if (spend < MIN_TRADE_DROPS) {
     return { decision: "research", rationale: "The next RLUSD trade would exceed the 2 XRP cap or the headroom." };
   }
@@ -555,7 +582,7 @@ async function buy(dir, now, clients, shot, observed, room, day, gate) {
   const key = bid ? (rowsOf(state).some((mission) => mission.idempotency_key === REST_KEY) ? `w1-rlusd-rest-${day}` : REST_KEY) : `w1-rlusd-swap-${day}`;
   const offerReserve = shot.reserveInc;
   const exposure = (bid ? BigInt(bid.taker_gets) : priced.sendMax) + shot.fee + (bid ? offerReserve : 0n);
-  if (!withinCaps(state, day, exposure, room)) {
+  if (!withinCaps(state, day, exposure, room, teamCap)) {
     return { decision: "research", aeth_exit_proposal: room.headroom < spend ? "w1-exit-sole-lp" : null, rationale: "Open RLUSD exposure is already at the 2 XRP cap." };
   }
   const baseline = !observed.balance || observed.balance.coeff === 0n ? "0" : formatCoeff(observed.balance.coeff, observed.balance.exp);
@@ -1283,7 +1310,9 @@ function passiveSell(observed, balance) {
   return { taker_gets: { currency: CURRENCY, issuer: ISSUER, value: text }, taker_pays: drops.toString() };
 }
 
-async function sellInventory(dir, mission, now, clients, observed, room, gate) {
+async function sellInventory(dir, mission, now, clients, observed, room, gate, teamCap) {
+  const held = foreignHold(dir, now);
+  if (held) return held;
   const today = policy.chicagoDay(now);
   const state = view(dir, now);
   if (dayTrades(state, today) >= MAX_TRADES_PER_DAY) {
@@ -1304,8 +1333,8 @@ async function sellInventory(dir, mission, now, clients, observed, room, gate) {
   if (!offer) return { decision: "research", traded: false, signed: false, rationale: "No passive RLUSD exit sits between the outside bid and the outside ask." };
   const shot = await shotOf(clients.ledger);
   const offerReserve = shot.reserveInc;
-  const exposure = shot.fee + offerReserve;
-  if (exposure > room.headroom) {
+  const exitCost = shot.fee + offerReserve;
+  if (exitCost > room.headroom) {
     return { decision: "research", traded: false, rationale: "The RLUSD exit reserve does not fit the bankroll headroom." };
   }
   const marked = markInventory(observed.pool, observed.bids, observed.balance);
@@ -1313,9 +1342,15 @@ async function sellInventory(dir, mission, now, clients, observed, room, gate) {
     return { decision: "research", traded: false, signed: false, book: "dust", rationale: "The RLUSD inventory mark is below the offer reserve. It is not sold." };
   }
   const previous = openExposure(state);
-  const nextOpen = previous - BigInt(mission.outstanding_drops || "0") + exposure;
+  const nextOpen = previous - BigInt(mission.outstanding_drops || "0") + exitCost;
+  const teamNow = exposure.teamOpen(state);
+  const teamNext = teamNow - BigInt(mission.outstanding_drops || "0") + exitCost;
+  const teamLimit = typeof teamCap === "bigint" ? teamCap : exposure.TEAM_CAP_DROPS;
   if (nextOpen > previous && nextOpen > MAX_TRADE_DROPS) {
     return { decision: "research", traded: false, signed: false, rationale: "The RLUSD exit does not fit the 2 XRP open cap." };
+  }
+  if (teamNext > teamLimit && teamNext > teamNow) {
+    return { decision: "research", traded: false, signed: false, rationale: "The RLUSD exit does not fit the team RLUSD cap." };
   }
   const tx = {
     TransactionType: "OfferCreate",
@@ -1340,7 +1375,7 @@ async function sellInventory(dir, mission, now, clients, observed, room, gate) {
     key,
     action: "sell",
     day: today,
-    exposure,
+    exposure: exitCost,
     tx,
     cost_basis: basis,
     cost_basis_drops: mission.inventory_drops || mission.outstanding_drops || null,
@@ -1446,7 +1481,7 @@ async function bookRemainder(dir, resting, now, clients, observed, row) {
   };
 }
 
-async function manageRest(dir, resting, now, clients, observed, room, day, gate) {
+async function manageRest(dir, resting, now, clients, observed, room, day, gate, teamCap) {
   const sequence = resting.sequence;
   const listed = listedOffer(observed, sequence);
   if (!listed) {
@@ -1461,7 +1496,7 @@ async function manageRest(dir, resting, now, clients, observed, room, day, gate)
   }
   const reduced = await bookRemainder(dir, resting, now, clients, observed, listed);
   if (reduced) return reduced;
-  if (resting.action === "sell") return manageSellRest(dir, resting, now, clients, observed, room, day, gate);
+  if (resting.action === "sell") return manageSellRest(dir, resting, now, clients, observed, room, day, gate, teamCap);
   if (Array.isArray(resting.absence_ledgers) && resting.absence_ledgers.length) {
     resting = Object.assign({}, resting, { absence_ledgers: [], updated_at: now });
     save(dir, resting);
@@ -1480,12 +1515,14 @@ async function manageRest(dir, resting, now, clients, observed, room, day, gate)
     Sequence: shot.sequence,
     LastLedgerSequence: shot.validatedLedger + bounds.LEDGER_WINDOW,
   };
-  const exposure = shot.fee;
+  const fee = shot.fee;
   const state = view(dir, now);
-  if (exposure > room.headroom || openExposure(state) + exposure > MAX_TRADE_DROPS) {
+  const teamLimit = typeof teamCap === "bigint" ? teamCap : exposure.TEAM_CAP_DROPS;
+  const teamNow = exposure.teamOpen(state);
+  if (fee > room.headroom || openExposure(state) + fee > MAX_TRADE_DROPS || teamNow + fee > teamLimit || exposure.blocksNewRisk(state, "W1")) {
     return { decision: "research", traded: false, rationale: "Open RLUSD exposure is already at the 2 XRP cap." };
   }
-  const reserved = reserve(dir, { key: `w1-rlusd-cancel-${sequence}`, action: "cancel", day, exposure, tx }, shot, now);
+  const reserved = reserve(dir, { key: `w1-rlusd-cancel-${sequence}`, action: "cancel", day, exposure: fee, tx }, shot, now);
   const sent = await submitSigned(dir, reserved, tx, {
     type: "OfferCancel",
     account: bounds.ACCOUNT,
@@ -1498,7 +1535,7 @@ async function manageRest(dir, resting, now, clients, observed, room, day, gate)
   return { decision: "cancel", signed: true, submitted: sent.mission.submitted === true, traded: false, status: sent.mission.status };
 }
 
-async function manageSellRest(dir, resting, now, clients, observed, room, day, gate) {
+async function manageSellRest(dir, resting, now, clients, observed, room, day, gate, teamCap) {
   const pays = marketXrp(resting.unsigned_tx && resting.unsigned_tx.TakerPays);
   const gets = exactOf(resting.unsigned_tx && resting.unsigned_tx.TakerGets);
   if (pays == null || !gets) {
@@ -1513,8 +1550,10 @@ async function manageSellRest(dir, resting, now, clients, observed, room, day, g
     return { decision: "research", traded: false, signed: false, rationale: "The stale RLUSD sell is through the outside bid. The Chicago day has no order left to cancel it." };
   }
   const shot = await shotOf(clients.ledger);
-  const exposure = shot.fee;
-  if (exposure > room.headroom || openExposure(state) + exposure > MAX_TRADE_DROPS) {
+  const fee = shot.fee;
+  const teamLimit = typeof teamCap === "bigint" ? teamCap : exposure.TEAM_CAP_DROPS;
+  const teamNow = exposure.teamOpen(state);
+  if (fee > room.headroom || openExposure(state) + fee > MAX_TRADE_DROPS || teamNow + fee > teamLimit || exposure.blocksNewRisk(state, "W1")) {
     return { decision: "research", traded: false, signed: false, rationale: "The stale RLUSD sell is through the outside bid. The cancel fee does not fit the cap." };
   }
   const tx = {
@@ -1525,7 +1564,7 @@ async function manageSellRest(dir, resting, now, clients, observed, room, day, g
     Sequence: shot.sequence,
     LastLedgerSequence: shot.validatedLedger + bounds.LEDGER_WINDOW,
   };
-  const reserved = reserve(dir, { key: `w1-rlusd-cancel-${resting.sequence}`, action: "cancel", day, exposure, tx }, shot, now);
+  const reserved = reserve(dir, { key: `w1-rlusd-cancel-${resting.sequence}`, action: "cancel", day, exposure: fee, tx }, shot, now);
   const sent = await submitSigned(dir, reserved, tx, {
     type: "OfferCancel",
     account: bounds.ACCOUNT,

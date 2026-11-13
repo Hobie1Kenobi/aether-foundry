@@ -22,6 +22,7 @@ const policy = require("./policy");
 const licenseChallenge = require("../license/challenge");
 const licenseLedger = require("../license/ledger");
 const heartbeat = require("../batch/heartbeat");
+const dexGates = require("../business/dex/gates");
 
 const DEFAULT_BIND = "127.0.0.1";
 const DEFAULT_PORT = 8787;
@@ -144,6 +145,7 @@ function archiveAction(intent, tx) {
     return intent;
   }
   if (intent === "batch_heartbeat" || intent === "batch_heartbeat_prepare") return intent;
+  if (intent === "w3_pool_taker" || intent === "w4_resting_quote" || intent === "w5_rlusd_oracle") return intent;
   return "agent-sign";
 }
 
@@ -536,6 +538,9 @@ async function evaluateMissionSpend(body, ctx) {
 
 async function evaluate(body, ctx) {
   if (body && body.intent === "mission_spend") return evaluateMissionSpend(body, ctx);
+  if (body && body.tx && body.tx.TransactionType === "OracleSet") {
+    dexGates.assertOracleWallet(body.wallet, body.tx);
+  }
   const options = ctx || {};
   const env = options.env || {};
   policy.assertAgentGate(env);

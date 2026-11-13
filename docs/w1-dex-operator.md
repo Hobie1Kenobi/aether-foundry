@@ -13,6 +13,7 @@ The adapter is installed and dormant. It does not read a key, open a socket, or 
 ## Limits and reserve
 
 - DEX and LP share one 100000000-drop bankroll. It is not 100 XRP for each agent and it does not refill each Chicago day. A restart reads the same ledger.
+- W1, W3, and W4 share one RLUSD team cap on that same mission ledger. The shipped default is 3500000 drops (3.5 XRP). `FOUNDRY_DEX_RLUSD_TEAM_CAP_DROPS` may set a lower cap and is rejected above 3500000. W1 still stops at 2000000 drops of its own RLUSD exposure. W3 stops at 500000. W4 stops at 1000000. Each mission id is counted once. An uncertain in-flight hold on any role blocks the others. See `docs/dex-roles.md`.
 - Proved XRP at risk is the LP share of pool XRP, open-offer locks, the account base reserve, `OwnerCount * reserve_inc`, in-flight holds, and realized losses. AETH counts only when an outside bid pays XRP for that AETH, and only for the amount the bid takes. The pool's own price is not a value. Uncovered or frozen AETH closes new risk and does not release XRP already in the pool. Minted AETH is not booked as a fresh XRP spend.
 - Payment missions stay at 1000000 drops each and 5000000 drops per Chicago day, including the 1747-drop legacy hold. New DEX rows do not write `budget.reserved`.
 - The open-ledger fee must be from 1 to 10000 drops. The caller does not set it.
