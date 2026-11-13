@@ -250,7 +250,7 @@ async function tick(env, dir, now, clients, position, journal) {
     rlusd_role_open_drops: exposure.roleOpen(state, ROLE).toString(),
     rlusd_team_cap_drops: cap == null ? null : cap.toString(),
   };
-  const trustMission = rowsOf(state).find((mission) => mission.action === "trust" && mission.hold !== "released" && mission.signed_hash && (mission.status === "rlusd_unknown" || mission.status === "rlusd_reserved"));
+  const trustMission = rowsOf(state).find((mission) => mission.action === "trust" && mission.hold !== "released" && mission.signed_hash && mission.status !== "rlusd_proved");
   if (trustMission) {
     const settled = await proveTrust(clients, trustMission, anchors.WALLETS.W4.address);
     if (!settled) {

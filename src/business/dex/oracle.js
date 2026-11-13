@@ -75,11 +75,11 @@ function buildTx(pool, now) {
   };
 }
 
-function readJournal(dir) {
+function journalLines(dir) {
   if (!dir) return [];
   const file = path.join(dir, "decisions.jsonl");
   if (!fs.existsSync(file)) return [];
-  return fs.readFileSync(file, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
+  return fs.readFileSync(file, "utf8").split("\n").filter((line) => line.length > 0);
 }
 
 function countsTowardRateLimit(row) {
@@ -89,10 +89,16 @@ function countsTowardRateLimit(row) {
 }
 
 function tooSoon(dir, now) {
-  const rows = readJournal(dir);
+  const lines = journalLines(dir);
   const clock = Date.parse(now);
-  for (let i = rows.length - 1; i >= 0; i -= 1) {
-    const row = rows[i];
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    let row;
+    try {
+      row = JSON.parse(lines[i]);
+    } catch (error) {
+      if (i === lines.length - 1) return true;
+      continue;
+    }
     if (!countsTowardRateLimit(row)) continue;
     const stamp = Date.parse(row.at || "");
     if (!Number.isFinite(stamp)) continue;
@@ -101,11 +107,16 @@ function tooSoon(dir, now) {
   return false;
 }
 
+function publicRationale(error) {
+  const message = String(error && error.message ? error.message : "");
+  if (/seed|secret|tx_blob|private|signingpubkey|txnsignature/i.test(message)) return "oracle tick failed";
+  if (/s[1-9A-HJ-NP-Za-km-z]{20,}/.test(message)) return "oracle tick failed";
+  if (/[0-9A-Fa-f]{32,}/.test(message)) return "oracle tick failed";
+  return message.slice(0, 240) || "oracle tick failed";
+}
+
 function reportFailure(error, dir, stderr) {
-  let message = String(error && error.message ? error.message : "oracle tick failed");
-  message = message.replace(/sEd[1-9A-HJ-NP-Za-km-z]{10,}/g, "[redacted]");
-  message = message.replace(/\b[0-9A-F]{64}\b/gi, "[hash]");
-  if (/seed|secret|tx_blob|private/i.test(message)) message = "oracle tick failed";
+  const code = typeof error.code === "string" && /^[A-Z0-9_]{1,32}$/.test(error.code) ? error.code : "FATAL";
   const record = {
     schema: "aether.business.rlusd-oracle",
     at: new Date().toISOString(),
@@ -116,8 +127,8 @@ function reportFailure(error, dir, stderr) {
     submitted: false,
     attempted: false,
     validated: false,
-    error_code: (error && error.code) || "FATAL",
-    rationale: message.slice(0, 240),
+    error_code: code,
+    rationale: publicRationale(error),
   };
   const line = `${JSON.stringify(record)}\n`;
   const write = stderr || ((text) => process.stderr.write(text));
@@ -158,12 +169,36 @@ function freshUpdate(now) {
   return Math.abs(wall - stamped) > 300 ? wall : stamped;
 }
 
+function publicRow(record) {
+  const copy = Object.assign({}, record);
+  delete copy.tx_blob;
+  delete copy.seed;
+  delete copy.secret;
+  delete copy.private_key;
+  delete copy.TxnSignature;
+  delete copy.SigningPubKey;
+  return copy;
+}
+
 function writePublic(dir, record) {
   if (!dir) return record;
-  const text = JSON.stringify(record);
-  if (/seed|secret|tx_blob|private/i.test(text)) throw coded("oracle record is not public", "SECRET");
+  const text = JSON.stringify(publicRow(record));
+  if (/seed|secret|tx_blob|private|signingpubkey|txnsignature/i.test(text)) throw coded("oracle record is not public", "SECRET");
   fs.mkdirSync(dir, { recursive: true });
-  fs.appendFileSync(path.join(dir, "decisions.jsonl"), `${text}\n`);
+  const file = path.join(dir, "decisions.jsonl");
+  const fd = fs.openSync(file, "a");
+  try {
+    fs.writeSync(fd, `${text}\n`);
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+  const dirFd = fs.openSync(dir, "r");
+  try {
+    fs.fsyncSync(dirFd);
+  } finally {
+    fs.closeSync(dirFd);
+  }
   return record;
 }
 
@@ -257,15 +292,31 @@ async function tick(env, input, clients) {
   row.signed = true;
   row.key_loaded = true;
   row.signed_hash = signed.hash;
-  let submitted = false;
-  if (typeof clients.submit === "function") {
-    await clients.submit(signed.tx_blob);
-    submitted = true;
-  }
-  row.submitted = submitted;
-  row.attempted = submitted;
   row.validated = false;
-  if (!submitted) return row;
+  if (typeof clients.submit !== "function") return row;
+  if (!body.journal) throw coded("oracle journal is required before an OracleSet", "JOURNAL");
+  row.decision = "publish";
+  row.attempted = true;
+  row.submitted = false;
+  const reserved = locked(body.journal, () => {
+    if (tooSoon(body.journal, now)) return false;
+    writePublic(body.journal, row);
+    return true;
+  });
+  if (!reserved) {
+    return {
+      decision: "research",
+      role: "W5",
+      learning: false,
+      signed: false,
+      dry_run: false,
+      traded: false,
+      fee_only: true,
+      rationale: "The RLUSD oracle posted within the last 30 minutes.",
+    };
+  }
+  await clients.submit(signed.tx_blob);
+  row.submitted = true;
   return writePublic(body.journal, row);
 }
 

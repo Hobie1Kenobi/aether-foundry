@@ -186,10 +186,8 @@ async function proveNow(clients, hash, self, mission) {
   }
   const result = lookup && lookup.result;
   const meta = result && (result.meta || result.metaData);
-  const tx = result && (result.tx_json || result);
-  if (!result || result.validated !== true || !meta || meta.TransactionResult !== "tesSUCCESS") return null;
-  if (tx && tx.TransactionType === "TrustSet") {
-    const settled = book.trustSettled(result, mission || { signed_hash: hash }, self);
+  if (mission && mission.action === "trust") {
+    const settled = book.trustSettled(result, mission, self);
     if (!settled) return null;
     return {
       mission: settled,
@@ -206,6 +204,7 @@ async function proveNow(clients, hash, self, mission) {
       },
     };
   }
+  if (!result || result.validated !== true || !meta || meta.TransactionResult !== "tesSUCCESS") return null;
   const proof = book.counterparties(meta, self);
   return {
     mission: {
@@ -269,7 +268,17 @@ async function tick(env, dir, now, clients, position, journal) {
     rlusd_role_open_drops: exposure.roleOpen(state, ROLE).toString(),
     rlusd_team_cap_drops: cap == null ? null : cap.toString(),
   };
-  const pending = rows(state).find((mission) => mission.hold === "uncertain" && (mission.status === "rlusd_reserved" || mission.status === "rlusd_unknown") && mission.signed_hash);
+  const trustMission = rows(state).find((mission) => mission.action === "trust" && mission.hold !== "released" && mission.status !== "rlusd_proved" && mission.signed_hash);
+  if (trustMission) {
+    const proved = await proveNow(clients, trustMission.signed_hash, anchors.WALLETS.W3.address, trustMission);
+    if (proved && proved.mission && proved.mission.status === "rlusd_proved") {
+      save(dir, Object.assign({}, trustMission, proved.mission, { updated_at: now }));
+      writePublic(journal, Object.assign({}, proved.journal, { at: now }));
+      return Object.assign(base, { decision: "reconcile", fill_proof: proved.journal, status: "rlusd_proved" });
+    }
+    return Object.assign(base, { decision: "research", signed: false, status: trustMission.status, rationale: "The W3 trust line has no validated proof. The hold stays open." });
+  }
+  const pending = rows(state).find((mission) => mission.action !== "trust" && mission.hold === "uncertain" && (mission.status === "rlusd_reserved" || mission.status === "rlusd_unknown") && mission.signed_hash);
   if (pending) {
     const proved = await proveNow(clients, pending.signed_hash, anchors.WALLETS.W3.address, pending);
     if (proved) {

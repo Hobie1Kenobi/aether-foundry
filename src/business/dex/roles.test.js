@@ -99,7 +99,7 @@ function roleLedger(role, extra) {
       request: async (req) => {
         if (req.command === "tx") return state.tx || { result: { error: "txnNotFound" } };
         if (req.command === "server_info") {
-          return { result: { info: { network_id: state.networkId || 1, validated_ledger: { seq: 3000, reserve_inc_xrp: "0.2", reserve_base_xrp: "1" }, complete_ledgers: "1-3000" } } };
+          return { result: { info: { network_id: state.networkId != null ? state.networkId : 1, validated_ledger: { seq: 3000, reserve_inc_xrp: "0.2", reserve_base_xrp: "1" }, complete_ledgers: "1-3000" } } };
         }
         if (req.command === "fee") return { result: { drops: { open_ledger_fee: "12" } } };
         if (req.command === "account_info") {
@@ -272,6 +272,7 @@ describe("shared RLUSD caps", () => {
           action: "trust",
           status: "rlusd_unknown",
           outstanding_drops: "200010",
+          fee_drops: "10",
         }),
         bid: mission({
           id: "w4bid",
@@ -281,13 +282,70 @@ describe("shared RLUSD caps", () => {
           status: "rlusd_resting",
           outstanding_drops: "400010",
         }),
+        flight: mission({
+          id: "w4flight",
+          kind: "w4-rlusd",
+          role: "W4",
+          action: "cancel",
+          status: "rlusd_unknown",
+          outstanding_drops: "12",
+        }),
       },
     };
-    assert.equal(exposure.teamOpen(doubled), 400010n);
-    assert.equal(exposure.roleOpen(doubled, "W4"), 400010n);
+    assert.equal(exposure.teamOpen(doubled), 400032n);
+    assert.equal(exposure.roleOpen(doubled, "W4"), 400032n);
+    assert.equal(exposure.teamOpen(doubled) > 400010n, true);
+    assert.equal(exposure.ledgerHeadroom(doubled).used, 400032n);
+    const smallAsk = {
+      missions: {
+        trust: doubled.missions.trust,
+        ask: mission({
+          id: "w4ask",
+          kind: "w4-rlusd",
+          role: "W4",
+          action: "ask",
+          status: "rlusd_resting",
+          outstanding_drops: "100000",
+        }),
+      },
+    };
+    assert.equal(exposure.teamOpen(smallAsk), 300010n);
+    assert.equal(exposure.roleOpen(smallAsk, "W4"), 300010n);
+    assert.equal(exposure.allows(doubled, "W4", 599969n, 3500000n), false);
+    assert.equal(exposure.allows(doubled, "W1", 2000000n, 3500000n), false);
+    const withDex = {
+      missions: {
+        trust: mission({
+          id: "trust-dex",
+          kind: "w4-rlusd",
+          role: "W4",
+          action: "trust",
+          status: "rlusd_unknown",
+          outstanding_drops: "200010",
+          fee_drops: "10",
+        }),
+        bid: mission({
+          id: "bid-dex",
+          kind: "w4-rlusd",
+          role: "W4",
+          action: "bid",
+          status: "rlusd_resting",
+          outstanding_drops: "400010",
+        }),
+        dex: mission({
+          id: "dex",
+          kind: "w1-dex-offer",
+          role: "W1",
+          action: "rest",
+          status: "dex_open",
+          outstanding_drops: "2000000",
+        }),
+      },
+    };
+    assert.equal(exposure.ledgerHeadroom(withDex).used, 2400020n);
     doubled.missions.trust.status = "rlusd_proved";
-    assert.equal(exposure.teamOpen(doubled), 400010n);
-    assert.equal(exposure.ledgerHeadroom(doubled).used, 400010n);
+    assert.equal(exposure.teamOpen(doubled), 400022n);
+    assert.equal(exposure.ledgerHeadroom(doubled).used, 400022n);
     const position = { proved_xrp: 0n, reserve_inc: 200000n };
     const head = rlusd.headroom(position, { missions: { w3: mission({ id: "w3", kind: "w3-rlusd", role: "W3", outstanding_drops: "500000" }) } }, { trustline: false, own: [] });
     assert.equal(head.used, 500000n);
@@ -714,6 +772,7 @@ describe("trust line proof", () => {
       submit_attempted: true,
       updated_at: "2026-11-13T12:00:00.000Z",
     });
+    seed(ledger, { id: exposure.LEGACY_HOLD, hold: "uncertain", signed: true, outstanding_drops: "1747", updated_at: "2026-11-13T12:00:00.000Z" });
     assert.equal(exposure.blocksNewRisk(view(ledger, NOW), "W1"), true);
     const state = { trust: true, box: { signs: 0, types: [], flags: [] }, tx: trustTx(anchors.WALLETS.W4.address, rlusd.ISSUER) };
     const proved = await quoter.tick(baseEnv("W4"), ledger, NOW, roleLedger("W4", state), null, null);
@@ -726,6 +785,10 @@ describe("trust line proof", () => {
     assert.equal(saved.outstanding_drops, "0");
     assert.equal(saved.proof_result, "tesSUCCESS");
     assert.equal(exposure.blocksNewRisk(view(ledger, NOW), "W1"), false);
+    const legacy = view(ledger, NOW).missions[exposure.LEGACY_HOLD];
+    assert.equal(legacy.hold, "uncertain");
+    assert.equal(legacy.signed, true);
+    assert.equal(legacy.outstanding_drops, "1747");
     const later = await quoter.tick(baseEnv("W4"), ledger, "2026-11-14T18:00:00.000Z", roleLedger("W4", { trust: true, box: { signs: 0, types: [], flags: [] }, bids: [], asks: [] }), null, null);
     const still = view(ledger, "2026-11-14T18:00:00.000Z").missions.msnde18ca1a9d441a55;
     assert.equal(still.hold, "uncertain");
@@ -757,6 +820,45 @@ describe("trust line proof", () => {
     assert.equal(open.status, "rlusd_unknown");
     assert.equal(open.hold, "uncertain");
     assert.equal(open.outstanding_drops, "200010");
+
+    const missing = home();
+    seed(missing, {
+      id: "w4missing",
+      kind: "w4-rlusd",
+      role: "W4",
+      action: "trust",
+      account: anchors.WALLETS.W4.address,
+      hold: "uncertain",
+      status: "rlusd_unknown",
+      signed_hash: HASH,
+      sequence: 9,
+      outstanding_drops: "200010",
+      realized_loss_drops: "0",
+      updated_at: "2026-11-01T00:00:00.000Z",
+    });
+    const noHash = trustTx(anchors.WALLETS.W4.address, rlusd.ISSUER);
+    delete noHash.result.hash;
+    await quoter.tick(baseEnv("W4"), missing, NOW, roleLedger("W4", { trust: true, box: { signs: 0, types: [], flags: [] }, tx: noHash }), null, null);
+    const failedTx = trustTx(anchors.WALLETS.W4.address, rlusd.ISSUER);
+    failedTx.result.meta.TransactionResult = "tecUNFUNDED";
+    await quoter.tick(baseEnv("W4"), missing, "2026-11-20T00:00:00.000Z", roleLedger("W4", { trust: true, box: { signs: 0, types: [], flags: [] }, tx: failedTx }), null, null);
+    const wrongAccount = trustTx(anchors.WALLETS.W1.address, rlusd.ISSUER);
+    await quoter.tick(baseEnv("W4"), missing, "2026-11-21T00:00:00.000Z", roleLedger("W4", { trust: true, box: { signs: 0, types: [], flags: [] }, tx: wrongAccount }), null, null);
+    await quoter.tick(baseEnv("W4"), missing, "2026-11-22T00:00:00.000Z", roleLedger("W4", { trust: true, box: { signs: 0, types: [], flags: [] } }), null, null);
+    const held = view(missing, "2026-11-22T00:00:00.000Z").missions.w4missing;
+    assert.equal(held.status, "rlusd_unknown");
+    assert.equal(held.hold, "uncertain");
+    assert.equal(held.outstanding_drops, "200010");
+    const wrongSeq = trustTx(anchors.WALLETS.W4.address, rlusd.ISSUER);
+    wrongSeq.result.tx_json.Sequence = 8;
+    wrongSeq.result.ledger_index = null;
+    assert.equal(book.trustSettled(noHash.result, { signed_hash: HASH, sequence: 9 }, anchors.WALLETS.W4.address), null);
+    assert.equal(book.trustSettled(failedTx.result, { signed_hash: HASH, sequence: 9 }, anchors.WALLETS.W4.address), null);
+    assert.equal(book.trustSettled(wrongSeq.result, { signed_hash: HASH, sequence: 9 }, anchors.WALLETS.W4.address), null);
+    await assert.rejects(() => quoter.tick(baseEnv("W4"), missing, NOW, roleLedger("W4", { trust: true, networkId: 0, box: { signs: 0, types: [], flags: [] }, tx: trustTx(anchors.WALLETS.W4.address, rlusd.ISSUER) }), null, null), (error) => error.code === "MAINNET");
+    assert.equal(view(missing, NOW).missions.w4missing.outstanding_drops, "200010");
+    assert.equal(await quoter.tick(Object.assign(baseEnv("W4"), { FOUNDRY_DEX_ACCOUNT: anchors.WALLETS.W0.address }), missing, NOW, roleLedger("W4", { trust: true, box: { signs: 0, types: [], flags: [] } }), null, null), null);
+    assert.equal(view(missing, NOW).missions.w4missing.status, "rlusd_unknown");
   });
 
   it("books a W3 trust line as proved rather than filled", async () => {
@@ -785,6 +887,55 @@ describe("trust line proof", () => {
     assert.equal(saved.outstanding_drops, "0");
     assert.equal(exposure.roleOpen(view(ledger, NOW), "W3"), 0n);
     assert.equal(state.box.signs, 0);
+  });
+
+  it("migrates a W3 trust line already booked filled", async () => {
+    const ledger = home();
+    seed(ledger, {
+      id: "w3filled",
+      kind: "w3-rlusd",
+      role: "W3",
+      action: "trust",
+      account: anchors.WALLETS.W3.address,
+      hold: "uncertain",
+      status: "rlusd_filled",
+      signed_hash: HASH,
+      sequence: 9,
+      outstanding_drops: "200012",
+      fee_drops: "12",
+      realized_loss_drops: "0",
+      outside_fill: true,
+      proof_type: "consuming_tx",
+      submit_attempted: true,
+      updated_at: "2026-11-01T00:00:00.000Z",
+    });
+    seed(ledger, { id: exposure.LEGACY_HOLD, hold: "uncertain", signed: true, outstanding_drops: "1747", updated_at: "2026-11-01T00:00:00.000Z" });
+    const quiet = await taker.tick(baseEnv("W3"), ledger, NOW, roleLedger("W3", { trust: true, box: { signs: 0, types: [], flags: [] } }), null, null);
+    assert.equal(quiet.signed, false);
+    const waiting = view(ledger, NOW).missions.w3filled;
+    assert.equal(waiting.status, "rlusd_filled");
+    assert.equal(waiting.hold, "uncertain");
+    assert.equal(waiting.outstanding_drops, "200012");
+    const later = await taker.tick(baseEnv("W3"), ledger, "2026-11-20T00:00:00.000Z", roleLedger("W3", { trust: true, box: { signs: 0, types: [], flags: [] } }), null, null);
+    assert.notEqual(later.status, "rlusd_proved");
+    assert.equal(view(ledger, "2026-11-20T00:00:00.000Z").missions.w3filled.outstanding_drops, "200012");
+    const provedTx = trustTx(anchors.WALLETS.W3.address, rlusd.ISSUER);
+    provedTx.result.meta.AffectedNodes = [
+      { ModifiedNode: { LedgerEntryType: "AccountRoot", FinalFields: { Account: OUTSIDER } } },
+    ];
+    const row = await taker.tick(baseEnv("W3"), ledger, "2026-11-20T01:00:00.000Z", roleLedger("W3", { trust: true, box: { signs: 0, types: [], flags: [] }, tx: provedTx }), null, null);
+    assert.equal(row.status, "rlusd_proved");
+    const saved = view(ledger, "2026-11-20T01:00:00.000Z").missions.w3filled;
+    assert.equal(saved.status, "rlusd_proved");
+    assert.equal(saved.hold, "uncertain");
+    assert.equal(saved.outstanding_drops, "0");
+    assert.equal(saved.outside_fill, false);
+    assert.equal(saved.proof_type, "trust_set");
+    assert.equal(exposure.roleOpen(view(ledger, "2026-11-20T01:00:00.000Z"), "W3"), 0n);
+    const legacy = view(ledger, "2026-11-20T01:00:00.000Z").missions[exposure.LEGACY_HOLD];
+    assert.equal(legacy.hold, "uncertain");
+    assert.equal(legacy.signed, true);
+    assert.equal(legacy.outstanding_drops, "1747");
   });
 });
 
@@ -868,5 +1019,42 @@ describe("W5 oracle", () => {
     assert.equal(text.includes("sEd"), false);
     assert.equal(text.includes("tx_blob"), false);
     assert.equal(oracle.tooSoon(failed, new Date().toISOString()), false);
+    const crashed = fs.mkdtempSync(path.join(os.tmpdir(), "w5-crash-"));
+    const crashNow = new Date().toISOString();
+    let submits = 0;
+    const crashEnv = {
+      FOUNDRY_W5_ORACLE_LIVE: "yes",
+      FOUNDRY_DEX_EXECUTE: "yes",
+      FOUNDRY_DEX_NETWORK: "xrpl:1",
+      FOUNDRY_DEX_AXELAR_DROPS: "0",
+      FOUNDRY_W5_ORACLE_ACTIVATE: oracle.PHRASE,
+    };
+    const clients = roleLedger("W5", { trust: true, box: { signs: 0, types: [], flags: [] } });
+    clients.submit = async () => {
+      submits += 1;
+      const prior = fs.readFileSync(path.join(crashed, "decisions.jsonl"), "utf8");
+      assert.equal(prior.includes("\"attempted\":true"), true);
+      assert.equal(prior.includes("sEd"), false);
+      assert.equal(prior.includes("tx_blob"), false);
+      throw Object.assign(new Error("crash after submit seed sEd11111111111111111111 tx_blob FFFF"), { code: "SUBMIT" });
+    };
+    await assert.rejects(() => oracle.tick(crashEnv, { now: crashNow, journal: crashed }, clients), (error) => error.code === "SUBMIT");
+    assert.equal(submits, 1);
+    assert.equal(oracle.tooSoon(crashed, crashNow), true);
+    const blocked = await oracle.tick(crashEnv, { now: crashNow, journal: crashed }, clients);
+    assert.equal(blocked.decision, "research");
+    assert.equal(blocked.signed, false);
+    assert.equal(submits, 1);
+    const crashText = fs.readFileSync(path.join(crashed, "decisions.jsonl"), "utf8");
+    assert.equal(crashText.includes("sEd"), false);
+    assert.equal(crashText.includes("tx_blob"), false);
+    assert.equal(crashText.includes("FFFF"), false);
+    fs.appendFileSync(path.join(crashed, "decisions.jsonl"), "{\"decision\":\"publish\",\"attempted\":true");
+    assert.equal(oracle.tooSoon(crashed, crashNow), true);
+    const unjournaled = roleLedger("W5", { trust: true, box: { signs: 0, types: [], flags: [] } });
+    let bareSubmits = 0;
+    unjournaled.submit = async () => { bareSubmits += 1; };
+    await assert.rejects(() => oracle.tick(crashEnv, { now: crashNow }, unjournaled), (error) => error.code === "JOURNAL");
+    assert.equal(bareSubmits, 0);
   });
 });

@@ -65,6 +65,16 @@ function rawOpen(state, role) {
   }, 0n);
 }
 
+function duplicatedReserve(trust, quotes) {
+  const outstanding = drops(trust.outstanding_drops);
+  const fee = drops(trust.fee_drops);
+  if (fee <= 0n || outstanding <= fee) return 0n;
+  const reserve = outstanding - fee;
+  const covers = quotes.some((mission) => drops(mission.outstanding_drops) > outstanding);
+  if (!covers) return 0n;
+  return reserve;
+}
+
 function reserveOverlap(state, role) {
   let cut = 0n;
   const roles = role ? [role] : ["W3", "W4"];
@@ -74,10 +84,7 @@ function reserveOverlap(state, role) {
     const trust = mine.find((mission) => mission.action === "trust" && countsOpen(mission));
     const quotes = mine.filter((mission) => (mission.action === "bid" || mission.action === "ask") && countsOpen(mission));
     if (!trust || quotes.length === 0) continue;
-    const trustDrops = drops(trust.outstanding_drops);
-    const quoteDrops = quotes.reduce((sum, mission) => sum + drops(mission.outstanding_drops), 0n);
-    const overlap = trustDrops < quoteDrops ? trustDrops : quoteDrops;
-    cut += overlap;
+    cut += duplicatedReserve(trust, quotes);
   }
   return cut;
 }
