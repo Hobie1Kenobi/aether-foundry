@@ -855,5 +855,14 @@ describe("dex adapter", () => {
     assert.equal(attestation.caps_raised, false);
     assert.equal(attestation.legacy_hold, PERMANENT_HOLD);
     assert.equal(fs.readFileSync(path.join(extract, "ATTESTATION.json"), "utf8").includes("fixture-not-a-seed"), false);
+    assert.equal(fs.existsSync(path.join(extract, "src/business/dex/oracle.js")), true);
+    assert.equal(fs.existsSync(path.join(extract, "src/frontier/oracle-math.js")), true);
+    assert.equal(fs.existsSync(path.join(extract, "src/time/rippleEpoch.js")), true);
+    const required = spawnSync(process.execPath, ["-e", "const oracle = require('./src/business/dex/oracle.js'); if (typeof oracle.tick !== 'function' || oracle.DOCUMENT_ID !== 2) process.exit(1);"], {
+      cwd: extract,
+      env: Object.assign({}, process.env, { NODE_PATH: path.resolve(__dirname, "..", "..", "node_modules") }),
+      encoding: "utf8",
+    });
+    assert.equal(required.status, 0, required.stderr);
   });
 });

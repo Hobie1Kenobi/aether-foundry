@@ -75,24 +75,70 @@ function buildTx(pool, now) {
   };
 }
 
-function readJournal(dir) {
+function journalLines(dir) {
   if (!dir) return [];
   const file = path.join(dir, "decisions.jsonl");
   if (!fs.existsSync(file)) return [];
-  return fs.readFileSync(file, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
+  return fs.readFileSync(file, "utf8").split("\n").filter((line) => line.length > 0);
+}
+
+function countsTowardRateLimit(row) {
+  if (!row || row.role !== "W5") return false;
+  if (row.submitted !== true && row.attempted !== true && row.validated !== true) return false;
+  return row.decision === "publish" || row.decision === "submitted";
 }
 
 function tooSoon(dir, now) {
-  const rows = readJournal(dir);
+  const lines = journalLines(dir);
   const clock = Date.parse(now);
-  for (let i = rows.length - 1; i >= 0; i -= 1) {
-    const row = rows[i];
-    if (!row || row.role !== "W5" || row.decision === "research") continue;
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    let row;
+    try {
+      row = JSON.parse(lines[i]);
+    } catch (error) {
+      if (i === lines.length - 1) return true;
+      continue;
+    }
+    if (!countsTowardRateLimit(row)) continue;
     const stamp = Date.parse(row.at || "");
     if (!Number.isFinite(stamp)) continue;
     return clock - stamp < INTERVAL_MS;
   }
   return false;
+}
+
+function publicRationale(error) {
+  const message = String(error && error.message ? error.message : "");
+  if (/seed|secret|tx_blob|private|signingpubkey|txnsignature/i.test(message)) return "oracle tick failed";
+  if (/s[1-9A-HJ-NP-Za-km-z]{20,}/.test(message)) return "oracle tick failed";
+  if (/[0-9A-Fa-f]{32,}/.test(message)) return "oracle tick failed";
+  return message.slice(0, 240) || "oracle tick failed";
+}
+
+function reportFailure(error, dir, stderr) {
+  const code = typeof error.code === "string" && /^[A-Z0-9_]{1,32}$/.test(error.code) ? error.code : "FATAL";
+  const record = {
+    schema: "aether.business.rlusd-oracle",
+    at: new Date().toISOString(),
+    decision: "error",
+    role: "W5",
+    learning: false,
+    signed: false,
+    submitted: false,
+    attempted: false,
+    validated: false,
+    error_code: code,
+    rationale: publicRationale(error),
+  };
+  const line = `${JSON.stringify(record)}\n`;
+  const write = stderr || ((text) => process.stderr.write(text));
+  write(line);
+  try {
+    writePublic(dir, record);
+  } catch (err) {
+    write(`${JSON.stringify({ decision: "error", role: "W5", learning: false, rationale: "oracle error could not be journaled" })}\n`);
+  }
+  return record;
 }
 
 function locked(dir, fn) {
@@ -123,12 +169,36 @@ function freshUpdate(now) {
   return Math.abs(wall - stamped) > 300 ? wall : stamped;
 }
 
+function publicRow(record) {
+  const copy = Object.assign({}, record);
+  delete copy.tx_blob;
+  delete copy.seed;
+  delete copy.secret;
+  delete copy.private_key;
+  delete copy.TxnSignature;
+  delete copy.SigningPubKey;
+  return copy;
+}
+
 function writePublic(dir, record) {
   if (!dir) return record;
-  const text = JSON.stringify(record);
-  if (/seed|secret|tx_blob|private/i.test(text)) throw coded("oracle record is not public", "SECRET");
+  const text = JSON.stringify(publicRow(record));
+  if (/seed|secret|tx_blob|private|signingpubkey|txnsignature/i.test(text)) throw coded("oracle record is not public", "SECRET");
   fs.mkdirSync(dir, { recursive: true });
-  fs.appendFileSync(path.join(dir, "decisions.jsonl"), `${text}\n`);
+  const file = path.join(dir, "decisions.jsonl");
+  const fd = fs.openSync(file, "a");
+  try {
+    fs.writeSync(fd, `${text}\n`);
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+  const dirFd = fs.openSync(dir, "r");
+  try {
+    fs.fsyncSync(dirFd);
+  } finally {
+    fs.closeSync(dirFd);
+  }
   return record;
 }
 
@@ -191,7 +261,7 @@ async function tick(env, input, clients) {
   };
   const admitted = locked(body.journal, () => {
     if (tooSoon(body.journal, now)) return false;
-    writePublic(body.journal, row);
+    if (dry) writePublic(body.journal, row);
     return true;
   });
   if (!admitted) {
@@ -222,10 +292,31 @@ async function tick(env, input, clients) {
   row.signed = true;
   row.key_loaded = true;
   row.signed_hash = signed.hash;
-  if (typeof clients.submit === "function") {
-    await clients.submit(signed.tx_blob);
-    row.submitted = true;
+  row.validated = false;
+  if (typeof clients.submit !== "function") return row;
+  if (!body.journal) throw coded("oracle journal is required before an OracleSet", "JOURNAL");
+  row.decision = "publish";
+  row.attempted = true;
+  row.submitted = false;
+  const reserved = locked(body.journal, () => {
+    if (tooSoon(body.journal, now)) return false;
+    writePublic(body.journal, row);
+    return true;
+  });
+  if (!reserved) {
+    return {
+      decision: "research",
+      role: "W5",
+      learning: false,
+      signed: false,
+      dry_run: false,
+      traded: false,
+      fee_only: true,
+      rationale: "The RLUSD oracle posted within the last 30 minutes.",
+    };
   }
+  await clients.submit(signed.tx_blob);
+  row.submitted = true;
   return writePublic(body.journal, row);
 }
 
@@ -249,10 +340,12 @@ function main(argv, deps) {
       await opened.close();
     }
   };
+  const journal = env.FOUNDRY_W5_ORACLE_JOURNAL || (options.input && options.input.journal);
+  const report = (error) => reportFailure(error, journal, options.stderr);
   if (!supervise) return once().then(() => 0);
-  return once().then(() => new Promise((resolve) => {
+  return once().catch(report).then(() => new Promise((resolve) => {
     const timer = setInterval(() => {
-      once().catch(() => {});
+      once().catch(report);
     }, INTERVAL_MS);
     if (options.stop) options.stop(() => {
       clearInterval(timer);
@@ -274,4 +367,6 @@ module.exports = {
   xrpPerRlusd,
   tick,
   main,
+  reportFailure,
+  tooSoon,
 };

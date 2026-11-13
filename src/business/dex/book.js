@@ -220,6 +220,38 @@ function counterparties(meta, self) {
   };
 }
 
+function sameSequence(mission, tx) {
+  if (!mission || mission.sequence == null || mission.sequence === "") return true;
+  const seq = typeof mission.sequence === "number" ? mission.sequence : (/^[0-9]+$/.test(String(mission.sequence)) ? Number(mission.sequence) : NaN);
+  return Number.isInteger(seq) && tx.Sequence === seq;
+}
+
+function trustSettled(result, mission, account) {
+  const meta = result && (result.meta || result.metaData);
+  const tx = result && (result.tx_json || result);
+  if (!result || result.error || result.validated !== true || !meta || meta.TransactionResult !== "tesSUCCESS") return null;
+  if (!tx || tx.TransactionType !== "TrustSet" || tx.Account !== account) return null;
+  const limit = tx.LimitAmount;
+  if (!limit || typeof limit !== "object" || limit.currency !== rlusd.CURRENCY || limit.issuer !== rlusd.ISSUER) return null;
+  if (String(limit.issuer).includes("rKmPxq")) return null;
+  const hash = String(result.hash || "").toUpperCase();
+  const wanted = String(mission && mission.signed_hash || "").toUpperCase();
+  if (!/^[0-9A-F]{64}$/.test(hash) || hash !== wanted) return null;
+  if (!sameSequence(mission, tx)) return null;
+  if (!Number.isInteger(result.ledger_index) || result.ledger_index <= 0) return null;
+  return {
+    status: "rlusd_proved",
+    hold: "uncertain",
+    outstanding_drops: "0",
+    proof_hash: hash,
+    proof_result: "tesSUCCESS",
+    proof_type: "trust_set",
+    validated_ledger: result.ledger_index,
+    outside_fill: false,
+    settled: true,
+  };
+}
+
 module.exports = {
   REGULAR,
   outside,
@@ -227,4 +259,5 @@ module.exports = {
   exactOf,
   rlusdAcquired,
   counterparties,
+  trustSettled,
 };

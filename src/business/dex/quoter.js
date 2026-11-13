@@ -223,6 +223,17 @@ function expectedFor(tx, shot) {
   };
 }
 
+async function proveTrust(clients, mission, account) {
+  if (!mission || !mission.signed_hash || !clients || !clients.ledger) return null;
+  let lookup;
+  try {
+    lookup = await clients.ledger.request({ command: "tx", transaction: mission.signed_hash, binary: false });
+  } catch (error) {
+    return null;
+  }
+  return book.trustSettled(lookup && lookup.result, mission, account);
+}
+
 async function tick(env, dir, now, clients, position, journal) {
   const config = bounds.verifiedEnv(env);
   if (!config || config.role !== ROLE) return null;
@@ -239,6 +250,15 @@ async function tick(env, dir, now, clients, position, journal) {
     rlusd_role_open_drops: exposure.roleOpen(state, ROLE).toString(),
     rlusd_team_cap_drops: cap == null ? null : cap.toString(),
   };
+  const trustMission = rowsOf(state).find((mission) => mission.action === "trust" && mission.hold !== "released" && mission.signed_hash && mission.status !== "rlusd_proved");
+  if (trustMission) {
+    const settled = await proveTrust(clients, trustMission, anchors.WALLETS.W4.address);
+    if (!settled) {
+      return Object.assign(base, { decision: "research", signed: false, status: trustMission.status, rationale: "The W4 trust line has no validated proof. The hold stays open." });
+    }
+    save(dir, Object.assign({}, trustMission, settled, { updated_at: now }));
+    return Object.assign(base, { decision: "reconcile", signed: false, status: "rlusd_proved", proof_hash: settled.proof_hash });
+  }
   let resting = rowsOf(state).find((mission) => mission.hold !== "released" && (mission.action === "bid" || mission.action === "ask") && (mission.status === "rlusd_resting" || mission.status === "rlusd_unknown" || mission.status === "rlusd_reserved"));
   if (resting && (resting.status === "rlusd_unknown" || resting.status === "rlusd_reserved")) {
     const listed = (observed.own || []).some((row) => Number(row.seq != null ? row.seq : row.Sequence) === resting.sequence);

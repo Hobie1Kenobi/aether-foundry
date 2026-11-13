@@ -58,15 +58,47 @@ function countsOpen(mission) {
   return true;
 }
 
+function rawOpen(state, role) {
+  return rows(state).reduce((sum, mission) => {
+    if (role && ownerOf(mission) !== role) return sum;
+    return sum + (countsOpen(mission) ? drops(mission.outstanding_drops) : 0n);
+  }, 0n);
+}
+
+function duplicatedReserve(trust, quotes) {
+  const outstanding = drops(trust.outstanding_drops);
+  const fee = drops(trust.fee_drops);
+  if (fee <= 0n || outstanding <= fee) return 0n;
+  const reserve = outstanding - fee;
+  const covers = quotes.some((mission) => drops(mission.outstanding_drops) > outstanding);
+  if (!covers) return 0n;
+  return reserve;
+}
+
+function reserveOverlap(state, role) {
+  let cut = 0n;
+  const roles = role ? [role] : ["W3", "W4"];
+  for (const id of roles) {
+    if (id !== "W3" && id !== "W4") continue;
+    const mine = rows(state).filter((mission) => ownerOf(mission) === id);
+    const trust = mine.find((mission) => mission.action === "trust" && countsOpen(mission));
+    const quotes = mine.filter((mission) => (mission.action === "bid" || mission.action === "ask") && countsOpen(mission));
+    if (!trust || quotes.length === 0) continue;
+    cut += duplicatedReserve(trust, quotes);
+  }
+  return cut;
+}
+
 function teamOpen(state) {
-  return rows(state).reduce((sum, mission) => sum + (countsOpen(mission) ? drops(mission.outstanding_drops) : 0n), 0n);
+  const raw = rawOpen(state);
+  const cut = reserveOverlap(state);
+  return raw > cut ? raw - cut : 0n;
 }
 
 function roleOpen(state, role) {
-  return rows(state).reduce((sum, mission) => {
-    if (ownerOf(mission) !== role) return sum;
-    return sum + (countsOpen(mission) ? drops(mission.outstanding_drops) : 0n);
-  }, 0n);
+  const raw = rawOpen(state, role);
+  const cut = reserveOverlap(state, role);
+  return raw > cut ? raw - cut : 0n;
 }
 
 function blocksNewRisk(state, role) {
@@ -129,7 +161,9 @@ function ledgerHeadroom(state) {
   const mark = state && state.missions && state.missions["bankroll-lp-high-water"];
   if (mark && typeof mark.proved_xrp_drops === "string" && /^[0-9]+$/.test(mark.proved_xrp_drops)) {
     const proved = BigInt(mark.proved_xrp_drops);
-    let rlusd = sumKind(state, (mission) => ALL.has(mission.kind), true);
+    let rlusd = sumKind(state, (mission) => ALL.has(mission.kind) && (countsOpen(mission) || mission.hold === "released"), true);
+    const trustCut = reserveOverlap(state);
+    if (trustCut > 0n && rlusd > trustCut) rlusd -= trustCut;
     const overlap = drops(mark.rlusd_overlap_drops);
     if (overlap > 0n && rlusd > overlap) rlusd -= overlap;
     const used = proved + rlusd;
@@ -140,10 +174,13 @@ function ledgerHeadroom(state) {
   if (mark && typeof mark.lp_high_water_drops === "string" && /^[0-9]+$/.test(mark.lp_high_water_drops)) {
     base = BigInt(mark.lp_high_water_drops);
   }
-  const extra = sumKind(state, (mission) => {
+  const gross = sumKind(state, (mission) => {
     const kind = mission.kind;
-    return kind === "w1-dex-offer" || kind === "w1-amm-lp" || ALL.has(kind);
+    if (ALL.has(kind)) return countsOpen(mission) || mission.hold === "released";
+    return kind === "w1-dex-offer" || kind === "w1-amm-lp";
   }, false);
+  const trustCut = reserveOverlap(state);
+  const extra = gross > trustCut ? gross - trustCut : 0n;
   const used = base + extra;
   const headroom = used >= bankroll.BANKROLL_DROPS ? 0n : bankroll.BANKROLL_DROPS - used;
   return { used, headroom, proved_xrp: base };
