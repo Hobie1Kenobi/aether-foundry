@@ -3,7 +3,7 @@
   "kind": "aether.director-state",
   "source": "director:snapshot",
   "timezone": "America/Chicago",
-  "updated_at": "2026-11-18T17:37:44-06:00",
+  "updated_at": "2026-11-18T21:45:30-06:00",
   "last_session_id": "2026-09-28-day7-band-bc",
   "networks": {
     "xrpl_testnet": {
@@ -12,7 +12,7 @@
       "http": "https://testnet.xrpl-labs.com",
       "ws": "wss://testnet.xrpl-labs.com",
       "explorer": "https://testnet.xrpl.org",
-      "validated_ledger_index": 22433825,
+      "validated_ledger_index": 22438149,
       "reserve_base_drops": "1000000",
       "reserve_inc_drops": "200000",
       "server_build": "3.4.1"
@@ -23,7 +23,7 @@
       "http": "https://xahau-test.net",
       "ws": "wss://xahau-test.net",
       "explorer": "https://xahau-testnet.xrpl.org",
-      "validated_ledger_index": 14181658,
+      "validated_ledger_index": 14186596,
       "reserve_base_drops": "1000000",
       "reserve_inc_drops": "200000",
       "server_build": "2026.10.16-tmp-dev"
@@ -64,18 +64,18 @@
       "role": "CHANNELS",
       "network": "xrpl_testnet",
       "address": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
-      "balance_drops": "105722872",
-      "spendable_drops": "104522872",
+      "balance_drops": "105722850",
+      "spendable_drops": "104522850",
       "owner_count": 1,
-      "sequence": 21093777,
+      "sequence": 21093778,
       "regular_key": "rJRxr1E1Dzz5TXJsCHhwQAm4qS68Y73dQj"
     },
     "W4": {
       "role": "ESCROW",
       "network": "xrpl_testnet",
       "address": "ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN",
-      "balance_drops": "108009867",
-      "spendable_drops": "106209867",
+      "balance_drops": "108009987",
+      "spendable_drops": "106209987",
       "owner_count": 4,
       "sequence": 21093763,
       "regular_key": "rfXBxqPjprj1J5Ekq5v82D3BDqRm7ms7p2"
@@ -94,10 +94,10 @@
       "role": "GRANTS",
       "network": "xrpl_testnet",
       "address": "rfnqxYQWKsVGFuWLjky41puXHJkT2v8yTf",
-      "balance_drops": "88009381",
-      "spendable_drops": "87009381",
+      "balance_drops": "88009259",
+      "spendable_drops": "87009259",
       "owner_count": 0,
-      "sequence": 21093747,
+      "sequence": 21093748,
       "regular_key": "rGjdFjMz577GF4uvb4N9ayCqP5Q74kwVq5"
     },
     "W7": {
@@ -215,7 +215,7 @@
       "amount_drops": "10000000",
       "offer_count": 1,
       "pack_offer_id": "08F7769F074C8C80C4DD6A691D2CEE3A3996458D845DA3C15F62BBAF699421B0",
-      "ledger_index": 22433826
+      "ledger_index": 22438150
     },
     "amm": {
       "account": "r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w",
@@ -223,7 +223,7 @@
       "amount_xrp_drops": "51783389",
       "lp_token_currency": "0330E60FAE706EAD2C7D511D790B07A6F3B89931",
       "trading_fee": 500,
-      "ledger_index": 22433826
+      "ledger_index": 22438150
     },
     "w0_signer_list": {
       "account": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
@@ -250,7 +250,7 @@
       "matches_h1": true,
       "master_disabled": false,
       "previous_txn_id": "EDD27C458D314602E6059D8351D2DDA322A5E4BD1FD55602B3D2E667EA970299",
-      "ledger_index": 22433826
+      "ledger_index": 22438150
     },
     "regular_keys": {
       "matches_pack": true,
@@ -318,7 +318,7 @@
       ]
     },
     "aeth_outstanding": "10100",
-    "testnet_nav_spendable_drops": "660595785",
+    "testnet_nav_spendable_drops": "660595761",
     "w7_hook": {
       "account": "r9YjdAzgL4hHvqDUeb4sTf4yF2MDQ5kq7h",
       "hook_hash": "B9B6A6D5DDCF4212CC046217500AB3D90D54C7E63684F98E7991F4EBA9BC6C09",
@@ -326,7 +326,7 @@
       "previous_txn_id": "7DBFE10ECFFDB2ACE8D83CA570ECF64F64712DBDE962B9C6756F83E655273447",
       "pack_hook_hash": "B9B6A6D5DDCF4212CC046217500AB3D90D54C7E63684F98E7991F4EBA9BC6C09",
       "matches_pack": true,
-      "ledger_index": 14181658
+      "ledger_index": 14186596
     }
   },
   "probes": {
