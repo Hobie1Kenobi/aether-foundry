@@ -1,0 +1,376 @@
+{
+  "generated_at": "2026-11-23T15:40:47.095Z",
+  "from": "lab/reset-2026-11-25/pre-reset-snapshot.json",
+  "unsigned": true,
+  "steps": [
+    {
+      "id": "fund-W0",
+      "phase": 1,
+      "kind": "faucet",
+      "target": "W0",
+      "address": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+      "note": "faucet same address; ~100 XRP/request"
+    },
+    {
+      "id": "fund-W1",
+      "phase": 1,
+      "kind": "faucet",
+      "target": "W1",
+      "address": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+      "note": "faucet same address; ~100 XRP/request"
+    },
+    {
+      "id": "fund-W2",
+      "phase": 1,
+      "kind": "faucet",
+      "target": "W2",
+      "address": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+      "note": "faucet same address; ~100 XRP/request"
+    },
+    {
+      "id": "fund-W3",
+      "phase": 1,
+      "kind": "faucet",
+      "target": "W3",
+      "address": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+      "note": "faucet same address; ~100 XRP/request"
+    },
+    {
+      "id": "fund-W4",
+      "phase": 1,
+      "kind": "faucet",
+      "target": "W4",
+      "address": "ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN",
+      "note": "faucet same address; ~100 XRP/request"
+    },
+    {
+      "id": "fund-W5",
+      "phase": 1,
+      "kind": "faucet",
+      "target": "W5",
+      "address": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+      "note": "faucet same address; ~100 XRP/request"
+    },
+    {
+      "id": "fund-W6",
+      "phase": 1,
+      "kind": "faucet",
+      "target": "W6",
+      "address": "rfnqxYQWKsVGFuWLjky41puXHJkT2v8yTf",
+      "note": "faucet same address; ~100 XRP/request"
+    },
+    {
+      "id": "regkey-W1",
+      "phase": 2,
+      "kind": "tx",
+      "signer": "W1_SEED",
+      "tx": {
+        "TransactionType": "SetRegularKey",
+        "Account": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+        "RegularKey": "rDyiGKuMgL2F8S7TjB6m6Wg1pLg5KDPJYY"
+      }
+    },
+    {
+      "id": "regkey-W2",
+      "phase": 2,
+      "kind": "tx",
+      "signer": "W2_SEED",
+      "tx": {
+        "TransactionType": "SetRegularKey",
+        "Account": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+        "RegularKey": "rNNzhkcScozB7Nzv3cWCZAEnu6MMC64rmy"
+      }
+    },
+    {
+      "id": "regkey-W3",
+      "phase": 2,
+      "kind": "tx",
+      "signer": "W3_SEED",
+      "tx": {
+        "TransactionType": "SetRegularKey",
+        "Account": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+        "RegularKey": "rJRxr1E1Dzz5TXJsCHhwQAm4qS68Y73dQj"
+      }
+    },
+    {
+      "id": "regkey-W4",
+      "phase": 2,
+      "kind": "tx",
+      "signer": "W4_SEED",
+      "tx": {
+        "TransactionType": "SetRegularKey",
+        "Account": "ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN",
+        "RegularKey": "rfXBxqPjprj1J5Ekq5v82D3BDqRm7ms7p2"
+      }
+    },
+    {
+      "id": "regkey-W5",
+      "phase": 2,
+      "kind": "tx",
+      "signer": "W5_SEED",
+      "tx": {
+        "TransactionType": "SetRegularKey",
+        "Account": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+        "RegularKey": "rav5cYVarjSaXeeqCbsghMmmVGcJWB5y7Q"
+      }
+    },
+    {
+      "id": "regkey-W6",
+      "phase": 2,
+      "kind": "tx",
+      "signer": "W6_SEED",
+      "tx": {
+        "TransactionType": "SetRegularKey",
+        "Account": "rfnqxYQWKsVGFuWLjky41puXHJkT2v8yTf",
+        "RegularKey": "rGjdFjMz577GF4uvb4N9ayCqP5Q74kwVq5"
+      }
+    },
+    {
+      "id": "w0-defaultripple",
+      "phase": 3,
+      "kind": "tx",
+      "signer": "W0_SEED",
+      "tx": {
+        "TransactionType": "AccountSet",
+        "Account": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+        "SetFlag": 8
+      }
+    },
+    {
+      "id": "w0-domain",
+      "phase": 3,
+      "kind": "tx",
+      "signer": "W0_SEED",
+      "tx": {
+        "TransactionType": "AccountSet",
+        "Account": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+        "Domain": "6165746865722D666F756E6472792D6465736B2E76657263656C2E617070"
+      }
+    },
+    {
+      "id": "w0-trustline-locking",
+      "phase": 3,
+      "kind": "tx",
+      "signer": "W0_SEED",
+      "optional": true,
+      "note": "asfAllowTrustLineLocking (TokenEscrow); skip if amendment off after reset",
+      "tx": {
+        "TransactionType": "AccountSet",
+        "Account": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+        "SetFlag": 17
+      }
+    },
+    {
+      "id": "w0-did",
+      "phase": 3,
+      "kind": "tx",
+      "signer": "W0_SEED",
+      "tx": {
+        "TransactionType": "DIDSet",
+        "Account": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+        "URI": "68747470733A2F2F7261772E67697468756275736572636F6E74656E742E636F6D2F486F626965314B656E6F62692F6165746865722D666F756E6472792F6D61696E2F636F72702F636861727465722E6D64"
+      }
+    },
+    {
+      "id": "w0-signerlist",
+      "phase": 3,
+      "kind": "tx",
+      "signer": "W0_SEED",
+      "tx": {
+        "TransactionType": "SignerListSet",
+        "Account": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+        "SignerQuorum": 3,
+        "SignerEntries": [
+          {
+            "SignerEntry": {
+              "Account": "rpEpjesFRPcpWWVKoheDT59YKtoA6Xureg",
+              "SignerWeight": 2
+            }
+          },
+          {
+            "SignerEntry": {
+              "Account": "rGfkxsMvv833ioy2QjmTXhYF49J94N9WRu",
+              "SignerWeight": 1
+            }
+          },
+          {
+            "SignerEntry": {
+              "Account": "rHG25YbFNqFL9HzVqa9JQhXFY9Zignxznh",
+              "SignerWeight": 2
+            }
+          },
+          {
+            "SignerEntry": {
+              "Account": "r4Qc6iUKrLZQwM9sPdPWCCHAK2bcMsrxVr",
+              "SignerWeight": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "w1-trust-aeth",
+      "phase": 4,
+      "kind": "tx",
+      "signer": "W1_REGULAR_SEED",
+      "tx": {
+        "TransactionType": "TrustSet",
+        "Account": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+        "LimitAmount": {
+          "currency": "4145544800000000000000000000000000000000",
+          "issuer": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+          "value": "1000000"
+        }
+      }
+    },
+    {
+      "id": "w4-trust-aeth",
+      "phase": 4,
+      "kind": "tx",
+      "signer": "W4_REGULAR_SEED",
+      "tx": {
+        "TransactionType": "TrustSet",
+        "Account": "ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN",
+        "LimitAmount": {
+          "currency": "4145544800000000000000000000000000000000",
+          "issuer": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+          "value": "1000"
+        }
+      }
+    },
+    {
+      "id": "w0-issue-w1",
+      "phase": 4,
+      "kind": "tx",
+      "signer": "W0_SEED",
+      "note": "4976.457… held + 4923.543… for the pool = 9900",
+      "tx": {
+        "TransactionType": "Payment",
+        "Account": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+        "Destination": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+        "Amount": {
+          "currency": "4145544800000000000000000000000000000000",
+          "issuer": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+          "value": "9900"
+        }
+      }
+    },
+    {
+      "id": "w0-issue-w4",
+      "phase": 4,
+      "kind": "tx",
+      "signer": "W0_SEED",
+      "tx": {
+        "TransactionType": "Payment",
+        "Account": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+        "Destination": "ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN",
+        "Amount": {
+          "currency": "4145544800000000000000000000000000000000",
+          "issuer": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+          "value": "50"
+        }
+      }
+    },
+    {
+      "id": "w1-ammcreate",
+      "phase": 5,
+      "kind": "tx",
+      "signer": "W1_REGULAR_SEED",
+      "note": "recreates pre-reset depth/price; new AMM account; pre r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w",
+      "tx": {
+        "TransactionType": "AMMCreate",
+        "Account": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+        "Amount": "51783389",
+        "Amount2": {
+          "currency": "4145544800000000000000000000000000000000",
+          "issuer": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+          "value": "4923.542951524584"
+        },
+        "TradingFee": 500
+      }
+    },
+    {
+      "id": "w1-trust-rlusd",
+      "phase": 6,
+      "kind": "tx",
+      "conditional": "rlusd_issuer_exists",
+      "signer": "W1_REGULAR_SEED",
+      "tx": {
+        "TransactionType": "TrustSet",
+        "Account": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+        "LimitAmount": {
+          "currency": "524C555344000000000000000000000000000000",
+          "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
+          "value": "10"
+        },
+        "Flags": 131072
+      }
+    },
+    {
+      "id": "w3-trust-rlusd",
+      "phase": 6,
+      "kind": "tx",
+      "conditional": "rlusd_issuer_exists",
+      "signer": "W3_REGULAR_SEED",
+      "tx": {
+        "TransactionType": "TrustSet",
+        "Account": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+        "LimitAmount": {
+          "currency": "524C555344000000000000000000000000000000",
+          "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
+          "value": "10"
+        },
+        "Flags": 131072
+      }
+    },
+    {
+      "id": "w4-trust-rlusd",
+      "phase": 6,
+      "kind": "tx",
+      "conditional": "rlusd_issuer_exists",
+      "signer": "W4_REGULAR_SEED",
+      "tx": {
+        "TransactionType": "TrustSet",
+        "Account": "ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN",
+        "LimitAmount": {
+          "currency": "524C555344000000000000000000000000000000",
+          "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
+          "value": "10"
+        },
+        "Flags": 131072
+      }
+    },
+    {
+      "id": "w2-walk-in-remint",
+      "phase": 7,
+      "kind": "command",
+      "command": "npm run remint:walk-in",
+      "note": "W2 mints taxon 20260927 flags 8 fee 1000 URI INBOUND.md and lists a 10 XRP sell offer"
+    },
+    {
+      "id": "w5-oracle-aeth",
+      "phase": 7,
+      "kind": "command",
+      "command": "npm run frontier:oracle-set -- --live",
+      "note": "W5 regular key; doc 1 AETH/XRP from new pool price"
+    },
+    {
+      "id": "services",
+      "phase": 8,
+      "kind": "command",
+      "command": "bash /workspace/scratch/restart-foundry-services.sh"
+    },
+    {
+      "id": "post-snapshot",
+      "phase": 8,
+      "kind": "command",
+      "command": "node src/reset/snapshot.js --out lab/reset-2026-11-25/post-rebuild-snapshot.json"
+    },
+    {
+      "id": "anchors",
+      "phase": 9,
+      "kind": "command",
+      "command": "node src/reset/anchors.js --new-amm <r...>  (dry-run first, then --apply)"
+    }
+  ]
+}

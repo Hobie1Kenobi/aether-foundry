@@ -1,0 +1,1934 @@
+{
+  "kind": "aether-foundry-testnet-snapshot",
+  "taken_at": "2026-11-23T15:37:37.616Z",
+  "rpc": "wss://testnet.xrpl-labs.com",
+  "note": "Read-only. Public ledger data only. No seeds.",
+  "server": {
+    "network_id": 1,
+    "build_version": "3.4.1",
+    "validated_ledger": {
+      "age": 2,
+      "base_fee_xrp": 0.00001,
+      "hash": "1318D5F850BB5EC8FD50FD4F9C2EDFD8DDE4A1482795F1B63E627EA2ECEDEDD7",
+      "reserve_base_xrp": 1,
+      "reserve_inc_xrp": 0.2,
+      "seq": 22553108
+    },
+    "complete_ledgers": "22551457-22553108"
+  },
+  "amendments": {
+    "RequireFullyCanonicalSig": {
+      "hash": "00C1FC4A53E60AB02C864641002B3172F38677E29C26C5406685179B37E1EDAC",
+      "enabled": true,
+      "supported": true
+    },
+    "fixNFTokenReserve": {
+      "hash": "03BDC0099C4E14163ADA272C1B6F6FABB448CC3E51F522F978041E4B57D9158C",
+      "enabled": true,
+      "supported": true
+    },
+    "Escrow": {
+      "hash": "07D43DCE529B15A10827E5E04943B496762F9A88E3268269D69C44BE49E21104",
+      "enabled": false,
+      "supported": true
+    },
+    "PayChan": {
+      "hash": "08DE7D96082187F6E6578530258C77FAABABE4C20474BDB82F04B021F1A68647",
+      "enabled": false,
+      "supported": true
+    },
+    "PermissionDelegationV1_1": {
+      "hash": "0F48FF561C709540328F31F1C97FD512ACC8B4E42138A161CB0E21ECA292540B",
+      "enabled": true,
+      "supported": true
+    },
+    "fixAMMOverflowOffer": {
+      "hash": "12523DF04B553A0B1AD74F42DDB741DE8DC06A03FC089A0EF197E2A87F1D8107",
+      "enabled": true,
+      "supported": true
+    },
+    "TokenEscrow": {
+      "hash": "138B968F25822EFBF54C00F97031221C47B1EAB8321D93C7C2AEAF85F04EC5DF",
+      "enabled": true,
+      "supported": true
+    },
+    "fixBatchV1_2": {
+      "hash": "14A2B45E48A4A124D1BBA657AC7B0DC3D5EA8C256C89E8F0D8142D32960A7944",
+      "enabled": true,
+      "supported": true
+    },
+    "CryptoConditions": {
+      "hash": "1562511F573A19AE9BD103B5D6B9E01B3B46805AEC5D3C4805C902B514399146",
+      "enabled": false,
+      "supported": true
+    },
+    "Checks": {
+      "hash": "157D2D480E006395B76F948E3E07A45A05FE10230D88A7993C71F97AE4B1F2D1",
+      "enabled": true,
+      "supported": true
+    },
+    "fixDisallowIncomingV1": {
+      "hash": "15D61F0C6DB6A2F86BCF96F1E2444FEC54E705923339EC175BD3E517C8B3FF91",
+      "enabled": true,
+      "supported": true
+    },
+    "Credentials": {
+      "hash": "1CB67D082CF7D9102412D34258CEDB400E659352D3B207348889297A6D90F5EF",
+      "enabled": true,
+      "supported": true
+    },
+    "fix1528": {
+      "hash": "1D3463A5891F9E589C5AE839FFAC4A917CE96197098A1EF22304E1BC5B98A454",
+      "enabled": false,
+      "supported": true
+    },
+    "fixAMMv1_2": {
+      "hash": "1E7ED950F2F13C4F8E2A54103B74D57D5D298FFDBD005936164EE9E6484C438C",
+      "enabled": true,
+      "supported": true
+    },
+    "HardenedValidations": {
+      "hash": "1F4AFA8FA1BC8827AD4C0F682C03A8B671DCDF6B5C4DE36D44243A684103EF88",
+      "enabled": true,
+      "supported": true
+    },
+    "ConfidentialTransfer": {
+      "hash": "2110E4A19966E2EF517C0A8C56A5F35099D7665B0BB89D7B126B30D50B86AAD5",
+      "enabled": false,
+      "supported": true
+    },
+    "fixCleanup3_2_0": {
+      "hash": "21B8D2F76F68E11E9C077A43BBBC394136E9987E99DDB73966DD68419467E431",
+      "enabled": true,
+      "supported": true
+    },
+    "fix1781": {
+      "hash": "25BA44241B3BD880770BFA4DA21C7180576831855368CBEC6A3154FDE4A7676E",
+      "enabled": true,
+      "supported": true
+    },
+    "fixReducedOffersV1": {
+      "hash": "27CD95EE8E1E5A537FF2F89B6CEB7C622E78E9374EBD7DCBEDFAE21CD6F16E0A",
+      "enabled": true,
+      "supported": true
+    },
+    "fixXChainRewardRounding": {
+      "hash": "2BF037D90E1B676B17592A8AF55E88DB465398B4B597AE46EECEE1399AB05699",
+      "enabled": false,
+      "supported": true
+    },
+    "fixTakerDryOfferRemoval": {
+      "hash": "2CD5286D8D687E98B41102BDD797198E81EA41DF7BD104E6561FEB104EFF2561",
+      "enabled": true,
+      "supported": true
+    },
+    "fixUniversalNumber": {
+      "hash": "2E2FB9CF8A44EB80F4694D38AADAE9B8B7ADAFD2F092E10068E61C98C4F092B0",
+      "enabled": true,
+      "supported": true
+    },
+    "FlowCross": {
+      "hash": "3012E8230864E95A58C60FD61430D7E1B4D3353195F2981DC12B0C7C0950FFAC",
+      "enabled": true,
+      "supported": true
+    },
+    "fixCleanup3_1_3": {
+      "hash": "303ACB16CF8DBD3B5C34F131A9D19A7DE01AE05F480A8A682B869D1B4AAC8CFC",
+      "enabled": true,
+      "supported": true
+    },
+    "DeletableAccounts": {
+      "hash": "30CD365592B8EE40489BA01AE2F7555CAC9C983145871DC82A42A31CF5BAE7D9",
+      "enabled": true,
+      "supported": true
+    },
+    "fixReducedOffersV2": {
+      "hash": "31E0DA76FB8FB527CADCDF0E61CB9C94120966328EFA9DCA202135BAF319C0BA",
+      "enabled": true,
+      "supported": true
+    },
+    "fixCleanup3_3_0": {
+      "hash": "3298D47E1F3A8A24FECAA30F699B8FE1DD234E072834BA099AD8180FFCE0FEC4",
+      "enabled": true,
+      "supported": true
+    },
+    "NonFungibleTokensV1_1": {
+      "hash": "32A122F1352A4C7B3A6D790362CC34749C5E57FCE896377BFDC6CCD14F6CD627",
+      "enabled": true,
+      "supported": true
+    },
+    "fixTokenEscrowV1": {
+      "hash": "32B8614321F7E070419115ABEAB1742EA20F3E3AF34432B5E2F474F8083260DC",
+      "enabled": true,
+      "supported": true
+    },
+    "fixFillOrKill": {
+      "hash": "3318EA0CF0755AF15DAC19F2B5C5BCBFF4B78BDD57609ACCAABE2C41309B051A",
+      "enabled": true,
+      "supported": true
+    },
+    "fixAMMv1_1": {
+      "hash": "35291ADD2D79EB6991343BDA0912269C817D0F094B02226C1C14AD2858962ED4",
+      "enabled": true,
+      "supported": true
+    },
+    "DepositPreauth": {
+      "hash": "3CBC5C4E630A1B82380295CDA84B32B49DD066602E74E39B85EF64137FA65194",
+      "enabled": true,
+      "supported": true
+    },
+    "fixDirectoryLimit": {
+      "hash": "41765F664A8D67FF03DDB1C1A893DE6273690BA340A6C2B07C8D29D0DD013D3A",
+      "enabled": true,
+      "supported": true
+    },
+    "FeeEscalation": {
+      "hash": "42426C4D4F1009EE67080A9B7965B44656D7714D104A72F9B4369F97ABF044EE",
+      "enabled": false,
+      "supported": true
+    },
+    "fix1373": {
+      "hash": "42EEA5E28A97824821D4EF97081FE36A54E9593C6E4F20CBAE098C69D2E072DC",
+      "enabled": false,
+      "supported": true
+    },
+    "fixSTAmountCanonicalize": {
+      "hash": "452F5906C46D46F407883344BFDD90E672B672C5E9943DB4891E3A34FEEEB9DB",
+      "enabled": true,
+      "supported": true
+    },
+    "DisallowIncoming": {
+      "hash": "47C3002ABA31628447E8E9A8B315FAA935CE30183F9A9B86845E469CA2CDC3DF",
+      "enabled": true,
+      "supported": true
+    },
+    "MultiSign": {
+      "hash": "4C97EBA926031A7CF7D7B36FDE3ED66DDA5421192D63DE53FFB46E43B9DC8373",
+      "enabled": false,
+      "supported": true
+    },
+    "fixAmendmentMajorityCalc": {
+      "hash": "4F46DF03559967AC60F2EB272FEFE3928A7594A45FF774B87A7E540DB0F8F068",
+      "enabled": true,
+      "supported": true
+    },
+    "TickSize": {
+      "hash": "532651B4FD58DF8922A49BA101AB3E996E5BFBF95A913B3E392504863E63B164",
+      "enabled": false,
+      "supported": true
+    },
+    "LendingProtocol": {
+      "hash": "565B90CA1AB2B9D42208ED10884188C64F9E19083DECB9634AAF06EB03299509",
+      "enabled": false,
+      "supported": true
+    },
+    "Clawback": {
+      "hash": "56B241D7A43D40354D02A9DC4C8DF5C7A1F930D92A9035C4E12291B3CA3E1C2B",
+      "enabled": true,
+      "supported": true
+    },
+    "MultiSignReserve": {
+      "hash": "586480873651E106F1D6339B0C4A8945BA705A777F3F4524626FF1FC07EFE41D",
+      "enabled": true,
+      "supported": true
+    },
+    "fix1623": {
+      "hash": "58BE9B5968C4DA7C59BA900961828B113E5490699B21877DEF9A31E9D0FE5D5F",
+      "enabled": true,
+      "supported": true
+    },
+    "DynamicMPT": {
+      "hash": "58E92F338758479C06084E1B6BA366BAD8F75E5329A7F0EEAFFFDA51E5106B7F",
+      "enabled": false,
+      "supported": true
+    },
+    "fix1515": {
+      "hash": "5D08145F0A4983F23AFFFF514E83FAD355C5ABFBB6CAB76FB5BC8519FF5F33BE",
+      "enabled": true,
+      "supported": true
+    },
+    "fixAMMClawbackRounding": {
+      "hash": "5E9586DB3D765B4C5794658FB6BB385071E9838DF4016027E6E26820C8526724",
+      "enabled": true,
+      "supported": true
+    },
+    "fixIncludeKeyletFields": {
+      "hash": "6143A27B71F7DAF9330ECA7C5EC3D54C8083A4FDEF7016737EEC06AB61E82EE0",
+      "enabled": true,
+      "supported": true
+    },
+    "fixPayChanRecipientOwnerDir": {
+      "hash": "621A0B264970359869E3C0363A899909AAB7A887C8B73519E4ECF952D33258A8",
+      "enabled": true,
+      "supported": true
+    },
+    "PermissionedDEX": {
+      "hash": "677E401A423E3708363A36BA8B3A7D019D21AC5ABD00387BDBEA6BDE4C91247E",
+      "enabled": true,
+      "supported": true
+    },
+    "TrustSetAuth": {
+      "hash": "6781F8368C4771B83E8B821D88F580202BCB4228075297B19E4FDC5233F1EFDC",
+      "enabled": false,
+      "supported": true
+    },
+    "fix1513": {
+      "hash": "67A34F2CF55BFC0F93AACD5B281413176FEE195269FA6D95219A2DF738671172",
+      "enabled": true,
+      "supported": true
+    },
+    "fix1512": {
+      "hash": "6C92211186613F9647A89DFFBAB8F94C99D4C7E956D495270789128569177DA1",
+      "enabled": false,
+      "supported": true
+    },
+    "fix1571": {
+      "hash": "7117E2EC2DBF119CA55181D69819F1999ECEE1A0225A7FD2B9ED47940968479C",
+      "enabled": true,
+      "supported": true
+    },
+    "AMMClawback": {
+      "hash": "726F944886BCDF7433203787E93DD9AA87FAB74DFE3AF4785BA03BEFC97ADA1F",
+      "enabled": true,
+      "supported": true
+    },
+    "fixNonFungibleTokensV1_2": {
+      "hash": "73761231F7F3D94EC3D8C63D91BDD0D89045C6F71B917D1925C01253515A6669",
+      "enabled": true,
+      "supported": true
+    },
+    "Flow": {
+      "hash": "740352F2412A9909880C23A559FCECEDA3BE2126FED62FC7660D628A06927F11",
+      "enabled": true,
+      "supported": true
+    },
+    "fixEmptyDID": {
+      "hash": "755C971C29971C9F20C6F080F2ED96F87884E40AD19554A5EBECDCEC8A1F77FE",
+      "enabled": true,
+      "supported": true
+    },
+    "ImmediateOfferKilled": {
+      "hash": "75A7E01C505DD5A179DFE3E000A9B6F1EDDEB55A12F95579A23E15B15DC8BE5A",
+      "enabled": true,
+      "supported": true
+    },
+    "fixEnforceNFTokenTrustline": {
+      "hash": "763C37B352BE8C7A04E810F8E462644C45AFEAD624BF3894A08E5C917CF9FF39",
+      "enabled": true,
+      "supported": true
+    },
+    "fixPreviousTxnID": {
+      "hash": "7BB62DC13EC72B775091E9C71BF8CF97E122647693B50C5E87A80DFD6FCFAC50",
+      "enabled": true,
+      "supported": true
+    },
+    "fixAMMv1_3": {
+      "hash": "7CA70A7674A26FA517412858659EBC7EDEEF7D2D608824464E6FDEFD06854E14",
+      "enabled": true,
+      "supported": true
+    },
+    "SingleAssetVault": {
+      "hash": "81BD2619B6B3C8625AC5D0BC01DE17F06C3F0AB95C7C87C93715B87A4FD240D8",
+      "enabled": false,
+      "supported": true
+    },
+    "fixFrozenLPTokenTransfer": {
+      "hash": "83FD6594FF83C1D105BD2B41D7E242D86ECB4A8220BD9AF4DA35CB0F69E39B2A",
+      "enabled": true,
+      "supported": true
+    },
+    "CryptoConditionsSuite": {
+      "hash": "86E83A7D2ECE3AD5FA87AB2195AE015C950469ABF0B72EAACED318F74886AE90",
+      "enabled": false,
+      "supported": true
+    },
+    "fixQualityUpperBound": {
+      "hash": "89308AF3B8B10B7192C4E613E1D2E4D9BA64B2EE2D5232402AE82A6A7220D953",
+      "enabled": true,
+      "supported": true
+    },
+    "AMM": {
+      "hash": "8CC0774A3BF66D1D22E76BBDA8E8A232E6B6313834301B3B23E8601196AE6455",
+      "enabled": true,
+      "supported": true
+    },
+    "fixInvalidTxFlags": {
+      "hash": "8EC4304A06AF03BE953EA6EDA494864F6F3F30AA002BABA35869FBB8C6AE5D52",
+      "enabled": true,
+      "supported": true
+    },
+    "fixCheckThreading": {
+      "hash": "8F81B066ED20DAECA20DF57187767685EEF3980B228E0667A650BAF24426D3B4",
+      "enabled": true,
+      "supported": true
+    },
+    "fixInnerObjTemplate2": {
+      "hash": "9196110C23EA879B4229E51C286180C7D02166DA712559F634372F5264D0EC59",
+      "enabled": true,
+      "supported": true
+    },
+    "XRPFees": {
+      "hash": "93E516234E35E08CA689FA33A6D38E103881F8DCB53023F728C307AA89D515A7",
+      "enabled": true,
+      "supported": true
+    },
+    "MPTokensV1": {
+      "hash": "950AE2EA4654E47F04AA8739C0B214E242097E802FD372D24047A89AB1F5EC38",
+      "enabled": true,
+      "supported": true
+    },
+    "TicketBatch": {
+      "hash": "955DF3FA5891195A9DAEFA1DDC6BB244B545DDE1BAA84CBB25D5F12A8DA68A0C",
+      "enabled": true,
+      "supported": true
+    },
+    "PriceOracle": {
+      "hash": "96FD2F293A519AE1DB6F8BED23E4AD9119342DA7CB6BAFD00953D16C54205D8B",
+      "enabled": true,
+      "supported": true
+    },
+    "fixCleanup3_4_0": {
+      "hash": "98433DD001A5737F773D74F8CA2A25A065089C73B2E611C760BAF369E4FECA76",
+      "enabled": true,
+      "supported": true
+    },
+    "CheckCashMakesTrustLine": {
+      "hash": "98DECF327BF79997AEC178323AD51A830E457BFC6D454DAF3E46E5EC42DC619F",
+      "enabled": true,
+      "supported": true
+    },
+    "BatchV1_1": {
+      "hash": "9F287AED3CDB50A7BD1ACEC24296A30C9B5230CCD136219317AC790E3B884377",
+      "enabled": true,
+      "supported": true
+    },
+    "LendingProtocolV1_1": {
+      "hash": "A360E2BFD775A5B0DCE1C36C16DF31B72735A57584FD163655D2F9564F8E7AC8",
+      "enabled": false,
+      "supported": true
+    },
+    "PermissionedDomains": {
+      "hash": "A730EB18A9D4BB52502C898589558B4CCEB4BE10044500EE5581137A2E80E849",
+      "enabled": true,
+      "supported": true
+    },
+    "fixMPTDeliveredAmount": {
+      "hash": "AB8D932A5F338903FE5BCBD80B611FFED70839ABA3170E9CE01D947C0EDEDCF2",
+      "enabled": true,
+      "supported": true
+    },
+    "fixNFTokenRemint": {
+      "hash": "AE35ABDEFBDE520372B31C957020B34A7A4A9DC3115A69803A44016477C84D6E",
+      "enabled": true,
+      "supported": true
+    },
+    "FlowSortStrands": {
+      "hash": "AF8DF7465C338AE64B1E937D6C8DA138C0D63AD5134A68792BBBE1F63356C422",
+      "enabled": true,
+      "supported": true
+    },
+    "ExpandedSignerList": {
+      "hash": "B2A4DB846F0891BF2C76AB2F2ACC8F5B4EC64437135C6E56F3F859DE5FFD5856",
+      "enabled": true,
+      "supported": true
+    },
+    "fixEnforceNFTokenTrustlineV2": {
+      "hash": "B32752F7DCC41FB86534118FC4EEC8F56E7BD0A7DB60FD73F93F257233C08E3A",
+      "enabled": true,
+      "supported": true
+    },
+    "fix1201": {
+      "hash": "B4D44CC3111ADD964E846FC57760C8B50FFCD5A82C86A72756F6B058DDDF96AD",
+      "enabled": false,
+      "supported": true
+    },
+    "NegativeUNL": {
+      "hash": "B4E4F5D2D6FB84DF7399960A732309C9FD530EAE5941838160042833625A6076",
+      "enabled": true,
+      "supported": true
+    },
+    "fixRmSmallIncreasedQOffers": {
+      "hash": "B6B3EEDC0267AB50491FDC450A398AF30DBCD977CECED8BEF2499CAB5DAC19E2",
+      "enabled": true,
+      "supported": true
+    },
+    "fix1523": {
+      "hash": "B9E739B8296B4A1BB29BE990B17D66E21B62A300A909F25AC55C22D6C72E1F9D",
+      "enabled": false,
+      "supported": true
+    },
+    "Sponsor": {
+      "hash": "BE1F90581635DBCEBFC4678C4B54FEDDC1A17B50FD02CFE765A4132A342126AC",
+      "enabled": false,
+      "supported": true
+    },
+    "DynamicNFT": {
+      "hash": "C1CE18F2A268E6A849C27B3DE485006771B4C01B2FCEC4F18356FE92ECD6BB74",
+      "enabled": true,
+      "supported": true
+    },
+    "fixInnerObjTemplate": {
+      "hash": "C393B3AEEBF575E475F0C60D5E4241B2070CC4D0EB6C4846B1A07508FAEFC485",
+      "enabled": true,
+      "supported": true
+    },
+    "fixMasterKeyAsRegularKey": {
+      "hash": "C4483A1896170C66C098DEA5B0E024309C60DC960DE5F01CD7AF986AA3D9AD37",
+      "enabled": true,
+      "supported": true
+    },
+    "fixNFTokenPageLinks": {
+      "hash": "C7981B764EC4439123A86CC7CCBA436E9B3FF73B3F10A0AE51882E404522FC41",
+      "enabled": true,
+      "supported": true
+    },
+    "XChainBridge": {
+      "hash": "C98D98EE9616ACD36E81FDEB8D41D349BF5F1B41DD64A0ABC1FE9AA5EA267E9C",
+      "enabled": false,
+      "supported": true
+    },
+    "fix1543": {
+      "hash": "CA7C02118BA27599528543DFE77BA6838D1B0F43B447D4D7F53523CE6A0E9AC2",
+      "enabled": true,
+      "supported": true
+    },
+    "SortedDirectories": {
+      "hash": "CC5ABAE4F3EC92E94A59B1908C2BE82D2228B6485C00AFF8F22DF930D89C194E",
+      "enabled": false,
+      "supported": true
+    },
+    "fixPayChanCancelAfter": {
+      "hash": "D3456A862DC07E382827981CA02E21946E641877F19B8889031CC57FDCAC83E2",
+      "enabled": true,
+      "supported": true
+    },
+    "DeepFreeze": {
+      "hash": "DAF3A6EB04FA5DC51E8E4F23E9B7022B693EFA636F23F22664746C77B5786B23",
+      "enabled": true,
+      "supported": true
+    },
+    "DID": {
+      "hash": "DB432C3A09D9D5DFC7859F39AE5FF767ABC59AED0A9FB441E83B814D8946C109",
+      "enabled": true,
+      "supported": true
+    },
+    "EnforceInvariants": {
+      "hash": "DC9CA96AEA1DCF83E527D1AFC916EFAF5D27388ECA4060A88817C1238CAEE0BF",
+      "enabled": false,
+      "supported": true
+    },
+    "fixRemoveNFTokenAutoTrustLine": {
+      "hash": "DF8B4536989BDACE3F934F29423848B9F1D76D09BE6A1FCFE7E7F06AA26ABEAD",
+      "enabled": true,
+      "supported": true
+    },
+    "fix1368": {
+      "hash": "E2E6F2866106419B88C50045ACE96368558C345566AC8F2BDF5A5B5587F0E6FA",
+      "enabled": false,
+      "supported": true
+    },
+    "NFTokenMintOffer": {
+      "hash": "EE3CF852F0506782D05E65D49E5DCC3D16D50898CD1B646BAE274863401CC3CE",
+      "enabled": true,
+      "supported": true
+    },
+    "fixTrustLinesToSelf": {
+      "hash": "F1ED6B4A411D8B872E65B9DCB4C8B100375B0DD3D62D07192E011D6D7F339013",
+      "enabled": true,
+      "supported": true
+    },
+    "DepositAuth": {
+      "hash": "F64E1EABBE79D55B3BB82020516CEC2C582A98A6BFE20FBE9BB6A0D233418064",
+      "enabled": true,
+      "supported": true
+    },
+    "fix1578": {
+      "hash": "FBD513F1B893AC765B78F250E6FFA6A11B573209D1842ADC787C850696741288",
+      "enabled": true,
+      "supported": true
+    },
+    "fixPriceOracleOrder": {
+      "hash": "FF2D1E13CF6D22427111B967BD504917F63A900CECD320D6FD3AC9FA90344631",
+      "enabled": true,
+      "supported": true
+    }
+  },
+  "accounts": {
+    "W0": {
+      "id": "W0",
+      "role": "TREASURY",
+      "address": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+      "account_root": {
+        "Balance": "97989868",
+        "Flags": 1082130432,
+        "OwnerCount": 2,
+        "Sequence": 21093723,
+        "RegularKey": null,
+        "Domain": "6165746865722D666F756E6472792D6465736B2E76657263656C2E617070",
+        "EmailHash": null,
+        "TransferRate": null,
+        "TickSize": null,
+        "MintedNFTokens": 0,
+        "BurnedNFTokens": 0,
+        "NFTokenMinter": null
+      },
+      "account_flags": {
+        "allowTrustLineClawback": false,
+        "allowTrustLineLocking": true,
+        "defaultRipple": true,
+        "depositAuth": false,
+        "disableMasterKey": false,
+        "disallowIncomingCheck": false,
+        "disallowIncomingNFTokenOffer": false,
+        "disallowIncomingPayChan": false,
+        "disallowIncomingTrustline": false,
+        "disallowIncomingXRP": false,
+        "globalFreeze": false,
+        "noFreeze": false,
+        "passwordSpent": false,
+        "requireAuthorization": false,
+        "requireDestinationTag": false
+      },
+      "signer_lists": [
+        {
+          "SignerQuorum": 3,
+          "SignerEntries": [
+            {
+              "Account": "rpEpjesFRPcpWWVKoheDT59YKtoA6Xureg",
+              "SignerWeight": 2
+            },
+            {
+              "Account": "rGfkxsMvv833ioy2QjmTXhYF49J94N9WRu",
+              "SignerWeight": 1
+            },
+            {
+              "Account": "rHG25YbFNqFL9HzVqa9JQhXFY9Zignxznh",
+              "SignerWeight": 2
+            },
+            {
+              "Account": "r4Qc6iUKrLZQwM9sPdPWCCHAK2bcMsrxVr",
+              "SignerWeight": 1
+            }
+          ]
+        }
+      ],
+      "lines": [
+        {
+          "account": "rEbUaXDXZnzR8wJjGqULKn1YLXNd5CARth",
+          "balance": "-50",
+          "currency": "4145544800000000000000000000000000000000",
+          "limit": "0",
+          "limit_peer": "1000000",
+          "quality_in": 0,
+          "quality_out": 0
+        },
+        {
+          "account": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+          "balance": "-4976.457048475416",
+          "currency": "4145544800000000000000000000000000000000",
+          "limit": "0",
+          "limit_peer": "1000000",
+          "quality_in": 0,
+          "quality_out": 0
+        },
+        {
+          "account": "rLDbAi71mciJwCDKyTn6dohD3ypDsMLRwm",
+          "balance": "-49.99999999999992",
+          "currency": "4145544800000000000000000000000000000000",
+          "limit": "0",
+          "limit_peer": "1000000",
+          "quality_in": 0,
+          "quality_out": 0
+        },
+        {
+          "account": "r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w",
+          "balance": "-4923.542951524584",
+          "currency": "4145544800000000000000000000000000000000",
+          "limit": "0",
+          "limit_peer": "0",
+          "quality_in": 0,
+          "quality_out": 0
+        },
+        {
+          "account": "rh4c6qMMyafccZrPFCPCN742BNMXfjKYss",
+          "balance": "-50",
+          "currency": "4145544800000000000000000000000000000000",
+          "limit": "0",
+          "limit_peer": "1000000",
+          "quality_in": 0,
+          "quality_out": 0
+        },
+        {
+          "account": "ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN",
+          "balance": "-50",
+          "currency": "4145544800000000000000000000000000000000",
+          "limit": "0",
+          "limit_peer": "0",
+          "no_ripple_peer": true,
+          "quality_in": 0,
+          "quality_out": 0
+        }
+      ],
+      "offers": [],
+      "nfts": [],
+      "objects": [
+        {
+          "Flags": 65536,
+          "LedgerEntryType": "SignerList",
+          "Owner": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+          "OwnerNode": "0",
+          "PreviousTxnID": "EDD27C458D314602E6059D8351D2DDA322A5E4BD1FD55602B3D2E667EA970299",
+          "PreviousTxnLgrSeq": 21101245,
+          "SignerEntries": [
+            {
+              "SignerEntry": {
+                "Account": "rpEpjesFRPcpWWVKoheDT59YKtoA6Xureg",
+                "SignerWeight": 2
+              }
+            },
+            {
+              "SignerEntry": {
+                "Account": "rGfkxsMvv833ioy2QjmTXhYF49J94N9WRu",
+                "SignerWeight": 1
+              }
+            },
+            {
+              "SignerEntry": {
+                "Account": "rHG25YbFNqFL9HzVqa9JQhXFY9Zignxznh",
+                "SignerWeight": 2
+              }
+            },
+            {
+              "SignerEntry": {
+                "Account": "r4Qc6iUKrLZQwM9sPdPWCCHAK2bcMsrxVr",
+                "SignerWeight": 1
+              }
+            }
+          ],
+          "SignerListID": 0,
+          "SignerQuorum": 3,
+          "index": "404CA2190C70B77DD562BADF1EF67C78C587D4789A2CDE01969B59CDE2CE811B"
+        },
+        {
+          "Account": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+          "Flags": 0,
+          "LedgerEntryType": "DID",
+          "OwnerNode": "0",
+          "PreviousTxnID": "95FD1096AE2D7F777697B65D2F97B7CBE3F08826654AE3CDC2D845A8022832A1",
+          "PreviousTxnLgrSeq": 21093859,
+          "URI": "68747470733A2F2F7261772E67697468756275736572636F6E74656E742E636F6D2F486F626965314B656E6F62692F6165746865722D666F756E6472792F6D61696E2F636F72702F636861727465722E6D64",
+          "index": "EC9BE68CB04372229EA4DD2FAE931073DDF49E65BC27B3404F24735D3D5F03BF"
+        }
+      ],
+      "object_counts": {
+        "RippleState": 6,
+        "SignerList": 1,
+        "DID": 1
+      },
+      "gateway_balances": {
+        "account": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+        "ledger_hash": "1318D5F850BB5EC8FD50FD4F9C2EDFD8DDE4A1482795F1B63E627EA2ECEDEDD7",
+        "ledger_index": 22553108,
+        "obligations": {
+          "4145544800000000000000000000000000000000": "10100"
+        },
+        "validated": true
+      }
+    },
+    "W1": {
+      "id": "W1",
+      "role": "MARKET",
+      "address": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+      "account_root": {
+        "Balance": "49036270",
+        "Flags": 65536,
+        "OwnerCount": 10,
+        "Sequence": 21093751,
+        "RegularKey": "rDyiGKuMgL2F8S7TjB6m6Wg1pLg5KDPJYY",
+        "Domain": null,
+        "EmailHash": null,
+        "TransferRate": null,
+        "TickSize": null,
+        "MintedNFTokens": 0,
+        "BurnedNFTokens": 0,
+        "NFTokenMinter": null
+      },
+      "account_flags": {
+        "allowTrustLineClawback": false,
+        "allowTrustLineLocking": false,
+        "defaultRipple": false,
+        "depositAuth": false,
+        "disableMasterKey": false,
+        "disallowIncomingCheck": false,
+        "disallowIncomingNFTokenOffer": false,
+        "disallowIncomingPayChan": false,
+        "disallowIncomingTrustline": false,
+        "disallowIncomingXRP": false,
+        "globalFreeze": false,
+        "noFreeze": false,
+        "passwordSpent": true,
+        "requireAuthorization": false,
+        "requireDestinationTag": false
+      },
+      "signer_lists": [],
+      "lines": [
+        {
+          "account": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+          "balance": "4976.457048475416",
+          "currency": "4145544800000000000000000000000000000000",
+          "limit": "1000000",
+          "limit_peer": "0",
+          "quality_in": 0,
+          "quality_out": 0
+        },
+        {
+          "account": "r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w",
+          "balance": "504886.5880440515",
+          "currency": "0330E60FAE706EAD2C7D511D790B07A6F3B89931",
+          "limit": "0",
+          "limit_peer": "0",
+          "no_ripple": true,
+          "quality_in": 0,
+          "quality_out": 0
+        },
+        {
+          "account": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
+          "balance": "0.00000001460762618",
+          "currency": "524C555344000000000000000000000000000000",
+          "limit": "10",
+          "limit_peer": "0",
+          "no_ripple": true,
+          "quality_in": 0,
+          "quality_out": 0
+        }
+      ],
+      "offers": [
+        {
+          "flags": 65536,
+          "quality": "0.0001052631578947368",
+          "seq": 21093739,
+          "taker_gets": "475000",
+          "taker_pays": {
+            "currency": "4145544800000000000000000000000000000000",
+            "issuer": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+            "value": "50"
+          }
+        },
+        {
+          "flags": 65536,
+          "quality": "10500",
+          "seq": 21093737,
+          "taker_gets": {
+            "currency": "4145544800000000000000000000000000000000",
+            "issuer": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+            "value": "50"
+          },
+          "taker_pays": "525000"
+        },
+        {
+          "flags": 65536,
+          "quality": "11000",
+          "seq": 21093738,
+          "taker_gets": {
+            "currency": "4145544800000000000000000000000000000000",
+            "issuer": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+            "value": "200"
+          },
+          "taker_pays": "2200000"
+        },
+        {
+          "flags": 65536,
+          "quality": "0.00000007708670472036428",
+          "seq": 21093750,
+          "taker_gets": "1000000",
+          "taker_pays": {
+            "currency": "524C555344000000000000000000000000000000",
+            "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
+            "value": "0.07708670472036428"
+          }
+        },
+        {
+          "flags": 65536,
+          "quality": "0.0001111111111111111",
+          "seq": 21093740,
+          "taker_gets": "1800000",
+          "taker_pays": {
+            "currency": "4145544800000000000000000000000000000000",
+            "issuer": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+            "value": "200"
+          }
+        }
+      ],
+      "nfts": [
+        {
+          "Flags": 9,
+          "Issuer": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+          "NFTokenID": "00090000D25E64BC6D436EA502CE71902FE64120C571FCF10CE86E6F0141DD60",
+          "NFTokenTaxon": 20261012,
+          "URI": "68747470733A2F2F7261772E67697468756275736572636F6E74656E742E636F6D2F486F626965314B656E6F62692F6165746865722D666F756E6472792F6D61696E2F6D616368696E65732F62617463682D6865617274626561742F524541444D452E6D64",
+          "nft_serial": 21093728
+        },
+        {
+          "Flags": 8,
+          "Issuer": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+          "NFTokenID": "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1B3732AC80141DD5C",
+          "NFTokenTaxon": 20260927,
+          "TransferFee": 1000,
+          "URI": "68747470733A2F2F7261772E67697468756275736572636F6E74656E742E636F6D2F486F626965314B656E6F62692F6165746865722D666F756E6472792F6D61696E2F6D616368696E65732F6C702D62616467652F524541444D452E6D64236C702D7468726573686F6C643D313030303030266C703D35303030303026686F6C6465723D5731",
+          "nft_serial": 21093724
+        }
+      ],
+      "objects": [
+        {
+          "Account": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+          "Data": "7B226D616368696E65223A2262617463682D686561727462656174222C22686561727462656174223A22323032362D31302D31325431353A31313A34372E3738305A227D",
+          "Flags": 0,
+          "LedgerEntryType": "DID",
+          "OwnerNode": "0",
+          "PreviousTxnID": "ACD524A81D8DCF1C7D608B00CBA3A9A84602D4DCD0D80BD41CCA0D67A8B4AAF5",
+          "PreviousTxnLgrSeq": 21482023,
+          "URI": "68747470733A2F2F7261772E67697468756275736572636F6E74656E742E636F6D2F486F626965314B656E6F62692F6165746865722D666F756E6472792F6D61696E2F636F72702F636861727465722E6D64236865617274626561743D323032362D31302D31325431353A31313A34372E3738305A",
+          "index": "8FCF0F2EAE425FDE6EFCE71C4F560CED9AE331CD30853CD735F093C5A2DC37C4"
+        }
+      ],
+      "object_counts": {
+        "NFTokenPage": 1,
+        "RippleState": 3,
+        "Offer": 5,
+        "DID": 1
+      },
+      "nft_sell_offers": {}
+    },
+    "W2": {
+      "id": "W2",
+      "role": "ATELIER",
+      "address": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+      "account_root": {
+        "Balance": "124019579",
+        "Flags": 0,
+        "OwnerCount": 3,
+        "Sequence": 21093759,
+        "RegularKey": "rNNzhkcScozB7Nzv3cWCZAEnu6MMC64rmy",
+        "Domain": null,
+        "EmailHash": null,
+        "TransferRate": null,
+        "TickSize": null,
+        "MintedNFTokens": 11,
+        "BurnedNFTokens": 1,
+        "NFTokenMinter": null
+      },
+      "account_flags": {
+        "allowTrustLineClawback": false,
+        "allowTrustLineLocking": false,
+        "defaultRipple": false,
+        "depositAuth": false,
+        "disableMasterKey": false,
+        "disallowIncomingCheck": false,
+        "disallowIncomingNFTokenOffer": false,
+        "disallowIncomingPayChan": false,
+        "disallowIncomingTrustline": false,
+        "disallowIncomingXRP": false,
+        "globalFreeze": false,
+        "noFreeze": false,
+        "passwordSpent": false,
+        "requireAuthorization": false,
+        "requireDestinationTag": false
+      },
+      "signer_lists": [],
+      "lines": [],
+      "offers": [],
+      "nfts": [
+        {
+          "Flags": 8,
+          "Issuer": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+          "NFTokenID": "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF129D634CE0141DD56",
+          "NFTokenTaxon": 20260927,
+          "TransferFee": 1000,
+          "URI": "68747470733A2F2F7261772E67697468756275736572636F6E74656E742E636F6D2F486F626965314B656E6F62692F6165746865722D666F756E6472792F6D61696E2F524541444D452E6D64",
+          "nft_serial": 21093718
+        },
+        {
+          "Flags": 8,
+          "Issuer": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+          "NFTokenID": "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1E1248CC60141DD5E",
+          "NFTokenTaxon": 20260927,
+          "TransferFee": 1000,
+          "URI": "68747470733A2F2F7261772E67697468756275736572636F6E74656E742E636F6D2F486F626965314B656E6F62692F6165746865722D666F756E6472792F6D61696E2F6D616368696E65732F77616C6B2D696E2D77696E646F772F494E424F554E442E6D64",
+          "nft_serial": 21093726
+        }
+      ],
+      "objects": [
+        {
+          "Account": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+          "Flags": 2,
+          "LedgerEntryType": "MPToken",
+          "MPTAmount": "9",
+          "MPTokenIssuanceID": "0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED",
+          "OwnerNode": "0",
+          "PreviousTxnID": "FC7CB7C6D6CA5DA7EBCEE2C48CAECDC6599128DDD5258C167D7305BE50A58797",
+          "PreviousTxnLgrSeq": 21130619,
+          "index": "6F98BB9124C7CCEB55BEA58A78DC57D0C5F31DA2D645EEF515F91F0C10B2E687"
+        },
+        {
+          "Amount": "10000000",
+          "Flags": 1,
+          "LedgerEntryType": "NFTokenOffer",
+          "NFTokenID": "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1E1248CC60141DD5E",
+          "NFTokenOfferNode": "0",
+          "Owner": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+          "OwnerNode": "0",
+          "PreviousTxnID": "75FCBFA093C36F92021E6FAB0C2C2E61A0ADB6B10A44416C1271B056B2E0A4CB",
+          "PreviousTxnLgrSeq": 21102049,
+          "index": "CEAC38D14EBB2B544E59D78084ECAE1D52486BA29C53D248717CD42DB159654F"
+        }
+      ],
+      "object_counts": {
+        "NFTokenPage": 1,
+        "MPToken": 1,
+        "NFTokenOffer": 1
+      },
+      "nft_sell_offers": {
+        "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1E1248CC60141DD5E": [
+          {
+            "amount": "10000000",
+            "flags": 1,
+            "nft_offer_index": "CEAC38D14EBB2B544E59D78084ECAE1D52486BA29C53D248717CD42DB159654F",
+            "owner": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw"
+          }
+        ]
+      }
+    },
+    "W3": {
+      "id": "W3",
+      "role": "CHANNELS",
+      "address": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+      "account_root": {
+        "Balance": "105920866",
+        "Flags": 0,
+        "OwnerCount": 1,
+        "Sequence": 21093783,
+        "RegularKey": "rJRxr1E1Dzz5TXJsCHhwQAm4qS68Y73dQj",
+        "Domain": null,
+        "EmailHash": null,
+        "TransferRate": null,
+        "TickSize": null,
+        "MintedNFTokens": 0,
+        "BurnedNFTokens": 0,
+        "NFTokenMinter": null
+      },
+      "account_flags": {
+        "allowTrustLineClawback": false,
+        "allowTrustLineLocking": false,
+        "defaultRipple": false,
+        "depositAuth": false,
+        "disableMasterKey": false,
+        "disallowIncomingCheck": false,
+        "disallowIncomingNFTokenOffer": false,
+        "disallowIncomingPayChan": false,
+        "disallowIncomingTrustline": false,
+        "disallowIncomingXRP": false,
+        "globalFreeze": false,
+        "noFreeze": false,
+        "passwordSpent": false,
+        "requireAuthorization": false,
+        "requireDestinationTag": false
+      },
+      "signer_lists": [],
+      "lines": [
+        {
+          "account": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
+          "balance": "0.00029654629425165",
+          "currency": "524C555344000000000000000000000000000000",
+          "limit": "10",
+          "limit_peer": "0",
+          "no_ripple": true,
+          "quality_in": 0,
+          "quality_out": 0
+        }
+      ],
+      "offers": [],
+      "nfts": [],
+      "objects": [
+        {
+          "Account": "rh4c6qMMyafccZrPFCPCN742BNMXfjKYss",
+          "Amount": "1000000",
+          "Balance": "0",
+          "Destination": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+          "DestinationNode": "0",
+          "Expiration": 843837231,
+          "Flags": 0,
+          "LedgerEntryType": "PayChannel",
+          "OwnerNode": "0",
+          "PreviousTxnID": "D04A320649912A028C27E67922BF681CEF6ADF12FBF2ACF46B884962A55BCF04",
+          "PreviousTxnLgrSeq": 21094442,
+          "PublicKey": "ED65D188F6C041B5143DDE8AC3FA86FA802156B573B717930BAB37D7CC58380EA5",
+          "Sequence": 21094422,
+          "SettleDelay": 300,
+          "index": "F83E073B648600D863FC8F3BB53B047D697FD1B87136A05B72F2F8296B7CC40E"
+        }
+      ],
+      "object_counts": {
+        "RippleState": 1,
+        "PayChannel": 1
+      }
+    },
+    "W4": {
+      "id": "W4",
+      "role": "ESCROW",
+      "address": "ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN",
+      "account_root": {
+        "Balance": "108009921",
+        "Flags": 0,
+        "OwnerCount": 4,
+        "Sequence": 21093768,
+        "RegularKey": "rfXBxqPjprj1J5Ekq5v82D3BDqRm7ms7p2",
+        "Domain": null,
+        "EmailHash": null,
+        "TransferRate": null,
+        "TickSize": null,
+        "MintedNFTokens": 0,
+        "BurnedNFTokens": 0,
+        "NFTokenMinter": null
+      },
+      "account_flags": {
+        "allowTrustLineClawback": false,
+        "allowTrustLineLocking": false,
+        "defaultRipple": false,
+        "depositAuth": false,
+        "disableMasterKey": false,
+        "disallowIncomingCheck": false,
+        "disallowIncomingNFTokenOffer": false,
+        "disallowIncomingPayChan": false,
+        "disallowIncomingTrustline": false,
+        "disallowIncomingXRP": false,
+        "globalFreeze": false,
+        "noFreeze": false,
+        "passwordSpent": false,
+        "requireAuthorization": false,
+        "requireDestinationTag": false
+      },
+      "signer_lists": [],
+      "lines": [
+        {
+          "account": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
+          "balance": "0",
+          "currency": "524C555344000000000000000000000000000000",
+          "limit": "10",
+          "limit_peer": "0",
+          "no_ripple": true,
+          "quality_in": 0,
+          "quality_out": 0
+        },
+        {
+          "account": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+          "balance": "50",
+          "currency": "4145544800000000000000000000000000000000",
+          "limit": "0",
+          "limit_peer": "0",
+          "no_ripple": true,
+          "quality_in": 0,
+          "quality_out": 0
+        }
+      ],
+      "offers": [
+        {
+          "flags": 65536,
+          "quality": "0.00000007623761958215186",
+          "seq": 21093746,
+          "taker_gets": "200000",
+          "taker_pays": {
+            "currency": "524C555344000000000000000000000000000000",
+            "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
+            "value": "0.01524752391643037"
+          }
+        }
+      ],
+      "nfts": [],
+      "objects": [
+        {
+          "Account": "rEbUaXDXZnzR8wJjGqULKn1YLXNd5CARth",
+          "Amount": "10000000",
+          "CancelAfter": 1790520578,
+          "Destination": "ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN",
+          "DestinationNode": "0",
+          "FinishAfter": 1790520473,
+          "Flags": 0,
+          "LedgerEntryType": "Escrow",
+          "OwnerNode": "0",
+          "PreviousTxnID": "6B9528CCE3F90E39A6D6E1A8A1F1E637E1A38B575F0DDB105785D3A66A319462",
+          "PreviousTxnLgrSeq": 21094057,
+          "Sequence": 21094052,
+          "index": "908D26FC250FFEC5EF51A6DA749C99DEF6B78D7A205993787DACCE5342D346E7"
+        },
+        {
+          "Account": "ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN",
+          "Flags": 2,
+          "LedgerEntryType": "MPToken",
+          "MPTAmount": "1",
+          "MPTokenIssuanceID": "0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED",
+          "OwnerNode": "0",
+          "PreviousTxnID": "7536CB47DD446BF5E09ABC1A65CB0633FC556EB83E1C261257F07644A7815DA1",
+          "PreviousTxnLgrSeq": 21130603,
+          "index": "AA34CF8E397DFAA3B8EA405C636D9259F7A5C43269F7EA40073A9CBD28EFD615"
+        }
+      ],
+      "object_counts": {
+        "Offer": 1,
+        "RippleState": 2,
+        "Escrow": 1,
+        "MPToken": 1
+      }
+    },
+    "W5": {
+      "id": "W5",
+      "role": "RD",
+      "address": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+      "account_root": {
+        "Balance": "100007571",
+        "Flags": 0,
+        "OwnerCount": 6,
+        "Sequence": 21093885,
+        "RegularKey": "rav5cYVarjSaXeeqCbsghMmmVGcJWB5y7Q",
+        "Domain": null,
+        "EmailHash": null,
+        "TransferRate": null,
+        "TickSize": null,
+        "MintedNFTokens": 0,
+        "BurnedNFTokens": 0,
+        "NFTokenMinter": null
+      },
+      "account_flags": {
+        "allowTrustLineClawback": false,
+        "allowTrustLineLocking": false,
+        "defaultRipple": false,
+        "depositAuth": false,
+        "disableMasterKey": false,
+        "disallowIncomingCheck": false,
+        "disallowIncomingNFTokenOffer": false,
+        "disallowIncomingPayChan": false,
+        "disallowIncomingTrustline": false,
+        "disallowIncomingXRP": false,
+        "globalFreeze": false,
+        "noFreeze": false,
+        "passwordSpent": false,
+        "requireAuthorization": false,
+        "requireDestinationTag": false
+      },
+      "signer_lists": [],
+      "lines": [
+        {
+          "account": "rBtvREuwPH5qhrDkZknAZ9yTqqqUr5zPdG",
+          "balance": "4",
+          "currency": "AGT",
+          "limit": "100",
+          "limit_peer": "0",
+          "no_ripple_peer": true,
+          "quality_in": 0,
+          "quality_out": 0
+        }
+      ],
+      "offers": [],
+      "nfts": [
+        {
+          "Flags": 8,
+          "Issuer": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+          "NFTokenID": "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF16CA1A7CB0141DD59",
+          "NFTokenTaxon": 20260927,
+          "TransferFee": 1000,
+          "URI": "68747470733A2F2F7261772E67697468756275736572636F6E74656E742E636F6D2F486F626965314B656E6F62692F6165746865722D666F756E6472792F6D61696E2F6D616368696E65732F776F726B2D7469636B65742D657363726F772F5448524541542E6D64",
+          "nft_serial": 21093721
+        }
+      ],
+      "objects": [
+        {
+          "CredentialType": "6165746865722D6167656E74",
+          "Flags": 65536,
+          "Issuer": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+          "IssuerNode": "0",
+          "LedgerEntryType": "Credential",
+          "PreviousTxnID": "12358142E4C10E4466E2BCE864E3AD2C5ED1D400BEE7400452AB73120B152080",
+          "PreviousTxnLgrSeq": 21130914,
+          "Subject": "rDUj1USBUYVkfsP3zQPth5dRiSjMYmofwi",
+          "SubjectNode": "0",
+          "URI": "68747470733A2F2F7261772E67697468756275736572636F6E74656E742E636F6D2F486F626965314B656E6F62692F6165746865722D666F756E6472792F6D61696E2F6D616368696E65732F63726564656E7469616C2D646F6D61696E2D73686F702F524541444D452E6D64",
+          "index": "2D6C2A42FA35E4A73DF185E3F40311E02F784A8E4EC83C8F249F4C9BE3184633"
+        },
+        {
+          "AssetClass": "63757272656E6379",
+          "Flags": 0,
+          "LastUpdateTime": 1795445744,
+          "LedgerEntryType": "Oracle",
+          "OracleDocumentID": 2,
+          "Owner": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+          "OwnerNode": "0",
+          "PreviousTxnID": "427E5B1F94677AED568FD8F980D4908EB6DE3E410EA851AFC0FB9FACCFE26EBE",
+          "PreviousTxnLgrSeq": 22552364,
+          "PriceDataSeries": [
+            {
+              "PriceData": {
+                "AssetPrice": "516169db",
+                "BaseAsset": "524C555344000000000000000000000000000000",
+                "QuoteAsset": "XRP",
+                "Scale": 8
+              }
+            }
+          ],
+          "Provider": "6165746865722D666F756E647279",
+          "index": "5B5F908936D283B7CD7302F6D302EBBA53C53B22CAC8A4B40349CD7E9147E058"
+        },
+        {
+          "AcceptedCredentials": [
+            {
+              "Credential": {
+                "CredentialType": "6165746865722D6167656E74",
+                "Issuer": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ"
+              }
+            }
+          ],
+          "Flags": 0,
+          "LedgerEntryType": "PermissionedDomain",
+          "Owner": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+          "OwnerNode": "0",
+          "PreviousTxnID": "2E04E95DEAFCC6625BEAE4DFC744157B8E3D265FAC821FA449611FBB716C3C45",
+          "PreviousTxnLgrSeq": 21130915,
+          "Sequence": 21093735,
+          "index": "6AF56BC1CEC72198156F650C6B425AA52905218CC889BF910BA495470352DCD4"
+        },
+        {
+          "AssetClass": "63757272656E6379",
+          "Flags": 0,
+          "LastUpdateTime": 1790639158,
+          "LedgerEntryType": "Oracle",
+          "OracleDocumentID": 1,
+          "Owner": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+          "OwnerNode": "0",
+          "PreviousTxnID": "B11B0B87A7C40AFA98540D2F40FF234384466729F90E259E60162714DC4DDE85",
+          "PreviousTxnLgrSeq": 21129718,
+          "PriceDataSeries": [
+            {
+              "PriceData": {
+                "AssetPrice": "f9838",
+                "BaseAsset": "4145544800000000000000000000000000000000",
+                "QuoteAsset": "XRP",
+                "Scale": 8
+              }
+            }
+          ],
+          "Provider": "6165746865722D666F756E647279",
+          "URI": "68747470733A2F2F7261772E67697468756275736572636F6E74656E742E636F6D2F486F626965314B656E6F62692F6165746865722D666F756E6472792F6D61696E2F6D616368696E65732F6E61746976652D70726963652D6F7261636C652F524541444D452E6D64",
+          "index": "7CD1AB908C3A8D2E3C426E0D3083F4DD9A8A3A753AA60EB73682AA11A06DFA4E"
+        },
+        {
+          "Flags": 108,
+          "Issuer": "rGpUbsnEjtUijR2WaUGn5W1yDWQ2S9RgKQ",
+          "LedgerEntryType": "MPTokenIssuance",
+          "MPTokenMetadata": "7B226163223A226F74686572222C226169223A7B22616D6D5F70616972223A22414554482F58525020494F55222C22636170223A2231303030303030222C2273796D626F6C223A22414554482D4C41424F52222C22756E6974223A226C61626F72227D2C2264223A22466F756E647279206C61626F7220756E69742E20546865204145544820494F552072656D61696E732074686520414D4D20706169722E222C2269223A227261772E67697468756275736572636F6E74656E742E636F6D2F486F626965314B656E6F62692F6165746865722D666F756E6472792F6D61696E2F646F63732F6173736574732F6D61726B2E737667222C22696E223A2241657468657220466F756E647279222C226E223A22414554482D4C41424F52222C2274223A224C41424F52222C227573223A5B7B2263223A22646F6373222C2274223A224C61626F72204D5054222C2275223A226769746875622E636F6D2F486F626965314B656E6F62692F6165746865722D666F756E6472792F626C6F622F6D61696E2F6D616368696E65732F6C61626F722D6D70742F524541444D452E6D64227D5D7D",
+          "MaximumAmount": "1000000",
+          "OutstandingAmount": "10",
+          "OwnerNode": "0",
+          "PreviousTxnID": "FC7CB7C6D6CA5DA7EBCEE2C48CAECDC6599128DDD5258C167D7305BE50A58797",
+          "PreviousTxnLgrSeq": 21130619,
+          "Sequence": 21093728,
+          "index": "A979C44AACCDA2253F98B3E027AEE921DF627F028B82ACD09622C9F1A06D69E5",
+          "mpt_issuance_id": "0141DD60A4C3F993CB1B29762088E9F1DB80AC36119504ED"
+        }
+      ],
+      "object_counts": {
+        "NFTokenPage": 1,
+        "Credential": 1,
+        "Oracle": 2,
+        "PermissionedDomain": 1,
+        "RippleState": 1,
+        "MPTokenIssuance": 1
+      },
+      "nft_sell_offers": {}
+    },
+    "W6": {
+      "id": "W6",
+      "role": "GRANTS",
+      "address": "rfnqxYQWKsVGFuWLjky41puXHJkT2v8yTf",
+      "account_root": {
+        "Balance": "88009129",
+        "Flags": 0,
+        "OwnerCount": 0,
+        "Sequence": 21093752,
+        "RegularKey": "rGjdFjMz577GF4uvb4N9ayCqP5Q74kwVq5",
+        "Domain": null,
+        "EmailHash": null,
+        "TransferRate": null,
+        "TickSize": null,
+        "MintedNFTokens": 0,
+        "BurnedNFTokens": 0,
+        "NFTokenMinter": null
+      },
+      "account_flags": {
+        "allowTrustLineClawback": false,
+        "allowTrustLineLocking": false,
+        "defaultRipple": false,
+        "depositAuth": false,
+        "disableMasterKey": false,
+        "disallowIncomingCheck": false,
+        "disallowIncomingNFTokenOffer": false,
+        "disallowIncomingPayChan": false,
+        "disallowIncomingTrustline": false,
+        "disallowIncomingXRP": false,
+        "globalFreeze": false,
+        "noFreeze": false,
+        "passwordSpent": false,
+        "requireAuthorization": false,
+        "requireDestinationTag": false
+      },
+      "signer_lists": [],
+      "lines": [],
+      "offers": [],
+      "nfts": [],
+      "objects": [],
+      "object_counts": {}
+    },
+    "BUYER": {
+      "id": "BUYER",
+      "role": "work-ticket client",
+      "address": "rEbUaXDXZnzR8wJjGqULKn1YLXNd5CARth",
+      "account_root": {
+        "Balance": "121979670",
+        "Flags": 0,
+        "OwnerCount": 3,
+        "Sequence": 21094066,
+        "RegularKey": null,
+        "Domain": null,
+        "EmailHash": null,
+        "TransferRate": null,
+        "TickSize": null,
+        "MintedNFTokens": 0,
+        "BurnedNFTokens": 0,
+        "NFTokenMinter": null
+      },
+      "account_flags": {
+        "allowTrustLineClawback": false,
+        "allowTrustLineLocking": false,
+        "defaultRipple": false,
+        "depositAuth": false,
+        "disableMasterKey": false,
+        "disallowIncomingCheck": false,
+        "disallowIncomingNFTokenOffer": false,
+        "disallowIncomingPayChan": false,
+        "disallowIncomingTrustline": false,
+        "disallowIncomingXRP": false,
+        "globalFreeze": false,
+        "noFreeze": false,
+        "passwordSpent": false,
+        "requireAuthorization": false,
+        "requireDestinationTag": false
+      },
+      "signer_lists": [],
+      "lines": [
+        {
+          "account": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+          "balance": "50",
+          "currency": "4145544800000000000000000000000000000000",
+          "limit": "1000000",
+          "limit_peer": "0",
+          "quality_in": 0,
+          "quality_out": 0
+        }
+      ],
+      "offers": [],
+      "nfts": [
+        {
+          "Flags": 8,
+          "Issuer": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+          "NFTokenID": "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF13EFDC5CD0141DD57",
+          "NFTokenTaxon": 20260927,
+          "TransferFee": 1000,
+          "URI": "68747470733A2F2F7261772E67697468756275736572636F6E74656E742E636F6D2F486F626965314B656E6F62692F6165746865722D666F756E6472792F6D61696E2F6D616368696E65732F776F726B2D7469636B65742D657363726F772F524541444D452E6D64",
+          "nft_serial": 21093719
+        },
+        {
+          "Flags": 8,
+          "Issuer": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+          "NFTokenID": "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1579B96CC0141DD58",
+          "NFTokenTaxon": 20260927,
+          "TransferFee": 1000,
+          "URI": "68747470733A2F2F7261772E67697468756275736572636F6E74656E742E636F6D2F486F626965314B656E6F62692F6165746865722D666F756E6472792F6D61696E2F6D616368696E65732F647269702D706173732F524541444D452E6D64",
+          "nft_serial": 21093720
+        },
+        {
+          "Flags": 8,
+          "Issuer": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+          "NFTokenID": "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF19A5519C90141DD5B",
+          "NFTokenTaxon": 20260927,
+          "TransferFee": 1000,
+          "URI": "68747470733A2F2F7261772E67697468756275736572636F6E74656E742E636F6D2F486F626965314B656E6F62692F6165746865722D666F756E6472792F6D61696E2F6D616368696E65732F6F7261636C652D6D69642D7469636B65742F524541444D452E6D642371756F74653D302E3031303037353238266C65646765723D756E646566696E65642674733D323032362D30392D3237543136253341343425334134352E3236395A",
+          "nft_serial": 21093723
+        }
+      ],
+      "objects": [
+        {
+          "Account": "rEbUaXDXZnzR8wJjGqULKn1YLXNd5CARth",
+          "Amount": "10000000",
+          "CancelAfter": 1790520578,
+          "Destination": "ra9X6T4Fk9qfD8ncKczHaG5GdkYcLcD5pN",
+          "DestinationNode": "0",
+          "FinishAfter": 1790520473,
+          "Flags": 0,
+          "LedgerEntryType": "Escrow",
+          "OwnerNode": "0",
+          "PreviousTxnID": "6B9528CCE3F90E39A6D6E1A8A1F1E637E1A38B575F0DDB105785D3A66A319462",
+          "PreviousTxnLgrSeq": 21094057,
+          "Sequence": 21094052,
+          "index": "908D26FC250FFEC5EF51A6DA749C99DEF6B78D7A205993787DACCE5342D346E7"
+        }
+      ],
+      "object_counts": {
+        "NFTokenPage": 1,
+        "RippleState": 1,
+        "Escrow": 1
+      },
+      "nft_sell_offers": {}
+    },
+    "STRANGER": {
+      "id": "STRANGER",
+      "role": "walk-in purchaser",
+      "address": "rh4c6qMMyafccZrPFCPCN742BNMXfjKYss",
+      "account_root": {
+        "Balance": "90497079",
+        "Flags": 0,
+        "OwnerCount": 3,
+        "Sequence": 21094424,
+        "RegularKey": null,
+        "Domain": null,
+        "EmailHash": null,
+        "TransferRate": null,
+        "TickSize": null,
+        "MintedNFTokens": 0,
+        "BurnedNFTokens": 0,
+        "NFTokenMinter": null
+      },
+      "account_flags": {
+        "allowTrustLineClawback": false,
+        "allowTrustLineLocking": false,
+        "defaultRipple": false,
+        "depositAuth": false,
+        "disableMasterKey": false,
+        "disallowIncomingCheck": false,
+        "disallowIncomingNFTokenOffer": false,
+        "disallowIncomingPayChan": false,
+        "disallowIncomingTrustline": false,
+        "disallowIncomingXRP": false,
+        "globalFreeze": false,
+        "noFreeze": false,
+        "passwordSpent": false,
+        "requireAuthorization": false,
+        "requireDestinationTag": false
+      },
+      "signer_lists": [],
+      "lines": [
+        {
+          "account": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+          "balance": "50",
+          "currency": "4145544800000000000000000000000000000000",
+          "limit": "1000000",
+          "limit_peer": "0",
+          "quality_in": 0,
+          "quality_out": 0
+        }
+      ],
+      "offers": [],
+      "nfts": [
+        {
+          "Flags": 8,
+          "Issuer": "rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw",
+          "NFTokenID": "000803E8D25E64BC6D436EA502CE71902FE64120C571FCF1854F48CA0141DD5A",
+          "NFTokenTaxon": 20260927,
+          "TransferFee": 1000,
+          "URI": "68747470733A2F2F7261772E67697468756275736572636F6E74656E742E636F6D2F486F626965314B656E6F62692F6165746865722D666F756E6472792F6D61696E2F6D616368696E65732F77616C6B2D696E2D77696E646F772F524541444D452E6D64",
+          "nft_serial": 21093722
+        }
+      ],
+      "objects": [
+        {
+          "Account": "rh4c6qMMyafccZrPFCPCN742BNMXfjKYss",
+          "Amount": "1000000",
+          "Balance": "0",
+          "Destination": "rB6tyDtACcaihvoHKocuA5snG8H7Hn43Fw",
+          "DestinationNode": "0",
+          "Expiration": 843837231,
+          "Flags": 0,
+          "LedgerEntryType": "PayChannel",
+          "OwnerNode": "0",
+          "PreviousTxnID": "D04A320649912A028C27E67922BF681CEF6ADF12FBF2ACF46B884962A55BCF04",
+          "PreviousTxnLgrSeq": 21094442,
+          "PublicKey": "ED65D188F6C041B5143DDE8AC3FA86FA802156B573B717930BAB37D7CC58380EA5",
+          "Sequence": 21094422,
+          "SettleDelay": 300,
+          "index": "F83E073B648600D863FC8F3BB53B047D697FD1B87136A05B72F2F8296B7CC40E"
+        }
+      ],
+      "object_counts": {
+        "NFTokenPage": 1,
+        "RippleState": 1,
+        "PayChannel": 1
+      },
+      "nft_sell_offers": {}
+    },
+    "FOREIGN": {
+      "id": "FOREIGN",
+      "role": "x402 outbound counterparty",
+      "address": "r3JbqcVQ4Pov4MhFUMSdnro7s3VgpaqssZ",
+      "account_root": {
+        "Balance": "100005000",
+        "Flags": 0,
+        "OwnerCount": 0,
+        "Sequence": 21099378,
+        "RegularKey": null,
+        "Domain": null,
+        "EmailHash": null,
+        "TransferRate": null,
+        "TickSize": null,
+        "MintedNFTokens": 0,
+        "BurnedNFTokens": 0,
+        "NFTokenMinter": null
+      },
+      "account_flags": {
+        "allowTrustLineClawback": false,
+        "allowTrustLineLocking": false,
+        "defaultRipple": false,
+        "depositAuth": false,
+        "disableMasterKey": false,
+        "disallowIncomingCheck": false,
+        "disallowIncomingNFTokenOffer": false,
+        "disallowIncomingPayChan": false,
+        "disallowIncomingTrustline": false,
+        "disallowIncomingXRP": false,
+        "globalFreeze": false,
+        "noFreeze": false,
+        "passwordSpent": false,
+        "requireAuthorization": false,
+        "requireDestinationTag": false
+      },
+      "signer_lists": [],
+      "lines": [],
+      "offers": [],
+      "nfts": [],
+      "objects": [],
+      "object_counts": {}
+    },
+    "LPB_ISSUER": {
+      "id": "LPB_ISSUER",
+      "role": "lp-badge-bound issuer",
+      "address": "rPXJrQEJN2K9grJJBqQHQ2V5nazcZQo5Cn",
+      "account_root": {
+        "Balance": "99999976",
+        "Flags": 0,
+        "OwnerCount": 0,
+        "Sequence": 21100632,
+        "RegularKey": null,
+        "Domain": null,
+        "EmailHash": null,
+        "TransferRate": null,
+        "TickSize": null,
+        "MintedNFTokens": 0,
+        "BurnedNFTokens": 0,
+        "NFTokenMinter": null
+      },
+      "account_flags": {
+        "allowTrustLineClawback": false,
+        "allowTrustLineLocking": false,
+        "defaultRipple": false,
+        "depositAuth": false,
+        "disableMasterKey": false,
+        "disallowIncomingCheck": false,
+        "disallowIncomingNFTokenOffer": false,
+        "disallowIncomingPayChan": false,
+        "disallowIncomingTrustline": false,
+        "disallowIncomingXRP": false,
+        "globalFreeze": false,
+        "noFreeze": false,
+        "passwordSpent": false,
+        "requireAuthorization": false,
+        "requireDestinationTag": false
+      },
+      "signer_lists": [],
+      "lines": [],
+      "offers": [],
+      "nfts": [],
+      "objects": [],
+      "object_counts": {}
+    },
+    "LPB_HOLDER": {
+      "id": "LPB_HOLDER",
+      "role": "lp-badge-bound holder",
+      "address": "rLDbAi71mciJwCDKyTn6dohD3ypDsMLRwm",
+      "account_root": {
+        "Balance": "106386828",
+        "Flags": 0,
+        "OwnerCount": 1,
+        "Sequence": 21100638,
+        "RegularKey": null,
+        "Domain": null,
+        "EmailHash": null,
+        "TransferRate": null,
+        "TickSize": null,
+        "MintedNFTokens": 0,
+        "BurnedNFTokens": 0,
+        "NFTokenMinter": null
+      },
+      "account_flags": {
+        "allowTrustLineClawback": false,
+        "allowTrustLineLocking": false,
+        "defaultRipple": false,
+        "depositAuth": false,
+        "disableMasterKey": false,
+        "disallowIncomingCheck": false,
+        "disallowIncomingNFTokenOffer": false,
+        "disallowIncomingPayChan": false,
+        "disallowIncomingTrustline": false,
+        "disallowIncomingXRP": false,
+        "globalFreeze": false,
+        "noFreeze": false,
+        "passwordSpent": false,
+        "requireAuthorization": false,
+        "requireDestinationTag": false
+      },
+      "signer_lists": [],
+      "lines": [
+        {
+          "account": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+          "balance": "49.99999999999992",
+          "currency": "4145544800000000000000000000000000000000",
+          "limit": "1000000",
+          "limit_peer": "0",
+          "quality_in": 0,
+          "quality_out": 0
+        }
+      ],
+      "offers": [],
+      "nfts": [],
+      "objects": [],
+      "object_counts": {
+        "RippleState": 1
+      }
+    },
+    "LPB_DOOR": {
+      "id": "LPB_DOOR",
+      "role": "lp-badge-bound door",
+      "address": "r3UBPs7Lakfic2Mjq2QcgSqwfn6iYVGtFQ",
+      "account_root": {
+        "Balance": "100099976",
+        "Flags": 16777216,
+        "OwnerCount": 1,
+        "Sequence": 21100632,
+        "RegularKey": null,
+        "Domain": null,
+        "EmailHash": null,
+        "TransferRate": null,
+        "TickSize": null,
+        "MintedNFTokens": 0,
+        "BurnedNFTokens": 0,
+        "NFTokenMinter": null
+      },
+      "account_flags": {
+        "allowTrustLineClawback": false,
+        "allowTrustLineLocking": false,
+        "defaultRipple": false,
+        "depositAuth": true,
+        "disableMasterKey": false,
+        "disallowIncomingCheck": false,
+        "disallowIncomingNFTokenOffer": false,
+        "disallowIncomingPayChan": false,
+        "disallowIncomingTrustline": false,
+        "disallowIncomingXRP": false,
+        "globalFreeze": false,
+        "noFreeze": false,
+        "passwordSpent": false,
+        "requireAuthorization": false,
+        "requireDestinationTag": false
+      },
+      "signer_lists": [],
+      "lines": [],
+      "offers": [],
+      "nfts": [],
+      "objects": [
+        {
+          "Account": "r3UBPs7Lakfic2Mjq2QcgSqwfn6iYVGtFQ",
+          "AuthorizeCredentials": [
+            {
+              "Credential": {
+                "CredentialType": "6165746865722D6C702D6F6B",
+                "Issuer": "rPXJrQEJN2K9grJJBqQHQ2V5nazcZQo5Cn"
+              }
+            }
+          ],
+          "Flags": 0,
+          "LedgerEntryType": "DepositPreauth",
+          "OwnerNode": "0",
+          "PreviousTxnID": "EB4387CB79C01E17C16AD66C4287E3DC208EBFAFDF066F2429D58906EEE2103B",
+          "PreviousTxnLgrSeq": 21100652,
+          "index": "6A9D1C05D5CD822E08C9D1BDC5A20D60511A28182E0C41D2B9F589394E2E00DB"
+        }
+      ],
+      "object_counts": {
+        "DepositPreauth": 1
+      }
+    },
+    "LPB_STRANGER": {
+      "id": "LPB_STRANGER",
+      "role": "lp-badge-bound stranger",
+      "address": "rUpVvDQWBQVvrdazFZfb6E7DPmoafN2jNj",
+      "account_root": {
+        "Balance": "99999988",
+        "Flags": 0,
+        "OwnerCount": 0,
+        "Sequence": 21100632,
+        "RegularKey": null,
+        "Domain": null,
+        "EmailHash": null,
+        "TransferRate": null,
+        "TickSize": null,
+        "MintedNFTokens": 0,
+        "BurnedNFTokens": 0,
+        "NFTokenMinter": null
+      },
+      "account_flags": {
+        "allowTrustLineClawback": false,
+        "allowTrustLineLocking": false,
+        "defaultRipple": false,
+        "depositAuth": false,
+        "disableMasterKey": false,
+        "disallowIncomingCheck": false,
+        "disallowIncomingNFTokenOffer": false,
+        "disallowIncomingPayChan": false,
+        "disallowIncomingTrustline": false,
+        "disallowIncomingXRP": false,
+        "globalFreeze": false,
+        "noFreeze": false,
+        "passwordSpent": false,
+        "requireAuthorization": false,
+        "requireDestinationTag": false
+      },
+      "signer_lists": [],
+      "lines": [],
+      "offers": [],
+      "nfts": [],
+      "objects": [],
+      "object_counts": {}
+    }
+  },
+  "key_accounts": [
+    {
+      "id": "SIGNER_DIRECTOR",
+      "weight": 2,
+      "address": "rpEpjesFRPcpWWVKoheDT59YKtoA6Xureg"
+    },
+    {
+      "id": "SIGNER_TREASURER",
+      "weight": 2,
+      "address": "rHG25YbFNqFL9HzVqa9JQhXFY9Zignxznh"
+    },
+    {
+      "id": "SIGNER_ATELIER",
+      "weight": 1,
+      "address": "rGfkxsMvv833ioy2QjmTXhYF49J94N9WRu"
+    },
+    {
+      "id": "SIGNER_MARKET",
+      "weight": 1,
+      "address": "r4Qc6iUKrLZQwM9sPdPWCCHAK2bcMsrxVr"
+    },
+    {
+      "id": "W1_REGULAR",
+      "of": "W1",
+      "address": "rDyiGKuMgL2F8S7TjB6m6Wg1pLg5KDPJYY"
+    },
+    {
+      "id": "W2_REGULAR",
+      "of": "W2",
+      "address": "rNNzhkcScozB7Nzv3cWCZAEnu6MMC64rmy"
+    },
+    {
+      "id": "W3_REGULAR",
+      "of": "W3",
+      "address": "rJRxr1E1Dzz5TXJsCHhwQAm4qS68Y73dQj"
+    },
+    {
+      "id": "W4_REGULAR",
+      "of": "W4",
+      "address": "rfXBxqPjprj1J5Ekq5v82D3BDqRm7ms7p2"
+    },
+    {
+      "id": "W5_REGULAR",
+      "of": "W5",
+      "address": "rav5cYVarjSaXeeqCbsghMmmVGcJWB5y7Q"
+    },
+    {
+      "id": "W6_REGULAR",
+      "of": "W6",
+      "address": "rGjdFjMz577GF4uvb4N9ayCqP5Q74kwVq5"
+    }
+  ],
+  "amm": {
+    "account": "r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w",
+    "amount": "51783389",
+    "amount2": {
+      "currency": "4145544800000000000000000000000000000000",
+      "issuer": "rJ9WRLiHuB6STbRCUqRKVsqKDbrGAbEbVs",
+      "value": "4923.542951524584"
+    },
+    "asset2_frozen": false,
+    "auction_slot": {
+      "account": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+      "discounted_fee": 50,
+      "expiration": "2026-09-28T14:38:00+0000",
+      "price": {
+        "currency": "0330E60FAE706EAD2C7D511D790B07A6F3B89931",
+        "issuer": "r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w",
+        "value": "0"
+      },
+      "time_interval": 20
+    },
+    "lp_token": {
+      "currency": "0330E60FAE706EAD2C7D511D790B07A6F3B89931",
+      "issuer": "r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w",
+      "value": "504886.5880440515"
+    },
+    "trading_fee": 500,
+    "vote_slots": [
+      {
+        "account": "rsi9kh9Pdkrn16sABjg8yGqZLVuT1qphzS",
+        "trading_fee": 500,
+        "vote_weight": 100000
+      }
+    ]
+  },
+  "amm_expected_old_account": "r4nTCaJ83W7HX3dHMrLrWTWCkFBeRSrS4w",
+  "rlusd_issuer": {
+    "address": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
+    "currency": "524C555344000000000000000000000000000000",
+    "exists": true,
+    "flags": 2174353408,
+    "domain": "68747470733A2F2F726970706C652E636F6D2F"
+  },
+  "repo_freeze": {
+    "ledger_log": {
+      "path": "lab/ledger-log.jsonl",
+      "bytes": 109211,
+      "lines": 300,
+      "sha256": "c4c5007763e6d433143c2760def60d7d3f9938de41b6915c98f181abdb8a9891",
+      "last_line": "{\"ts\":\"2026-11-21T00:42:20.901Z\",\"source\":\"agent-signer\",\"action\":\"agent-sign\",\"wallet\":\"W2\",\"account\":\"rLBKyi1NKoXmMXUHPH4ZFZLUKyXfUywKEw\",\"hash\":\"67B76CD92B4ACEA42DE9F8BBF44E21293A964FE78AE4465045D83C2794AC5973\",\"ledger_index\":22485739,\"result\":\"tesSUCCESS\",\"network_id\":1,\"transaction_type\":\"Payment\",\"amount_drops\":\"5\",\"intent\":\"presence_house_supply\"}"
+    },
+    "metrics": {
+      "path": "lab/metrics.json",
+      "bytes": 1165,
+      "lines": 26,
+      "sha256": "bbfc3c126e7e49b34534c37cf5f9c8bfbd902e41bc04ebb726e420226f0e5e7d",
+      "last_line": "}"
+    },
+    "director_state": {
+      "path": "lab/director-state.json",
+      "bytes": 12579,
+      "lines": 350,
+      "sha256": "5b32067ce2a63a93da99803829b1cab1e7de611cba412e4d2c20007a6d0e1599",
+      "last_line": "}"
+    }
+  }
+}
